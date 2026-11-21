@@ -29,7 +29,7 @@ func TestStoreRoundTrip(t *testing.T) {
 	base := time.Now().Add(-10 * time.Minute).Truncate(time.Minute)
 	for i := 0; i < 120; i++ {
 		ts := base.Add(time.Duration(i) * 3 * time.Second)
-		if err := s.InsertPortMetrics(ts, sw.ID, []*model.Port{{IfIndex: 1, Oper: "up", RxBps: 1000, ErrDelta: 1}}); err != nil {
+		if err := s.InsertPortMetrics(ts, sw.ID, []*model.Port{{IfIndex: 1, Oper: "up", RxBps: 1000, ErrDelta: 1}}, true); err != nil {
 			t.Fatal(err)
 		}
 	}

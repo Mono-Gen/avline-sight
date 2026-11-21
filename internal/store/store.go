@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   watchlist_json TEXT NOT NULL DEFAULT '[]', background BLOB, background_type TEXT,
   created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS switches (
-  id INTEGER PRIMARY KEY, profile_id INTEGER NOT NULL, name TEXT NOT NULL, group_tag TEXT NOT NULL DEFAULT '',
+  id INTEGER PRIMARY KEY AUTOINCREMENT, profile_id INTEGER NOT NULL, name TEXT NOT NULL, group_tag TEXT NOT NULL DEFAULT '',
   ip TEXT NOT NULL, snmp_port INTEGER NOT NULL DEFAULT 161, community_ro TEXT NOT NULL DEFAULT 'public',
   web_url TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', fw_version TEXT NOT NULL DEFAULT '',
   sys_object_id TEXT NOT NULL DEFAULT '', oid_capabilities_json TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1);
@@ -355,7 +355,8 @@ func (s *Store) SaveAlias(profileID int64, a Alias) error {
 // ---- 時系列 ----
 
 // InsertPortMetrics はFastティック1回分を1トランザクションで書き込む。
-func (s *Store) InsertPortMetrics(ts time.Time, switchID int64, ports []*model.Port) error {
+// withMedium=false のときは Medium周期で更新される増分（FCS・CoS・PAUSE）を0として書く（多重集計防止）。
+func (s *Store) InsertPortMetrics(ts time.Time, switchID int64, ports []*model.Port, withMedium bool) error {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
@@ -374,8 +375,12 @@ func (s *Store) InsertPortMetrics(ts time.Time, switchID int64, ports []*model.P
 		if p.SFP != nil {
 			sfp = p.SFP.RxDBm
 		}
+		fcs, cos, pause := p.FCSDelta, p.CosDropDelta, p.PauseDelta
+		if !withMedium {
+			fcs, cos, pause = 0, 0, 0
+		}
 		if _, err := st.Exec(ms(ts), switchID, p.IfIndex, p.Oper == "up", p.SpeedMbps, p.RxBps, p.TxBps, p.RxMcPps, p.TxMcPps, p.RxBcPps,
-			p.ErrDelta, p.FCSDelta, p.DiscardDelta, p.CosDropDelta, p.PauseDelta, poe, sfp); err != nil {
+			p.ErrDelta, fcs, p.DiscardDelta, cos, pause, poe, sfp); err != nil {
 			return err
 		}
 	}
@@ -401,7 +406,7 @@ func (s *Store) PortSeries(switchID int64, ifIndex int, from, to time.Time) (str
 			return "", nil, err
 		}
 		pts, err := scanPoints(rows, true)
-		if err != nil || len(pts) > 0 || to.Sub(from) < time.Hour {
+		if err != nil || len(pts) > 0 {
 			return "raw", downsample(pts, 3600), err
 		}
 	}
@@ -468,7 +473,7 @@ func (s *Store) SwitchSeries(switchID int64, from, to time.Time) (string, []Poin
 			return "", nil, err
 		}
 		pts, err := scanPoints(rows, false)
-		if err != nil || len(pts) > 0 || to.Sub(from) < time.Hour {
+		if err != nil || len(pts) > 0 {
 			return "raw", downsample(pts, 3600), err
 		}
 	}
@@ -680,9 +685,10 @@ func (s *Store) InsertSnapshot(ts time.Time, trigger string, states []*model.Swi
 func (s *Store) SnapshotAt(ts time.Time) (time.Time, []*model.SwitchState, error) {
 	var t int64
 	var b []byte
+	// 未来の状態を過去に見せないため、ts以前が無ければ該当なしとする
 	err := s.DB.QueryRow(`SELECT ts,state_gz FROM state_snapshots WHERE ts<=? ORDER BY ts DESC LIMIT 1`, ms(ts)).Scan(&t, &b)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = s.DB.QueryRow(`SELECT ts,state_gz FROM state_snapshots ORDER BY ts LIMIT 1`).Scan(&t, &b)
+		return time.Time{}, nil, fmt.Errorf("指定時刻（%s）以前の状態スナップショットがありません", ts.Format(time.RFC3339))
 	}
 	if err != nil {
 		return time.Time{}, nil, err

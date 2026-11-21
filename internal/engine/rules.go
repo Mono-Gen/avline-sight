@@ -482,9 +482,16 @@ func (e *Engine) evaluateCross(set Settings) {
 			}
 		}
 		// Unknown Multicastフラッディング: 多数ポートで送信Mcast ppsが高く、グループ登録が少ない
+		// 仕様3.6: 「Mcast急増 かつ IGMPグループ未登録」。登録済みグループの正規配信は除外する
+		joined := map[string]bool{}
+		for _, g := range s.IGMP.Groups {
+			for _, pn := range g.Ports {
+				joined[pn] = true
+			}
+		}
 		high := 0
 		for _, p := range s.Ports {
-			if p.Oper == "up" && p.TxMcPps > 20000 {
+			if p.Oper == "up" && p.TxMcPps > 20000 && !joined[p.Name] {
 				high++
 			}
 		}

@@ -1020,7 +1020,8 @@ func expandRange(s string) ([]string, error) {
 		return nil, fmt.Errorf("範囲が広すぎるか逆順です")
 	}
 	var out []string
-	for v := start; v <= end; v++ {
+	for i := uint64(0); i <= uint64(end-start); i++ {
+		v := start + uint32(i)
 		out = append(out, fmt.Sprintf("%d.%d.%d.%d", v>>24, (v>>16)&255, (v>>8)&255, v&255))
 	}
 	return out, nil

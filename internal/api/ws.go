@@ -15,6 +15,12 @@ import (
 	"github.com/Mono-Gen/avline-sight/internal/term"
 )
 
+func (s *Server) isLocked() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.locked
+}
+
 func simScenarioList() []sim.Scenario { return sim.Scenarios }
 
 func (s *Server) accept(w http.ResponseWriter, r *http.Request) (*websocket.Conn, error) {
@@ -116,6 +122,12 @@ func (s *Server) wsTerminal(w http.ResponseWriter, r *http.Request) {
 	if s.Lab != nil && host == "127.0.0.1" && proto == "telnet" {
 		port = LabCLIBase + (cfg.SNMPPort - LabSNMPBase)
 	}
+	// 認証待ちの間にロックされた場合は接続しない
+	if s.isLocked() {
+		auth.Password = ""
+		conn.Close(websocket.StatusPolicyViolation, "閲覧専用ロック中のため接続できません")
+		return
+	}
 	sess, fp, err := term.Dial(ctx, proto, host, port, auth.User, auth.Password, auth.Cols, auth.Rows)
 	auth.Password = "" // メモリ上の認証情報を速やかに破棄
 	if err != nil {
@@ -152,10 +164,19 @@ func (s *Server) wsTerminal(w http.ResponseWriter, r *http.Request) {
 	}()
 	// アイドル監視
 	go func() {
+		lockCheck := time.NewTicker(2 * time.Second)
+		defer lockCheck.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
+			case <-lockCheck.C:
+				// セッション中にロックされたら即切断（ロック中はCLI操作を禁止する仕様）
+				if s.isLocked() {
+					conn.Close(websocket.StatusPolicyViolation, "閲覧専用ロックにより切断しました")
+					cancel()
+					return
+				}
 			case <-activity:
 				if !idle.Stop() {
 					select {

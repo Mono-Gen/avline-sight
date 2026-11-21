@@ -250,10 +250,16 @@ func (s *Server) lock(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if in.Locked {
-		s.locked = true
-		if in.PIN != "" {
+		// ロック中にPINを差し替えると解除できてしまうため、既存PINがある間は変更を許さない
+		if s.locked && s.pinHash != "" {
+			if in.PIN != "" && hashPIN(in.PIN) != s.pinHash {
+				writeErr(w, 403, "PINを変更できません", "既にPIN付きでロックされています", "一度現在のPINで解除してから設定し直してください")
+				return
+			}
+		} else if in.PIN != "" {
 			s.pinHash = hashPIN(in.PIN)
 		}
+		s.locked = true
 	} else {
 		if s.pinHash != "" && hashPIN(in.PIN) != s.pinHash {
 			writeErr(w, 403, "ロックを解除できません", "PINが一致しません", "ロック時に設定したPINを入力してください")

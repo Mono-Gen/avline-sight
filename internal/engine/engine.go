@@ -77,13 +77,14 @@ type Engine struct {
 	lastSnap  time.Time
 	snapDirty bool
 	prevQuerier map[string]string
+	mediumFresh map[int64]bool // Medium更新後、まだFastで時系列へ書いていないか
 }
 
 // New を作る。
 func New(st *store.Store, profileID int64, hub Broadcaster) *Engine {
 	e := &Engine{st: st, profileID: profileID, hub: hub, states: map[int64]*model.SwitchState{},
 		portCfg: map[int64]map[int]store.PortSetting{}, aliases: map[string]string{}, active: map[string]time.Time{},
-		baseline: map[string]float64{}, prevQuerier: map[string]string{}}
+		baseline: map[string]float64{}, prevQuerier: map[string]string{}, mediumFresh: map[int64]bool{}}
 	e.Reload()
 	return e
 }
@@ -218,10 +219,17 @@ func (e *Engine) OnState(st *model.SwitchState, tier string) {
 
 	switch tier {
 	case "fast":
-		if err := e.st.InsertPortMetrics(now, st.ID, st.Ports); err != nil {
+		e.mu.Lock()
+		fresh := e.mediumFresh[st.ID]
+		e.mediumFresh[st.ID] = false
+		e.mu.Unlock()
+		if err := e.st.InsertPortMetrics(now, st.ID, st.Ports, fresh); err != nil {
 			slog.Warn("ポート時系列の保存に失敗", "switch", st.Name, "err", err)
 		}
 	case "medium":
+		e.mu.Lock()
+		e.mediumFresh[st.ID] = true
+		e.mu.Unlock()
 		if err := e.st.InsertHealth(now, st); err != nil {
 			slog.Warn("ヘルス時系列の保存に失敗", "switch", st.Name, "err", err)
 		}
