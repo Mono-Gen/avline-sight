@@ -1044,15 +1044,8 @@ func (s *Server) simScenarios(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	type sw struct {
-		Index int    `json:"index"`
-		Name  string `json:"name"`
-	}
-	var list []sw
-	for _, x := range s.Lab.Switches {
-		list = append(list, sw{x.Index, x.Name})
-	}
-	writeJSON(w, 200, map[string]any{"scenarios": simScenarioList(), "switches": list})
+	// docs/api.md の契約どおり配列で返す（switch_index はスイッチ名 AV-SW-NN の NN-1）
+	writeJSON(w, 200, simScenarioList())
 }
 
 func (s *Server) simFault(w http.ResponseWriter, r *http.Request) {
