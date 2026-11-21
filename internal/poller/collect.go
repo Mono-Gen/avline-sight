@@ -564,6 +564,15 @@ func (w *worker) basePortToIf(bp int) int {
 
 // collectSlow は接続機器・DHCP・ログ・設定（Slow Tier）。
 func (w *worker) collectSlow() error {
+	// 非対応と判定した機能グループも定期的に再確認する（運用中にMVR/AVB等を有効化されても追従するため）
+	w.slowCount++
+	if w.slowCount%reprobeEverySlow == 0 {
+		for k, v := range w.st.Caps {
+			if v == "UNSUPPORTED" {
+				delete(w.st.Caps, k)
+			}
+		}
+	}
 	if err := w.collectSystem(); err != nil {
 		return err
 	}

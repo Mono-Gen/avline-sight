@@ -2,156 +2,100 @@ import cytoscape from 'cytoscape';
 import { useEffect, useRef, useState } from 'react';
 import { api, json, upload } from '../api';
 import { WatchBar } from '../components/Dialogs';
+import { PollingStatus } from '../components/PollingStatus';
 import { asArray } from '../format';
+import { topologyStyles, updateTopology } from '../topologyGraph';
 import type { Topology as Graph, Multicast } from '../types';
+import { TOPOLOGY_REFRESH_MS, usePolling } from '../usePolling';
 import type { ViewProps } from './props';
-export function Topology(p: ViewProps) {
-  const [graph, setGraph] = useState<Graph>();
-  const [groups, setGroups] = useState<Multicast>();
+
+export function Topology(props: ViewProps) {
   const [group, setGroup] = useState('');
   const [blocking, setBlocking] = useState(true);
-  const ref = useRef<HTMLDivElement>(null);
-  const cy = useRef<cytoscape.Core>();
-  const load = () => api<Graph>('/api/topology').then(setGraph);
+  const container = useRef<HTMLDivElement>(null);
+  const graph = useRef<cytoscape.Core>();
+  const initialized = useRef(false);
+  const onSelect = useRef(props.select);
+  onSelect.current = props.select;
+  const result = usePolling(async signal => {
+    const [topology, multicast] = await Promise.all([
+      api<Graph>('/api/topology', { signal }),
+      api<Multicast>('/api/multicast', { signal }),
+    ]);
+    return { topology, multicast };
+  }, TOPOLOGY_REFRESH_MS, [], !props.replay);
+
   useEffect(() => {
-    void load().catch(() => undefined);
-    api<Multicast>('/api/multicast').then(setGroups).catch(() => {
-    });
-  }, []);
-  useEffect(() => {
-    if (!ref.current || !graph) return;
-    const selectedGroups = asArray((groups?.groups || [])).filter(g => g.group === group);
-    const members = new Set(asArray(selectedGroups).map(g => g.switch_id));
-    const carries = (nodeId: string, port: string, vlan: number) => {
-      const id = asArray((graph.nodes || [])).find(n => n.id === nodeId)?.switch_id;
-      return asArray(selectedGroups).some(g => g.vlan === vlan && g.switch_id === id && asArray((g.ports || [])).includes(port));
-    };
+    if (!container.current) return;
     const instance = cytoscape({
-      container: ref.current,
-      elements: [
-        ...asArray((graph.nodes || [])).map(n => ({
-          data: {
-            ...n,
-            highlight: group && n.switch_id !== undefined && members.has(n.switch_id)
-          },
-          position: n.x !== undefined && n.y !== undefined ? {
-            x: n.x,
-            y: n.y
-          } : undefined
-        })),
-        ...asArray((graph.edges || [])).filter(e => blocking || !e.blocking).map(e => ({
-          data: {
-            ...e,
-            highlight: group && asArray(selectedGroups).some(g => carries(e.source, e.local_port, g.vlan) && carries(e.target, e.remote_port, g.vlan))
-          }
-        }))
-      ],
-      layout: { name: asArray((graph.nodes || [])).some(n => n.x !== undefined) ? 'preset' : 'grid' },
-      style: [
-        {
-          selector: 'node',
-          style: {
-            label: 'data(label)',
-            'background-color': '#38bdf8',
-            color: '#ddd',
-            'text-valign': 'bottom'
-          }
-        },
-        {
-          selector: 'node[kind = "external"], node[kind = "device"]',
-          style: {
-            shape: 'diamond',
-            'background-color': '#a78bfa'
-          }
-        },
-        {
-          selector: 'edge',
-          style: {
-            width: 3,
-            'line-color': '#94a3b8',
-            label: 'data(local_port)',
-            'font-size': 9,
-            color: '#ddd'
-          }
-        },
-        {
-          selector: 'edge[blocking = 1]',
-          style: { 'line-style': 'dashed' }
-        },
-        {
-          selector: '[highlight = 1]',
-          style: {
-            'background-color': '#f59e0b',
-            'line-color': '#f59e0b',
-            width: 5
-          }
-        }
-      ]
+      container: container.current,
+      elements: [],
+      layout: { name: 'preset' },
+      style: topologyStyles
     });
-    cy.current = instance;
-    instance.on('tap', 'node', e => {
-      const id = e.target.data('switch_id');
-      if (id) p.select(id);
+    graph.current = instance;
+    instance.on('tap', 'node', event => {
+      const id = event.target.data('switch_id');
+      if (id) onSelect.current(id);
     });
     return () => {
       instance.destroy();
-      cy.current = undefined;
+      graph.current = undefined;
+      initialized.current = false;
     };
-  }, [graph, groups, group, blocking]);
-  return <>
-    <WatchBar items={p.watch} onChange={p.setWatch} run={p.run} disabled={p.locked || p.busy} />
-    <div className="flex flex-wrap gap-2">
-      <label>
-        <input type="checkbox" checked={blocking} onChange={e => setBlocking(e.target.checked)} />
-        ブロッキングを表示
-      </label>
-      <select value={group} onChange={e => setGroup(e.target.value)}>
-        <option value="">マルチキャスト経路候補
-        </option>
-        {Array.from(new Set(asArray((groups?.groups || [])).map(g => g.group))).map(g => <option key={g}>
-          {g}
-        </option>)}
-      </select>
-      <button
-        disabled={p.locked || p.busy}
-        onClick={() => p.run(async () => {
-          const positions: Record<string, {
-            x: number;
-            y: number;
-          }> = {};
-          cy.current?.nodes().forEach(n => {
-            positions[n.id()] = n.position();
-          });
-          await api('/api/topology/layout', json('PUT', { positions }));
-        })}
-      >配置を保存
-      </button>
-      <label>背景画像
-        <input
+  }, []);
+  useEffect(() => {
+    if (!graph.current || !result.data) return;
+    updateTopology(graph.current, result.data.topology, result.data.multicast, group, blocking, !initialized.current);
+    if (asArray(result.data.topology.nodes).length) initialized.current = true;
+  }, [result.data, group, blocking]);
+
+  const background = result.data?.topology.background;
+  return (
+    <>
+      <WatchBar items={props.watch} onChange={props.setWatch} run={props.run} disabled={props.locked || props.busy} />
+      <PollingStatus {...result} />
+      <div className="flex flex-wrap gap-2">
+        <label><input type="checkbox" checked={blocking} onChange={event => setBlocking(event.target.checked)} /> ブロッキングを表示</label>
+        <select value={group} onChange={event => setGroup(event.target.value)}>
+          <option value="">マルチキャスト経路候補</option>
+          {Array.from(new Set(asArray(result.data?.multicast.groups).map(item => item.group))).map(address => <option key={address}>{address}</option>)}
+        </select>
+        <button
+          disabled={props.locked || props.busy}
+          onClick={() => props.run(async () => {
+            const positions: Record<string, {
+              x: number;
+              y: number
+            }> = {};
+            graph.current?.nodes().forEach(node => { positions[node.id()] = node.position(); });
+            await api('/api/topology/layout', json('PUT', { positions }));
+          })}
+        >配置を保存</button>
+        <label>背景画像 <input
           type="file"
           accept="image/*"
-          disabled={p.locked || p.busy}
-          onChange={e => {
-            const f = e.target.files?.[0];
-            if (f) p.run(async () => {
-              await api('/api/topology/background', upload(f));
-              await load();
+          disabled={props.locked || props.busy}
+          onChange={event => {
+            const file = event.target.files?.[0];
+            if (file) props.run(async () => {
+              await api('/api/topology/background', upload(file));
+              await result.refresh();
             });
           }}
-        />
-      </label>
-    </div>
-    <p>経路候補は両端のポート名が一致する接続です。方向や外部機器は判定できません。
-    </p>
-    <div
-      ref={ref}
-      className="h-[600px] rounded bg-slate-800"
-      style={graph?.background ? {
-        backgroundImage: `url(${JSON.stringify(graph.background).slice(1, -1)})`,
-        backgroundSize: 'contain',
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'center'
-      } : undefined}
-    />
-  </>;
+        /></label>
+      </div>
+      <p>経路候補は両端のポート名が一致する接続です。方向や外部機器は判定できません。</p>
+      <div
+        ref={container}
+        className="h-[600px] rounded bg-slate-800"
+        style={background ? {
+          backgroundImage: `url(${JSON.stringify(background).slice(1, -1)})`,
+          backgroundSize: 'contain',
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'center',
+        } : undefined}
+      />
+    </>
+  );
 }

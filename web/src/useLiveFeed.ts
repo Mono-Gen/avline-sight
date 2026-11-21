@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { Event, Overview, Settings, SwitchState } from './types';
+import { useEffect, useRef } from 'react';
 import { asArray } from './format';
+import type { Event, Overview, Settings, SwitchState } from './types';
 import { LiveSocket } from './ws';
 
-const MAX_LIVE_EVENTS = 2000;
+import { LIVE_EVENT_LIMIT, mergeOverviewTick, pushRecentEvent } from './events';
 
 export function useLiveFeed({ muted, replay, settings, setOverview, setState, setEvents, setOnline }: {
   muted: boolean;
@@ -20,11 +20,12 @@ export function useLiveFeed({ muted, replay, settings, setOverview, setState, se
   preferences.current = { muted, replay, settings };
   useEffect(() => {
     const live = new LiveSocket(message => {
-      if (message.type === 'overview_tick') setOverview(message.data);
+      if (message.type === 'overview_tick') setOverview(previous => mergeOverviewTick(previous, message.data));
       if (message.type === 'switch_state') setState(message.data);
       if (message.type !== 'event_pushed') return;
       // 長時間稼働時のメモリ増加を抑え、同じIDの再配信でも重複させない。
-      setEvents(old => [message.data, ...asArray(old).filter(item => item.id !== message.data.id)].slice(0, MAX_LIVE_EVENTS));
+      setEvents(old => [message.data, ...asArray(old).filter(item => item.id !== message.data.id)].slice(0, LIVE_EVENT_LIMIT));
+      setOverview(previous => pushRecentEvent(previous, message.data));
       const current = preferences.current;
       if (message.data.severity !== 'CRITICAL' || current.replay || current.muted || !current.settings?.alert_sound) return;
       try {

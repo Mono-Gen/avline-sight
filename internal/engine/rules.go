@@ -468,6 +468,13 @@ func chainDepth(live []*model.SwitchState) int {
 
 // evaluateCross は横断ルールをイベント化する（監査結果のCRITICAL/WARNINGを立ち上がりで発報）。
 func (e *Engine) evaluateCross(set Settings) {
+	// 起動直後など、まだ一度も応答していない／設定未取得のスイッチがある間は横断比較を発報しない
+	// （一部のスイッチだけで比較すると「全台既定値」等を誤検知するため）
+	for _, s := range e.States() {
+		if s.LastPoll.IsZero() || (s.Reachable && s.Config.StpVersion == "") {
+			return
+		}
+	}
 	fs, _ := e.Audit()
 	seen := map[string]bool{}
 	for _, f := range fs {

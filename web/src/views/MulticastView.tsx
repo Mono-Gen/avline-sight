@@ -1,57 +1,60 @@
-import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { Table } from '../components/Common';
+import { AvStatus } from '../components/AvStatus';
+import { PollingStatus } from '../components/PollingStatus';
+import { Table } from '../components/Table';
 import { asArray } from '../format';
-import type { Multicast } from '../types';
+import type { Multicast, SwitchState } from '../types';
+import { STATE_REFRESH_MS, usePolling } from '../usePolling';
 import type { ViewProps } from './props';
 
-export function MulticastView(p: ViewProps) {
-  const [data, setData] = useState<Multicast>();
-  useEffect(() => {
-    if (!p.replay) api<Multicast>('/api/multicast').then(setData).catch(() => setData(undefined));
-  }, [p.replay]);
-  const dataReplay = p.replay ? {
-    vlans: asArray(p.replay).flatMap(s => asArray((s.igmp.vlans || [])).map(v => ({
-      ...v,
-      switch_id: s.id,
-      switch_name: s.name
-    }))),
-    groups: asArray(p.replay).flatMap(s => asArray((s.igmp.groups || [])).map(v => ({
-      ...v,
-      switch_id: s.id,
-      switch_name: s.name
-    }))),
-    mrouters: asArray(p.replay).flatMap(s => asArray((s.igmp.mrouters || [])).map(v => ({
-      ...v,
-      switch_id: s.id,
-      switch_name: s.name
-    }))),
-    gptp: asArray(p.replay).flatMap(s => s.igmp.gptp ? [{
-      ...s.igmp.gptp,
-      switch_id: s.id,
-      switch_name: s.name
-    }] : []),
-    findings: []
-  } : data;
-  const preset = asArray(p.settings?.views)?.find(v => v.id === p.part);
-  const filt = <T extends {
+function replayMulticast(states: SwitchState[]): Multicast {
+  return {
+    vlans: states.flatMap(state => asArray(state.igmp.vlans).map(value => ({ ...value, switch_id: state.id, switch_name: state.name }))),
+    groups: states.flatMap(state => asArray(state.igmp.groups).map(value => ({ ...value, switch_id: state.id, switch_name: state.name }))),
+    mrouters: states.flatMap(state => asArray(state.igmp.mrouters).map(value => ({ ...value, switch_id: state.id, switch_name: state.name }))),
+    gptp: states.flatMap(state => state.igmp.gptp ? [{ ...state.igmp.gptp, switch_id: state.id, switch_name: state.name }] : []),
+    findings: [],
+  };
+}
+
+export function MulticastView(props: ViewProps) {
+  const switches = asArray(props.overview.switches);
+  const switchKey = switches.map(item => item.id).join(',');
+  const result = usePolling(async signal => {
+    // 集約APIにAVB詳細が無いため、同じ更新周期で各装置の正規化状態も取得する。
+    const [multicast, states] = await Promise.all([
+      api<Multicast>('/api/multicast', { signal }),
+      Promise.all(switches.map(item => api<SwitchState>(`/api/switches/${item.id}/state`, { signal }))),
+    ]);
+    return { multicast, states };
+  }, STATE_REFRESH_MS, [switchKey], !props.replay);
+  const states = props.replay ? asArray(props.replay) : asArray(result.data?.states);
+  const data = props.replay ? replayMulticast(states) : result.data?.multicast;
+  const preset = asArray(props.settings?.views).find(view => view.id === props.part);
+  const vlans = asArray(preset?.vlans);
+  const tags = asArray(preset?.tags);
+  const visibleStates = states.filter(state => !tags.length || tags.includes(state.group_tag));
+  const visibleIds = new Set(visibleStates.map(state => state.id));
+  const filter = <T extends {
     vlan: number;
-  }>(a: T[] | undefined) => asArray((a || [])).filter(x => !preset?.vlans?.length || asArray(preset.vlans).includes(x.vlan));
-  return <div className="panel space-y-4">
-    <h2>VLAN クエリア
-    </h2>
-    <Table rows={filt(dataReplay?.vlans)} />
-    <h2>グループ × ポート
-    </h2>
-    <Table rows={filt(dataReplay?.groups)} />
-    <h2>マルチキャストルーター
-    </h2>
-    <Table rows={filt(dataReplay?.mrouters)} />
-    <h2>gPTP
-    </h2>
-    <Table rows={dataReplay?.gptp || []} />
-    <h2>検出事項
-    </h2>
-    <Table rows={dataReplay?.findings || []} />
-  </div>;
+    switch_id: number
+  }>(rows: T[] | undefined) => asArray(rows).filter(row =>
+    (!vlans.length || vlans.includes(row.vlan)) && (!tags.length || visibleIds.has(row.switch_id)));
+  return (
+    <div className="panel space-y-4">
+      {!props.replay && <PollingStatus {...result} />}
+      <h2>VLAN クエリア</h2>
+      <Table rows={filter(data?.vlans)} />
+      <h2>グループ × ポート</h2>
+      <Table rows={filter(data?.groups)} />
+      <h2>マルチキャストルーター</h2>
+      <Table rows={filter(data?.mrouters)} />
+      <h2>gPTP</h2>
+      <Table rows={asArray(data?.gptp).filter(row => !tags.length || visibleIds.has(row.switch_id))} />
+      <h2>スイッチ別 MVR / AVB</h2>
+      {visibleStates.map(state => <AvStatus key={state.id} state={state} />)}
+      <h2>検出事項</h2>
+      <Table rows={asArray(data?.findings).filter(row => !tags.length || visibleIds.has(row.switch_id))} />
+    </div>
+  );
 }

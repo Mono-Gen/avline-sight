@@ -141,7 +141,11 @@ type worker struct {
 	devSeen     map[int]string // ifIndex → MAC集合の署名（接続変化検知）
 	failures    int
 	lastUpSpeed map[int]int // ポート毎の直近リンクアップ速度
+	slowCount   int
 }
+
+// reprobeEverySlow はSlow周期何回ごとに非対応グループを再確認するか（既定45秒×10≒7.5分）。
+const reprobeEverySlow = 10
 
 func newWorker(cfg model.SwitchConfig, iv Intervals, sink Sink, alias AliasFunc, cancel context.CancelFunc) *worker {
 	return &worker{cfg: cfg, iv: iv, sink: sink, alias: alias, cancel: cancel, probeNow: make(chan struct{}, 1),

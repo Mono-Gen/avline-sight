@@ -1,27 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '../api';
 import { Table } from '../components/Common';
+import { PollingStatus } from '../components/PollingStatus';
 import { asArray } from '../format';
 import type { Port } from '../types';
+import { STATE_REFRESH_MS, usePolling } from '../usePolling';
 import type { ViewProps } from './props';
 
 export function PortMatrix(p: ViewProps) {
-  const [rows, setRows] = useState<{
-    switch_id: number;
-    switch_name: string;
-    port: Port;
-  }[]>([]);
   const [q, setQ] = useState('');
   const [sort, setSort] = useState('err');
   const [anomaly, setAnomaly] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => {
-      api<typeof rows>(`/api/ports/search?q=${encodeURIComponent(q)}&sort=${sort}`).then(setRows).catch(() => setRows([]));
-    }, 300);
-    return () => clearTimeout(t);
-  }, [q, sort]);
+  const result = usePolling(signal => api<{
+    switch_id: number;
+    switch_name: string;
+    port: Port
+  }[]>(
+    `/api/ports/search?q=${encodeURIComponent(q)}&sort=${sort}`, { signal }),
+    STATE_REFRESH_MS, [q, sort], !p.replay, 300);
+  const rows = result.data;
   const preset = asArray(p.settings?.views)?.find(v => v.id === p.part);
   return <section className="panel">
+    <PollingStatus {...result} />
     <input placeholder="機器名 / MAC / IP / VLAN" value={q} onChange={e => setQ(e.target.value)} />
     <select value={sort} onChange={e => setSort(e.target.value)}>
       <option value="err">エラー順

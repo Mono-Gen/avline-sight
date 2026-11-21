@@ -1,4 +1,13 @@
 export const columnLabels: Record<string, string> = {
+  mvr: 'MVR有効',
+  active: '有効',
+  mvr_rx_failures: 'MVR受信失敗累計',
+  mvr_rx_fail_delta: 'MVR受信失敗増分',
+  msrp_streams: 'MSRPストリーム数',
+  msrp_reservations: 'MSRP予約数',
+  stream_id: 'ストリームID',
+  declaration: '宣言',
+  failure_code: '失敗コード',
   id: 'ID',
   name: '名前',
   switch: 'スイッチ',

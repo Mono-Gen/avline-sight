@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, json } from '../api';
 import { Chart, FrontPanel, Table } from '../components/Common';
+import { PollingStatus } from '../components/PollingStatus';
 import { PortHardware } from '../components/PortHardware';
 import { asArray, decimal, formatBps, resolveSwitchId } from '../format';
-import type { Event, MetricResult, Port } from '../types';
+import type { Event, MetricResult, ModelDefinitions, Port } from '../types';
+import { METRICS_REFRESH_MS, usePolling } from '../usePolling';
+import { useSwitchState } from '../useSwitchState';
 import type { ViewProps } from './props';
 const roles = [
   '',
@@ -22,15 +25,14 @@ const roles = [
 export function PortMonitor(p: ViewProps) {
   const [idx, setIdx] = useState(0);
   const [range, setRange] = useState(15);
-  const [points, setPoints] = useState<MetricResult>();
-  const [timeline, setTimeline] = useState<Event[]>([]);
   const [memo, setMemo] = useState('');
   const [excluded, setExcluded] = useState(false);
   const [speed, setSpeed] = useState(0);
   const [role, setRole] = useState('');
   const [until, setUntil] = useState(0);
   const [now, setNow] = useState(Date.now());
-  const s = p.replay ? asArray(p.replay).find(x => x.id === p.selected) : p.state?.id === p.selected ? p.state : undefined;
+  const { state: s, polling: statePolling } = useSwitchState(p.selected, p.state, p.replay);
+  const models = usePolling(signal => api<ModelDefinitions>('/api/models', { signal }), 0);
   const switches = asArray(p.replay || p.overview.switches);
   useEffect(() => {
     // Overviewから指定された選択を優先し、未選択またはプロファイル変更時だけ補う。
@@ -46,13 +48,21 @@ export function PortMonitor(p: ViewProps) {
     setSpeed(x.expected_speed_mbps || 0);
     setRole(x.av_role || '');
   };
-  useEffect(() => {
-    if (!p.selected || !idx || p.replay) return;
+  const metrics = usePolling(async signal => {
     const end = new Date();
     const from = new Date(end.getTime() - range * 60000);
-    api<MetricResult>(`/api/metrics/port?switch_id=${p.selected}&if_index=${idx}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(end.toISOString())}`).then(setPoints).catch(() => setPoints(undefined));
-    api<Event[]>(`/api/events?switch_id=${p.selected}`).then(v => setTimeline(asArray((v || [])).filter(x => x.if_index === idx))).catch(() => setTimeline([]));
-  }, [p.selected, idx, range, p.replay]);
+    const params = new URLSearchParams({
+      switch_id: String(p.selected),
+      if_index: String(idx),
+      from: from.toISOString(),
+      to: end.toISOString(),
+    });
+    const [series, history] = await Promise.all([
+      api<MetricResult>(`/api/metrics/port?${params}`, { signal }),
+      api<Event[]>(`/api/events?switch_id=${p.selected}`, { signal }),
+    ]);
+    return { series, history: asArray(history).filter(event => event.if_index === idx) };
+  }, METRICS_REFRESH_MS, [p.selected, idx, range], !p.replay && p.selected > 0 && idx > 0);
   useEffect(() => {
     if (!until) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -88,8 +98,11 @@ export function PortMonitor(p: ViewProps) {
       >WebUI
       </button>
     </div>
+    {!p.replay && <PollingStatus {...statePolling} />}
     {s && <>
       <FrontPanel
+        model={s.model}
+        definitions={models.data}
         selected={idx}
         onSelect={choose}
         ports={asArray((s.ports || [])).filter(x => !preset?.vlans?.length || asArray(preset.vlans).includes(x.pvid))}
@@ -232,12 +245,13 @@ export function PortMonitor(p: ViewProps) {
             </option>)}
           </select>
           <Chart
-            points={points?.points || []}
+            points={metrics.data?.series.points || []}
             keys={['rx_bps', 'tx_bps', 'rx_mc_pps', 'err_delta', 'discard_delta', 'poe_w', 'sfp_rx_dbm']}
           />
           <h3>ポート履歴
           </h3>
-          <Table rows={timeline} />
+          <PollingStatus {...metrics} />
+          <Table rows={metrics.data?.history || []} />
         </>}
       </section>}
     </>}

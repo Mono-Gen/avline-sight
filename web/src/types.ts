@@ -167,6 +167,11 @@ export interface IGMP {
   mvr: boolean;
   gptp?: GPTP | null;
   msrp_streams: number;
+  msrp_reservations: number;
+  msrp_failed: MSRPFailure[];
+  mvr_groups: MVRGroup[];
+  mvr_rx_failures: number;
+  mvr_rx_fail_delta: number;
 }
 export interface VlanIGMP {
   vlan: number;
@@ -397,3 +402,24 @@ export interface Timeline {
     category: string;
   }[];
 }
+
+export interface MVRGroup {
+  group: string;
+  active: boolean;
+  ports: string[];
+}
+
+export interface MSRPFailure {
+  stream_id: string;
+  port: string;
+  declaration: string;
+  failure_code: number;
+}
+
+export interface ModelDefinition {
+  model: string;
+  rows: string[][];
+  note: string;
+}
+
+export type ModelDefinitions = Record<string, ModelDefinition>;

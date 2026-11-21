@@ -1,5 +1,8 @@
-export async function response(path: string, options: RequestInit = {}): Promise<Response> {
+async function consumeResponse<T>(path: string, options: RequestInit, consume: (response: Response) => Promise<T>): Promise<T> {
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (options.signal?.aborted) abort();
+  options.signal?.addEventListener('abort', abort, { once: true });
   const timer = window.setTimeout(() => controller.abort(), 15000);
   try {
     const r = await fetch(path, {
@@ -18,20 +21,27 @@ export async function response(path: string, options: RequestInit = {}): Promise
       }
       throw new Error(`操作に失敗しました（${reason}）。接続や入力を確認して再試行してください。`);
     }
-    return r;
+    return await consume(r);
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener('abort', abort);
   }
 }
+export function response(path: string, options: RequestInit = {}): Promise<Response> {
+  return consumeResponse(path, options, async result => result);
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
-    const r = await response(path, options);
-    if (r.status === 204) return undefined as T;
-    const text = await r.text();
-    return (text ? JSON.parse(text) : undefined) as T;
-  } catch (e) {
-    window.dispatchEvent(new CustomEvent('api-error', { detail: message(e) }));
-    throw e;
+    // JSON本文の読込中も、画面切替の中断とタイムアウトを有効に保つ。
+    return await consumeResponse(path, options, async result => {
+      if (result.status === 204) return undefined as T;
+      const text = await result.text();
+      return (text ? JSON.parse(text) : undefined) as T;
+    });
+  } catch (error) {
+    if (!options.signal?.aborted) window.dispatchEvent(new CustomEvent('api-error', { detail: message(error) }));
+    throw error;
   }
 }
 export const json = (method: string, body?: unknown): RequestInit => ({

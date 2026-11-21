@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api, json } from '../api';
 import { Badge } from '../components/Badge';
-import { asArray, formatTime } from '../format';
+import { PollingStatus } from '../components/PollingStatus';
+import type { EventFilters } from '../events';
+import { logRows, SEARCH_EVENT_LIMIT } from '../events';
+import { formatTime } from '../format';
 import type { Event } from '../types';
+import { usePolling } from '../usePolling';
 import type { ViewProps } from './props';
 
 const filterLabels = {
@@ -13,16 +17,7 @@ const filterLabels = {
   from: '開始日時',
   to: '終了日時',
 };
-type Filters = Record<keyof typeof filterLabels, string>;
-
-function matches(event: Event, filter: Filters): boolean {
-  return (!filter.category || event.category.toLowerCase().includes(filter.category.toLowerCase())) &&
-    (!filter.severity || event.severity.toLowerCase().includes(filter.severity.toLowerCase())) &&
-    (!filter.switch_id || String(event.switch_id) === filter.switch_id) &&
-    (!filter.q || JSON.stringify(event).toLowerCase().includes(filter.q.toLowerCase())) &&
-    (!filter.from || Date.parse(event.ts) >= new Date(filter.from).getTime()) &&
-    (!filter.to || Date.parse(event.ts) <= new Date(filter.to).getTime());
-}
+type Filters = EventFilters;
 
 export function Logs(props: ViewProps) {
   const [filter, setFilter] = useState<Filters>({
@@ -33,30 +28,21 @@ export function Logs(props: ViewProps) {
     from: '',
     to: ''
   });
-  const refresh = async () => {
+  const queryKey = JSON.stringify(filter);
+  const result = usePolling(signal => {
     const params = new URLSearchParams({
       ...filter,
       from: filter.from ? new Date(filter.from).toISOString() : '',
       to: filter.to ? new Date(filter.to).toISOString() : '',
-      limit: '500',
+      limit: String(SEARCH_EVENT_LIMIT),
     });
-    const fetched = await api<Event[]>(`/api/events?${params}`);
-    props.setEvents(old => {
-      // GET待機中に届いたイベントを、後着の履歴応答で失わないよう統合する。
-      const merged = [...asArray(old), ...asArray(fetched)];
-      return Array.from(new Map(merged.map(event => [event.id, event])).values())
-        .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts)).slice(0, 2000);
-    });
-  };
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      void refresh().catch(() => undefined);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [JSON.stringify(filter)]);
-  const rows = asArray(props.events).filter(event => matches(event, filter));
+    return api<Event[]>(`/api/events?${params}`, { signal });
+  }, 0, [queryKey], true, 300);
+  const refresh = result.refresh;
+  const rows = logRows(result.data || [], props.events, filter);
   return (
     <section className="panel space-y-2">
+      <PollingStatus {...result} />
       <div className="flex flex-wrap gap-2">
         {(Object.entries(filter) as [keyof Filters, string][]).map(([key, value]) => (
           <label key={key}>{filterLabels[key]}

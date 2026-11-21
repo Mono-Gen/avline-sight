@@ -1,29 +1,32 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api, json } from '../api';
 import { Chart, Table } from '../components/Common';
+import { PollingStatus } from '../components/PollingStatus';
 import { asArray } from '../format';
 import type { Audit, MetricResult } from '../types';
+import { METRICS_REFRESH_MS, TOPOLOGY_REFRESH_MS, usePolling } from '../usePolling';
+import { useSwitchState } from '../useSwitchState';
 import type { ViewProps } from './props';
 
 export function HealthAudit(p: ViewProps) {
-  const [audit, setAudit] = useState<Audit>();
-  const [bases, setBases] = useState<{
-    id: number;
-    name: string;
-    captured_ts: string;
-  }[]>([]);
   const [diff, setDiff] = useState<object[]>([]);
-  const [metrics, setMetrics] = useState<MetricResult>();
-  const load = () => api<typeof bases>('/api/baselines').then(setBases);
-  useEffect(() => {
-    api<Audit>('/api/audit').then(setAudit).catch(() => {
-    });
-    void load().catch(() => undefined);
-  }, []);
-  useEffect(() => {
-    if (p.selected && !p.replay) api<MetricResult>(`/api/metrics/switch?switch_id=${p.selected}`).then(setMetrics).catch(() => setMetrics(undefined));
-  }, [p.selected, p.replay]);
-  const state = p.replay ? asArray(p.replay).find(s => s.id === p.selected) : p.state;
+  const report = usePolling(async signal => {
+    const [audit, baselines] = await Promise.all([
+      api<Audit>('/api/audit', { signal }),
+      api<{
+        id: number;
+        name: string;
+        captured_ts: string
+      }[]>('/api/baselines', { signal }),
+    ]);
+    return { audit, baselines };
+  }, TOPOLOGY_REFRESH_MS, [], !p.replay);
+  const metrics = usePolling(signal => api<MetricResult>(`/api/metrics/switch?switch_id=${p.selected}`, { signal }),
+    METRICS_REFRESH_MS, [p.selected], !p.replay && p.selected > 0);
+  const { state, polling: statePolling } = useSwitchState(p.selected, p.state, p.replay);
+  const audit = report.data?.audit;
+  const bases = report.data?.baselines;
+  const load = report.refresh;
   const health = state?.health;
   const summary = health ? {
     ...health,
@@ -39,6 +42,7 @@ export function HealthAudit(p: ViewProps) {
         {s.name}
       </option>)}
     </select>
+    {!p.replay && <PollingStatus {...statePolling} />}
     {state && <>
       <h2>筐体ヘルス / PoE
       </h2>
@@ -62,9 +66,11 @@ export function HealthAudit(p: ViewProps) {
     </>}
     {!p.replay && <>
       <Chart
-        points={metrics?.points || []}
+        points={metrics.data?.points || []}
         keys={['cpu_5s', 'mem_free_pct', 'mbuf_used_pct', 'temp_max_c', 'poe_used_w']}
       />
+      <PollingStatus {...metrics} />
+      <PollingStatus {...report} />
       <h2>監査
       </h2>
       <Table rows={audit?.findings || []} />
