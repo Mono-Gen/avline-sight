@@ -3,6 +3,7 @@ package engine
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Mono-Gen/avline-sight/internal/model"
 	"github.com/Mono-Gen/avline-sight/internal/store"
@@ -72,7 +73,7 @@ func TestRulesFromSpec(t *testing.T) {
 func TestAuditCrossSwitch(t *testing.T) {
 	e, _ := newTestEngine(t)
 	mk := func(id int64, name, fw string, dhcp bool, prio int) *model.SwitchState {
-		return &model.SwitchState{ID: id, Name: name, SysName: name, Reachable: true, FW: fw,
+		return &model.SwitchState{ID: id, Name: name, SysName: name, Reachable: true, FW: fw, LastPoll: time.Now(),
 			Config: model.SwitchConf{StpVersion: "rstp", StpPriority: prio},
 			DHCP:   model.DHCP{ServerOn: dhcp},
 			IGMP:   model.IGMP{Vlans: []model.VlanIGMP{{VLAN: 10, Snooping: true}}}}
@@ -93,5 +94,14 @@ func TestAuditCrossSwitch(t *testing.T) {
 	}
 	if len(fw) != 2 {
 		t.Errorf("FW分類 %v", fw)
+	}
+	// 1台でも初回取得前なら横断監査は保留（監査3周目#5）
+	e.mu.Lock()
+	e.states[3] = &model.SwitchState{ID: 3, Name: "C"}
+	e.order = append(e.order, 3)
+	e.mu.Unlock()
+	fs, _ = e.Audit()
+	if len(fs) != 1 || fs[0].Code != "AUDIT_PENDING" {
+		t.Errorf("初回取得前に横断監査が実行された: %+v", fs)
 	}
 }

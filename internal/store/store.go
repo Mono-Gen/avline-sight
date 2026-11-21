@@ -131,7 +131,8 @@ func migrateSwitchesAutoinc(db *sql.DB) error {
 	defer tx.Rollback()
 	var maxHist sql.NullInt64
 	tx.QueryRow(`SELECT MAX(m) FROM (SELECT MAX(switch_id) m FROM port_metrics_raw UNION ALL SELECT MAX(switch_id) FROM events
-		UNION ALL SELECT MAX(switch_id) FROM switch_health_raw UNION ALL SELECT MAX(switch_id) FROM device_bindings UNION ALL SELECT MAX(id) FROM switches)`).Scan(&maxHist)
+		UNION ALL SELECT MAX(switch_id) FROM switch_health_raw UNION ALL SELECT MAX(switch_id) FROM device_bindings UNION ALL SELECT MAX(switch_id) FROM port_metrics_1m
+		UNION ALL SELECT MAX(switch_id) FROM switch_health_1m UNION ALL SELECT MAX(id) FROM switches)`).Scan(&maxHist)
 	newDDL := strings.Replace(ddl, "switches", "switches_new", 1)
 	newDDL = strings.Replace(newDDL, "id INTEGER PRIMARY KEY,", "id INTEGER PRIMARY KEY AUTOINCREMENT,", 1)
 	for _, q := range []string{newDDL, `INSERT INTO switches_new SELECT * FROM switches`, `DROP TABLE switches`, `ALTER TABLE switches_new RENAME TO switches`} {

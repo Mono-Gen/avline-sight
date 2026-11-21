@@ -492,9 +492,15 @@ func (w *worker) collectMVRMSRP(pname func(int) string) {
 	ig := &w.st.IGMP
 	ig.MVRGroups = ig.MVRGroups[:0]
 	if w.supported("mvr") {
-		grows, err := w.c.WalkColumns([]string{mib.MvrGroupStatus})
+		mres, merr := w.c.Get([]string{mib.MvrAdminMode})
+		_, hasMvr := mres[mib.MvrAdminMode]
+		cnt := 0
+		if hasMvr {
+			cnt = 1
+		}
+		w.markCap("mvr", merr, cnt)
+		grows, _ := w.c.WalkColumns([]string{mib.MvrGroupStatus})
 		prows, perr := w.c.WalkColumns([]string{mib.MvrPortMemberRow})
-		w.markCap("mvr", err, len(grows)+len(prows))
 		byG := map[string]*model.MVRGroup{}
 		var order []string
 		for _, r := range grows {

@@ -31,6 +31,9 @@ const (
 	hintStpPrio = "全スイッチが既定優先度32768のままだとエッジがRoot Bridgeになり得ます。推奨: コア=0(Primary)、予備コア=8192(Backup)"
 )
 
+// floodPps は未登録ポートへのマルチキャスト送出がフラッディングと見なされる目安（1Gbps級映像1本≒数万pps）。
+const floodPps = 20000
+
 // ndi4系はFlow Control必要（公式ガイド）。PAUSE警告を出し分ける
 func pauseAllowed(role string) bool { return role == "ndi4" }
 
@@ -113,6 +116,15 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 			}
 		}
 		if tier == "medium" {
+			// MVR/MSRP はMedium周期で収集されるため同じ周期で判定する（取りこぼし防止）
+			if n := len(st.IGMP.MSRPFailed); n > 0 {
+				e.raise(seen, key(model.SevWarning, "MSRP_RESV_FAILED", 0), ev(model.SevWarning, "MSRP_RESV_FAILED", fmt.Sprintf("AVB/Milan 帯域予約失敗 %d件", n),
+					"MSRP予約失敗。帯域不足・経路上のAVB非対応機器・VLAN不一致を確認してください", 0, nil))
+			}
+			if st.IGMP.MVRRxFailDelta > 0 {
+				e.raise(seen, key(model.SevWarning, "MVR_RX_FAIL", 0), ev(model.SevWarning, "MVR_RX_FAIL", fmt.Sprintf("MVR IGMPパケット受信失敗 +%d", st.IGMP.MVRRxFailDelta),
+					"MVR設定（ソース/レシーバーポート、MVR VLAN）の不整合を確認してください", 0, nil))
+			}
 			h := st.Health
 			if th.CPUPct > 0 && h.CPU5s >= th.CPUPct {
 				e.raise(seen, key(model.SevWarning, "CPU_HIGH", 0), ev(model.SevWarning, "CPU_HIGH", fmt.Sprintf("CPU使用率 %.0f%%", h.CPU5s), hintChassis, 0, nil))
@@ -157,14 +169,6 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 				e.raise(seen, key(model.SevWarning, "STP_BLOCKING", p.IfIndex), ev(model.SevWarning, "STP_BLOCKING", fmt.Sprintf("%s STP Blocking", p.Name), hintStp, p.IfIndex, nil))
 			}
 		}
-		if n := len(st.IGMP.MSRPFailed); n > 0 {
-			e.raise(seen, key(model.SevWarning, "MSRP_RESV_FAILED", 0), ev(model.SevWarning, "MSRP_RESV_FAILED", fmt.Sprintf("AVB/Milan 帯域予約失敗 %d件", n),
-				"MSRP予約失敗。帯域不足・経路上のAVB非対応機器・VLAN不一致を確認してください", 0, nil))
-		}
-		if st.IGMP.MVRRxFailDelta > 0 {
-			e.raise(seen, key(model.SevWarning, "MVR_RX_FAIL", 0), ev(model.SevWarning, "MVR_RX_FAIL", fmt.Sprintf("MVR IGMPパケット受信失敗 +%d", st.IGMP.MVRRxFailDelta),
-				"MVR設定（ソース/レシーバーポート、MVR VLAN）の不整合を確認してください", 0, nil))
-		}
 		if st.Config.StpVersion == "mstp" {
 			e.raise(seen, key(model.SevWarning, "STP_MSTP", 0), ev(model.SevWarning, "STP_MSTP", "MSTPが稼働中（ProAVではRSTP推奨）", hintStp, 0, nil))
 		}
@@ -204,10 +208,25 @@ type Finding struct {
 }
 
 // Audit はスイッチ間設定ズレ＆ProAV基準チェック（仕様3.5）。
+// crossReady は監視中の全スイッチが一度は応答し設定まで取得済みか。
+// 起動直後に一部のスイッチだけで比較すると「全台既定値」等を誤検知するため、揃うまで横断判定を保留する。
+func (e *Engine) crossReady() bool {
+	for _, s := range e.States() {
+		if s.LastPoll.IsZero() || (s.Reachable && s.Config.StpVersion == "") {
+			return false
+		}
+	}
+	return true
+}
+
 func (e *Engine) Audit() ([]Finding, map[string][]string) {
 	states := e.States()
 	var fs []Finding
 	fw := map[string][]string{}
+	if !e.crossReady() {
+		return []Finding{{Severity: model.SevInfo, Code: "AUDIT_PENDING", Title: "全スイッチの初回取得待ちのため、横断監査を保留しています",
+			Hint: "Slow周期（既定45秒）が一巡すると表示されます"}}, fw
+	}
 	add := func(sev, code, title, hint string, s *model.SwitchState, port string) {
 		f := Finding{Severity: sev, Code: code, Title: title, Hint: hint, Port: port}
 		if s != nil {
@@ -468,12 +487,8 @@ func chainDepth(live []*model.SwitchState) int {
 
 // evaluateCross は横断ルールをイベント化する（監査結果のCRITICAL/WARNINGを立ち上がりで発報）。
 func (e *Engine) evaluateCross(set Settings) {
-	// 起動直後など、まだ一度も応答していない／設定未取得のスイッチがある間は横断比較を発報しない
-	// （一部のスイッチだけで比較すると「全台既定値」等を誤検知するため）
-	for _, s := range e.States() {
-		if s.LastPoll.IsZero() || (s.Reachable && s.Config.StpVersion == "") {
-			return
-		}
+	if !e.crossReady() {
+		return
 	}
 	fs, _ := e.Audit()
 	seen := map[string]bool{}
@@ -506,14 +521,19 @@ func (e *Engine) evaluateCross(set Settings) {
 				joined[pn] = true
 			}
 		}
-		high := 0
+		// 未登録ポートのうち過半（かつ2ポート以上）へ大量送出 → フラッディング。台数規模に依存しない比率判定
+		high, candidates := 0, 0
 		for _, p := range s.Ports {
-			if p.Oper == "up" && p.TxMcPps > 20000 && !joined[p.Name] {
+			if p.Oper != "up" || joined[p.Name] || p.Type == "lag" || isUplink(s, p) {
+				continue
+			}
+			candidates++
+			if p.TxMcPps > floodPps {
 				high++
 			}
 		}
 		k := itoa(int(s.ID)) + "|" + model.SevCritical + "|MCAST_FLOOD|0|x"
-		if high >= 5 && high*2 >= len(s.Ports)/2 {
+		if high >= 2 && high*2 > candidates {
 			e.raise(seen, k, model.Event{SwitchID: s.ID, SwitchName: s.Name, Category: "ANOMALY", Severity: model.SevCritical, Code: "MCAST_FLOOD",
 				Title: fmt.Sprintf("%dポートでマルチキャスト急増（フラッディングの疑い）", high), Hint: hintFlood})
 		} else {

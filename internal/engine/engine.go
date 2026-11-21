@@ -115,6 +115,9 @@ func (e *Engine) Reload() {
 	keep := map[int64]bool{}
 	e.order = e.order[:0]
 	for _, s := range sws {
+		if !s.Enabled {
+			continue // 無効化スイッチはポーリングされないため状態集合に含めない
+		}
 		keep[s.ID] = true
 		e.order = append(e.order, s.ID)
 		if e.states[s.ID] == nil {
