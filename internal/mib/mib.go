@@ -56,17 +56,17 @@ const (
 
 // EtherLike-MIB dot3StatsTable / dot3PauseTable（INDEX=ifIndex）
 const (
-	Dot3AlignmentErrors   = "1.3.6.1.2.1.10.7.2.1.2"
-	Dot3FCSErrors         = "1.3.6.1.2.1.10.7.2.1.3"
-	Dot3LateCollisions    = "1.3.6.1.2.1.10.7.2.1.8"
-	Dot3FrameTooLongs     = "1.3.6.1.2.1.10.7.2.1.13"
-	Dot3SymbolErrors      = "1.3.6.1.2.1.10.7.2.1.18"
-	Dot3DuplexStatus      = "1.3.6.1.2.1.10.7.2.1.19" // 1=unknown 2=half 3=full
-	Dot3TxLPITransitions  = "1.3.6.1.2.1.10.7.2.1.24"
-	Dot3RxLPITransitions  = "1.3.6.1.2.1.10.7.2.1.25"
-	Dot3PauseOperMode     = "1.3.6.1.2.1.10.7.10.1.2" // 1=disabled 2=xmit 3=rcv 4=both
-	Dot3HCInPauseFrames   = "1.3.6.1.2.1.10.7.10.1.5"
-	Dot3HCOutPauseFrames  = "1.3.6.1.2.1.10.7.10.1.6"
+	Dot3AlignmentErrors  = "1.3.6.1.2.1.10.7.2.1.2"
+	Dot3FCSErrors        = "1.3.6.1.2.1.10.7.2.1.3"
+	Dot3LateCollisions   = "1.3.6.1.2.1.10.7.2.1.8"
+	Dot3FrameTooLongs    = "1.3.6.1.2.1.10.7.2.1.13"
+	Dot3SymbolErrors     = "1.3.6.1.2.1.10.7.2.1.18"
+	Dot3DuplexStatus     = "1.3.6.1.2.1.10.7.2.1.19" // 1=unknown 2=half 3=full
+	Dot3TxLPITransitions = "1.3.6.1.2.1.10.7.2.1.24"
+	Dot3RxLPITransitions = "1.3.6.1.2.1.10.7.2.1.25"
+	Dot3PauseOperMode    = "1.3.6.1.2.1.10.7.10.1.2" // 1=disabled 2=xmit 3=rcv 4=both
+	Dot3HCInPauseFrames  = "1.3.6.1.2.1.10.7.10.1.5"
+	Dot3HCOutPauseFrames = "1.3.6.1.2.1.10.7.10.1.6"
 )
 
 // QoS CoS（fastpath_qos_cos.my）
@@ -80,8 +80,8 @@ const (
 
 // IGMP Snooping（fastpathswitching.my）
 const (
-	SnoopingAdminMode          = "1.3.6.1.4.1.4526.10.1.2.8.6.1.1.2"  // INDEX=protocol 1=en 2=dis
-	SnoopVlanAdminMode         = "1.3.6.1.4.1.4526.10.1.2.8.8.1.1.1"  // INDEX=vlan,protocol 0=dis 1=en
+	SnoopingAdminMode          = "1.3.6.1.4.1.4526.10.1.2.8.6.1.1.2" // INDEX=protocol 1=en 2=dis
+	SnoopVlanAdminMode         = "1.3.6.1.4.1.4526.10.1.2.8.8.1.1.1" // INDEX=vlan,protocol 0=dis 1=en
 	SnoopVlanFastLeave         = "1.3.6.1.4.1.4526.10.1.2.8.8.1.1.4"
 	QuerierVlanAdminMode       = "1.3.6.1.4.1.4526.10.1.2.8.20.2.1.1"
 	QuerierVlanOperMode        = "1.3.6.1.4.1.4526.10.1.2.8.20.2.1.2" // 0=disabled 1=querier 2=non-querier
@@ -92,7 +92,7 @@ const (
 	SSMGroupLastReporter       = "1.3.6.1.4.1.4526.10.1.2.8.34.1.5" // INDEX=atype,ifIndex,vlan,group
 	SSMFDBIncludePortList      = "1.3.6.1.4.1.4526.10.1.2.8.36.1.5"
 	VlanStaticMrouterAdminMode = "1.3.6.1.4.1.4526.10.1.2.8.9.1.1.1" // INDEX=ifIndex,vlan,protocol
-	Dot1qTpGroupEgressPorts    = "1.3.6.1.2.1.17.7.1.2.3.1.2"          // INDEX=vlan,mac
+	Dot1qTpGroupEgressPorts    = "1.3.6.1.2.1.17.7.1.2.3.1.2"        // INDEX=vlan,mac
 	MulticastStormAction       = "1.3.6.1.4.1.4526.10.1.2.8.12.14"
 	BroadcastControlModeGlobal = "1.3.6.1.4.1.4526.10.1.2.8.12.4.0"
 	MulticastControlModeGlobal = "1.3.6.1.4.1.4526.10.1.2.8.12.6.0"
@@ -109,90 +109,90 @@ const (
 
 // PoE（POWER-ETHERNET-MIB / fastpath_power_ethernet.my）
 const (
-	PethMainPower            = "1.3.6.1.2.1.105.1.3.1.1.2" // W
-	PethMainOperStatus       = "1.3.6.1.2.1.105.1.3.1.1.3"
-	PethMainConsumption      = "1.3.6.1.2.1.105.1.3.1.1.4" // W
-	PethMainUsageThreshold   = "1.3.6.1.2.1.105.1.3.1.1.5" // %
-	PethPortDetectionStatus  = "1.3.6.1.2.1.105.1.1.1.6"   // INDEX=group,port
-	PethPortClass            = "1.3.6.1.2.1.105.1.1.1.10"
-	PethPortPowerDeniedCnt   = "1.3.6.1.2.1.105.1.1.1.12"
-	PethPortOverLoadCnt      = "1.3.6.1.2.1.105.1.1.1.13"
-	PethPortShortCnt         = "1.3.6.1.2.1.105.1.1.1.14"
-	AgentPethOutputPower     = "1.3.6.1.4.1.4526.10.15.1.1.1.2" // mW, INDEX=group,port
-	AgentPethOutputCurrent   = "1.3.6.1.4.1.4526.10.15.1.1.1.3" // mA
-	AgentPethOutputVolts     = "1.3.6.1.4.1.4526.10.15.1.1.1.4" // V
-	AgentPethFaultStatus     = "1.3.6.1.4.1.4526.10.15.1.1.1.9"
+	PethMainPower           = "1.3.6.1.2.1.105.1.3.1.1.2" // W
+	PethMainOperStatus      = "1.3.6.1.2.1.105.1.3.1.1.3"
+	PethMainConsumption     = "1.3.6.1.2.1.105.1.3.1.1.4" // W
+	PethMainUsageThreshold  = "1.3.6.1.2.1.105.1.3.1.1.5" // %
+	PethPortDetectionStatus = "1.3.6.1.2.1.105.1.1.1.6"   // INDEX=group,port
+	PethPortClass           = "1.3.6.1.2.1.105.1.1.1.10"
+	PethPortPowerDeniedCnt  = "1.3.6.1.2.1.105.1.1.1.12"
+	PethPortOverLoadCnt     = "1.3.6.1.2.1.105.1.1.1.13"
+	PethPortShortCnt        = "1.3.6.1.2.1.105.1.1.1.14"
+	AgentPethOutputPower    = "1.3.6.1.4.1.4526.10.15.1.1.1.2" // mW, INDEX=group,port
+	AgentPethOutputCurrent  = "1.3.6.1.4.1.4526.10.15.1.1.1.3" // mA
+	AgentPethOutputVolts    = "1.3.6.1.4.1.4526.10.15.1.1.1.4" // V
+	AgentPethFaultStatus    = "1.3.6.1.4.1.4526.10.15.1.1.1.9"
 	// agentPethTemperature (.5) は obsolete のため使用禁止
 )
 
 // 筐体ヘルス（fastpathswitching.my / fastpath_boxservices.my）
 const (
-	CpuMemFreePct      = "1.3.6.1.4.1.4526.10.1.1.4.10.0"
-	CpuTotal5s         = "1.3.6.1.4.1.4526.10.1.1.4.11.0"
-	CpuTotal60s        = "1.3.6.1.4.1.4526.10.1.1.4.12.0"
-	CpuTotal300s       = "1.3.6.1.4.1.4526.10.1.1.4.13.0"
-	CpuProcessName     = "1.3.6.1.4.1.4526.10.1.1.4.8.1.2"
-	CpuProcessPct      = "1.3.6.1.4.1.4526.10.1.1.4.8.1.3" // DisplayString
-	MbufsFree          = "1.3.6.1.4.1.4526.10.1.1.7.1.0"
-	MbufsTotal         = "1.3.6.1.4.1.4526.10.1.1.7.3.0"
-	MbufsUsed          = "1.3.6.1.4.1.4526.10.1.1.7.4.0"
-	MbufAllocFails     = "1.3.6.1.4.1.4526.10.1.1.7.2.1.4" // 優先度別テーブル。全行合算
-	TempSensorTemp     = "1.3.6.1.4.1.4526.10.43.1.8.1.5"  // INDEX=unit,sensor
-	TempUnitState      = "1.3.6.1.4.1.4526.10.43.1.15.1.2" // BoxsTemperatureStatus
-	FanItemState       = "1.3.6.1.4.1.4526.10.43.1.6.1.3"  // INDEX=unit,fan
-	FanSpeed           = "1.3.6.1.4.1.4526.10.43.1.6.1.4"  // OCTET STRING
-	FanDutyLevel       = "1.3.6.1.4.1.4526.10.43.1.6.1.5"  // OCTET STRING
-	PowSupplyItemState = "1.3.6.1.4.1.4526.10.43.1.7.1.3"
-	OpticsTemp         = "1.3.6.1.4.1.4526.10.43.1.18.1.2" // ÷10 ℃, INDEX=ifIndex
-	OpticsVoltage      = "1.3.6.1.4.1.4526.10.43.1.18.1.3" // ÷1000 V
-	OpticsCurrent      = "1.3.6.1.4.1.4526.10.43.1.18.1.4" // ÷10 mA
-	OpticsPowerOut     = "1.3.6.1.4.1.4526.10.43.1.18.1.5" // ÷100 dBm
-	OpticsPowerIn      = "1.3.6.1.4.1.4526.10.43.1.18.1.6" // ÷100 dBm
-	OpticsTxFault      = "1.3.6.1.4.1.4526.10.43.1.18.1.7" // TruthValue
-	OpticsLos          = "1.3.6.1.4.1.4526.10.43.1.18.1.8"
-	OpticsInfoVendor   = "1.3.6.1.4.1.4526.10.43.1.19.1.2"
-	OpticsInfoPartNo   = "1.3.6.1.4.1.4526.10.43.1.19.1.6"
+	CpuMemFreePct       = "1.3.6.1.4.1.4526.10.1.1.4.10.0"
+	CpuTotal5s          = "1.3.6.1.4.1.4526.10.1.1.4.11.0"
+	CpuTotal60s         = "1.3.6.1.4.1.4526.10.1.1.4.12.0"
+	CpuTotal300s        = "1.3.6.1.4.1.4526.10.1.1.4.13.0"
+	CpuProcessName      = "1.3.6.1.4.1.4526.10.1.1.4.8.1.2"
+	CpuProcessPct       = "1.3.6.1.4.1.4526.10.1.1.4.8.1.3" // DisplayString
+	MbufsFree           = "1.3.6.1.4.1.4526.10.1.1.7.1.0"
+	MbufsTotal          = "1.3.6.1.4.1.4526.10.1.1.7.3.0"
+	MbufsUsed           = "1.3.6.1.4.1.4526.10.1.1.7.4.0"
+	MbufAllocFails      = "1.3.6.1.4.1.4526.10.1.1.7.2.1.4" // 優先度別テーブル。全行合算
+	TempSensorTemp      = "1.3.6.1.4.1.4526.10.43.1.8.1.5"  // INDEX=unit,sensor
+	TempUnitState       = "1.3.6.1.4.1.4526.10.43.1.15.1.2" // BoxsTemperatureStatus
+	FanItemState        = "1.3.6.1.4.1.4526.10.43.1.6.1.3"  // INDEX=unit,fan
+	FanSpeed            = "1.3.6.1.4.1.4526.10.43.1.6.1.4"  // OCTET STRING
+	FanDutyLevel        = "1.3.6.1.4.1.4526.10.43.1.6.1.5"  // OCTET STRING
+	PowSupplyItemState  = "1.3.6.1.4.1.4526.10.43.1.7.1.3"
+	OpticsTemp          = "1.3.6.1.4.1.4526.10.43.1.18.1.2" // ÷10 ℃, INDEX=ifIndex
+	OpticsVoltage       = "1.3.6.1.4.1.4526.10.43.1.18.1.3" // ÷1000 V
+	OpticsCurrent       = "1.3.6.1.4.1.4526.10.43.1.18.1.4" // ÷10 mA
+	OpticsPowerOut      = "1.3.6.1.4.1.4526.10.43.1.18.1.5" // ÷100 dBm
+	OpticsPowerIn       = "1.3.6.1.4.1.4526.10.43.1.18.1.6" // ÷100 dBm
+	OpticsTxFault       = "1.3.6.1.4.1.4526.10.43.1.18.1.7" // TruthValue
+	OpticsLos           = "1.3.6.1.4.1.4526.10.43.1.18.1.8"
+	OpticsInfoVendor    = "1.3.6.1.4.1.4526.10.43.1.19.1.2"
+	OpticsInfoPartNo    = "1.3.6.1.4.1.4526.10.43.1.19.1.6"
 	OpticsInfoSupported = "1.3.6.1.4.1.4526.10.43.1.19.1.10"
 )
 
 // 接続機器識別
 const (
-	LldpLocChassisID   = "1.0.8802.1.1.2.1.3.2.0"
-	LldpRemChassisID   = "1.0.8802.1.1.2.1.4.1.1.5" // INDEX=timeMark,localPort,remIndex
+	LldpLocChassisID        = "1.0.8802.1.1.2.1.3.2.0"
+	LldpRemChassisID        = "1.0.8802.1.1.2.1.4.1.1.5"   // INDEX=timeMark,localPort,remIndex
 	Dot1qVlanStaticEgress   = "1.3.6.1.2.1.17.7.1.4.3.1.2" // PortList, INDEX=vlan
 	Dot1qVlanStaticUntagged = "1.3.6.1.2.1.17.7.1.4.3.1.4"
-	LldpRemPortID      = "1.0.8802.1.1.2.1.4.1.1.7"
-	LldpRemPortDesc    = "1.0.8802.1.1.2.1.4.1.1.8"
-	LldpRemSysName     = "1.0.8802.1.1.2.1.4.1.1.9"
-	LldpRemSysDesc     = "1.0.8802.1.1.2.1.4.1.1.10"
-	LldpRemManAddrIfID = "1.0.8802.1.1.2.1.4.2.1.4" // INDEX=...,subtype,len,addr
-	Dot1qTpFdbPort     = "1.3.6.1.2.1.17.7.1.2.2.1.2" // INDEX=fdbId,mac(6)
-	Dot1qTpFdbStatus   = "1.3.6.1.2.1.17.7.1.2.2.1.3"
-	Dot1dBasePortIfIdx = "1.3.6.1.2.1.17.1.4.1.2"
-	IpNetToPhysPhys    = "1.3.6.1.2.1.4.35.1.4" // INDEX=ifIndex,atype,len,addr
-	IpNetToMediaPhys   = "1.3.6.1.2.1.4.22.1.2" // INDEX=ifIndex,ip(4)
-	DsBindingIfIndex   = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.1" // INDEX=mac
-	DsBindingVlan      = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.2"
-	DsBindingIP        = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.4"
-	Dot1qPvid          = "1.3.6.1.2.1.17.7.1.4.5.1.1"
-	Dot1qVlanStaticName = "1.3.6.1.2.1.17.7.1.4.3.1.1"
+	LldpRemPortID           = "1.0.8802.1.1.2.1.4.1.1.7"
+	LldpRemPortDesc         = "1.0.8802.1.1.2.1.4.1.1.8"
+	LldpRemSysName          = "1.0.8802.1.1.2.1.4.1.1.9"
+	LldpRemSysDesc          = "1.0.8802.1.1.2.1.4.1.1.10"
+	LldpRemManAddrIfID      = "1.0.8802.1.1.2.1.4.2.1.4"   // INDEX=...,subtype,len,addr
+	Dot1qTpFdbPort          = "1.3.6.1.2.1.17.7.1.2.2.1.2" // INDEX=fdbId,mac(6)
+	Dot1qTpFdbStatus        = "1.3.6.1.2.1.17.7.1.2.2.1.3"
+	Dot1dBasePortIfIdx      = "1.3.6.1.2.1.17.1.4.1.2"
+	IpNetToPhysPhys         = "1.3.6.1.2.1.4.35.1.4"                // INDEX=ifIndex,atype,len,addr
+	IpNetToMediaPhys        = "1.3.6.1.2.1.4.22.1.2"                // INDEX=ifIndex,ip(4)
+	DsBindingIfIndex        = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.1" // INDEX=mac
+	DsBindingVlan           = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.2"
+	DsBindingIP             = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.4"
+	Dot1qPvid               = "1.3.6.1.2.1.17.7.1.4.5.1.1"
+	Dot1qVlanStaticName     = "1.3.6.1.2.1.17.7.1.4.3.1.1"
 )
 
 // DHCP（fastpath_dhcp.my / fastpathswitching.my）
 const (
-	DhcpServerAdminMode     = "1.3.6.1.4.1.4526.10.12.1.1.0" // 1=en 2=dis
-	DhcpServerDeclineRx     = "1.3.6.1.4.1.4526.10.12.1.8.0"
-	DhcpServerNakTx         = "1.3.6.1.4.1.4526.10.12.1.13.0"
-	DhcpServerDiscoverDrop  = "1.3.6.1.4.1.4526.10.12.1.16.0"
-	DhcpPoolName            = "1.3.6.1.4.1.4526.10.12.2.2.1.2"
-	DhcpLeaseIP             = "1.3.6.1.4.1.4526.10.12.3.2.1.1" // INDEX=leaseIndex
-	DhcpLeaseHW             = "1.3.6.1.4.1.4526.10.12.3.2.1.3"
-	DhcpLeasePool           = "1.3.6.1.4.1.4526.10.12.3.2.1.7"
-	DhcpConflictType        = "1.3.6.1.4.1.4526.10.12.4.3.1.2" // INDEX=ip
-	DhcpSnoopingAdminMode   = "1.3.6.1.4.1.4526.10.1.2.8.23.1.0" // TruthValue
-	DhcpSnoopVlanEnable     = "1.3.6.1.4.1.4526.10.1.2.8.23.3.1.2"
-	DhcpSnoopIfTrust        = "1.3.6.1.4.1.4526.10.1.2.8.23.4.1.1"
-	DhcpSnoopInvalidServer  = "1.3.6.1.4.1.4526.10.1.2.8.23.7.1.3" // INDEX=ifIndex
+	DhcpServerAdminMode    = "1.3.6.1.4.1.4526.10.12.1.1.0" // 1=en 2=dis
+	DhcpServerDeclineRx    = "1.3.6.1.4.1.4526.10.12.1.8.0"
+	DhcpServerNakTx        = "1.3.6.1.4.1.4526.10.12.1.13.0"
+	DhcpServerDiscoverDrop = "1.3.6.1.4.1.4526.10.12.1.16.0"
+	DhcpPoolName           = "1.3.6.1.4.1.4526.10.12.2.2.1.2"
+	DhcpLeaseIP            = "1.3.6.1.4.1.4526.10.12.3.2.1.1" // INDEX=leaseIndex
+	DhcpLeaseHW            = "1.3.6.1.4.1.4526.10.12.3.2.1.3"
+	DhcpLeasePool          = "1.3.6.1.4.1.4526.10.12.3.2.1.7"
+	DhcpConflictType       = "1.3.6.1.4.1.4526.10.12.4.3.1.2"   // INDEX=ip
+	DhcpSnoopingAdminMode  = "1.3.6.1.4.1.4526.10.1.2.8.23.1.0" // TruthValue
+	DhcpSnoopVlanEnable    = "1.3.6.1.4.1.4526.10.1.2.8.23.3.1.2"
+	DhcpSnoopIfTrust       = "1.3.6.1.4.1.4526.10.1.2.8.23.4.1.1"
+	DhcpSnoopInvalidServer = "1.3.6.1.4.1.4526.10.1.2.8.23.7.1.3" // INDEX=ifIndex
 )
 
 // L2冗長・診断・AV地雷・ログ・管理アクセス
@@ -228,4 +228,8 @@ const (
 	AsStepsRemoved         = "1.3.111.2.802.1.1.20.1.2.1.0"
 	AsGrandmasterIdentity  = "1.3.111.2.802.1.1.20.1.3.4.0"
 	MsrpStreamVlanID       = "1.3.6.1.4.1.4526.10.60.2.3.1.7.1.4"
+	MsrpStreamID           = "1.3.6.1.4.1.4526.10.60.2.3.1.7.1.2"
+	MsrpResvDeclType       = "1.3.6.1.4.1.4526.10.60.2.3.1.8.1.3" // 0=talkerAdvertise 1=talkerFailed 2=listenerAskingFailed 3=listenerReady 4=listenerReadyFailed
+	MsrpResvFailureCode    = "1.3.6.1.4.1.4526.10.60.2.3.1.8.1.6" // 0=noFailure
+	MvrPortMemberRow       = "1.3.6.1.4.1.4526.10.50.4.1.3"       // INDEX=group(4),ifIndex
 )

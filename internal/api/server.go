@@ -28,17 +28,17 @@ import (
 
 // Server はHTTPサーバーの依存関係。
 type Server struct {
-	Version  string
-	DataDir  string
-	Store    *store.Store
-	Engine   *engine.Engine
-	Poller   *poller.Manager
-	Trap     *trap.Receiver
-	Hub      *Hub
-	Lab      *sim.Lab // nil なら非ラボ
-	Static   fs.FS    // web/dist
-	WebAddr  string
-	Ctx      context.Context
+	Version string
+	DataDir string
+	Store   *store.Store
+	Engine  *engine.Engine
+	Poller  *poller.Manager
+	Trap    *trap.Receiver
+	Hub     *Hub
+	Lab     *sim.Lab // nil なら非ラボ
+	Static  fs.FS    // web/dist
+	WebAddr string
+	Ctx     context.Context
 
 	mu      sync.Mutex
 	locked  bool
@@ -296,7 +296,9 @@ func (s *Server) networkBind(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, st)
 }
 
-func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Engine.Settings()) }
+func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, s.Engine.Settings())
+}
 
 func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	var in engine.Settings
@@ -355,13 +357,13 @@ func (s *Server) activateProfile(w http.ResponseWriter, r *http.Request) {
 
 // profileExport はプロファイル一式（スイッチ・ポート設定・ラベル・設定・レイアウト）のJSON。
 type profileExport struct {
-	Name      string                        `json:"name"`
-	Settings  json.RawMessage               `json:"settings"`
-	Layout    json.RawMessage               `json:"topology_layout"`
-	Watchlist json.RawMessage               `json:"watchlist"`
-	Switches  []model.SwitchConfig          `json:"switches"`
+	Name      string                               `json:"name"`
+	Settings  json.RawMessage                      `json:"settings"`
+	Layout    json.RawMessage                      `json:"topology_layout"`
+	Watchlist json.RawMessage                      `json:"watchlist"`
+	Switches  []model.SwitchConfig                 `json:"switches"`
 	Ports     map[string]map[int]store.PortSetting `json:"ports"`
-	Aliases   []store.Alias                 `json:"aliases"`
+	Aliases   []store.Alias                        `json:"aliases"`
 }
 
 func (s *Server) exportProfile(w http.ResponseWriter, r *http.Request) {

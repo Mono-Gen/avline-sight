@@ -23,9 +23,12 @@ var Scenarios = []Scenario{
 	{"poe-overload", "PoE過負荷（Overload/PowerDenied）"},
 	{"chassis", "CPU高騰・Mbuf確保失敗・温度上昇・電源瞬断"},
 	{"stp-loop", "STP Blocking出現＋MSTP設定＋TCN増加"},
+	{"avb-mvr", "AVB/Milan帯域予約失敗＋MVR IGMP受信失敗"},
 }
 
-func vbInt(oid string, v int) extraVB { return gosnmp.SnmpPDU{Name: "." + oid, Type: gosnmp.Integer, Value: v} }
+func vbInt(oid string, v int) extraVB {
+	return gosnmp.SnmpPDU{Name: "." + oid, Type: gosnmp.Integer, Value: v}
+}
 
 // Inject は指定スイッチへ障害を注入する。
 func (l *Lab) Inject(sw int, id string) error {
@@ -134,6 +137,10 @@ func (l *Lab) Inject(sw int, id string) error {
 			}
 		}
 		s.trap("stpInstanceTopologyChangeTrap")
+	case "avb-mvr":
+		s.AVBDemo = true
+		s.MvrRxFail += 7
+		s.addLog("MSRP: reservation failed for stream 0x28C68E1000000001 (insufficient bandwidth)")
 	default:
 		return fmt.Errorf("未知のシナリオ %q", id)
 	}
@@ -157,6 +164,7 @@ func (l *Lab) Reset() {
 		}
 		s.Querier, s.DhcpServerOn, s.DhcpConflicts = f.Querier, f.DhcpServerOn, nil
 		s.CPU5s, s.MemFreePct, s.TempC, s.StpVersion = f.CPU5s, f.MemFreePct, f.TempC, f.StpVersion
+		s.AVBDemo = false
 		s.addLog("LAB: faults cleared")
 		s.mu.Unlock()
 	}

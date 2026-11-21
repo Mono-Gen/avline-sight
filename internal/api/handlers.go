@@ -1027,7 +1027,9 @@ func expandRange(s string) ([]string, error) {
 	return out, nil
 }
 
-func ipU32(ip net.IP) uint32 { return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3]) }
+func ipU32(ip net.IP) uint32 {
+	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
+}
 
 func (s *Server) lldpCandidates(w http.ResponseWriter, r *http.Request) {
 	reg := map[string]bool{}

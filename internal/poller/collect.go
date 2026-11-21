@@ -218,7 +218,10 @@ func (w *worker) collectMedium() error {
 				continue
 			}
 			k := strconv.Itoa(p.IfIndex)
-			d := func(col string, is32 bool) uint64 { v, _ := w.cnt.delta("m"+col+"|"+k, sx.U64(r.Cols[col]), is32); return v }
+			d := func(col string, is32 bool) uint64 {
+				v, _ := w.cnt.delta("m"+col+"|"+k, sx.U64(r.Cols[col]), is32)
+				return v
+			}
 			p.FCSDelta = d(mib.Dot3FCSErrors, true)
 			p.AlignDelta = d(mib.Dot3AlignmentErrors, true)
 			p.SymbolDelta = d(mib.Dot3SymbolErrors, true)
@@ -463,6 +466,7 @@ func (w *worker) collectIGMP() error {
 			ig.Mrouters = append(ig.Mrouters, model.Mrouter{Port: pname(int(r.Index[0])), VLAN: int(r.Index[1])})
 		}
 	}
+	w.collectMVRMSRP(pname)
 	// MVR / gPTP（未対応時はスキップ）
 	if w.supported("avb") {
 		res, err := w.c.Get([]string{mib.MvrAdminMode, mib.AsDefaultClockIdentity, mib.AsGrandmasterIdentity, mib.AsStepsRemoved})
@@ -478,6 +482,77 @@ func (w *worker) collectIGMP() error {
 		}
 	}
 	return nil
+}
+
+var msrpDecl = mib.Enum{0: "talkerAdvertise", 1: "talkerFailed", 2: "listenerAskingFailed", 3: "listenerReady", 4: "listenerReadyFailed"}
+
+// collectMVRMSRP は MVRグループ/所属ポート/IGMP受信失敗 と MSRPストリーム/予約失敗 を取得する（仕様3.3-7,8）。
+// 未有効・未対応のスイッチでは行が0件となり、UIは自動で折りたたむ。
+func (w *worker) collectMVRMSRP(pname func(int) string) {
+	ig := &w.st.IGMP
+	ig.MVRGroups = ig.MVRGroups[:0]
+	if w.supported("mvr") {
+		grows, err := w.c.WalkColumns([]string{mib.MvrGroupStatus})
+		prows, perr := w.c.WalkColumns([]string{mib.MvrPortMemberRow})
+		w.markCap("mvr", err, len(grows)+len(prows))
+		byG := map[string]*model.MVRGroup{}
+		var order []string
+		for _, r := range grows {
+			g := sx.IndexIPv4(r.Index)
+			byG[g] = &model.MVRGroup{Group: g, Active: sx.Int(r.Cols[mib.MvrGroupStatus]) == 1}
+			order = append(order, g)
+		}
+		if perr == nil {
+			for _, r := range prows {
+				if len(r.Index) < 5 {
+					continue
+				}
+				g := sx.IndexIPv4(r.Index[:4])
+				if byG[g] == nil {
+					byG[g] = &model.MVRGroup{Group: g}
+					order = append(order, g)
+				}
+				byG[g].Ports = append(byG[g].Ports, pname(int(r.Index[4])))
+			}
+		}
+		for _, g := range order {
+			ig.MVRGroups = append(ig.MVRGroups, *byG[g])
+		}
+		if res, err := w.c.Get([]string{mib.MvrIGMPRxFailures}); err == nil {
+			if v, ok := res[mib.MvrIGMPRxFailures]; ok {
+				n := sx.U64(v)
+				ig.MVRRxFailDelta, _ = w.cnt.delta("mvrrx", n, true)
+				ig.MVRRxFailures = n
+			}
+		}
+	}
+	ig.MSRPStreams, ig.MSRPReservations, ig.MSRPFailed = 0, 0, ig.MSRPFailed[:0]
+	if w.supported("msrp") {
+		srows, err := w.c.WalkColumns([]string{mib.MsrpStreamID})
+		rrows, rerr := w.c.WalkColumns([]string{mib.MsrpResvDeclType, mib.MsrpResvFailureCode})
+		w.markCap("msrp", err, len(srows)+len(rrows))
+		ig.MSRPStreams = len(srows)
+		if rerr == nil {
+			ig.MSRPReservations = len(rrows)
+			for _, r := range rrows {
+				decl := int(sx.Int(r.Cols[mib.MsrpResvDeclType]))
+				code := int(sx.Int(r.Cols[mib.MsrpResvFailureCode]))
+				if decl == 1 || decl == 2 || decl == 4 || code != 0 {
+					// INDEX = streamId(8オクテット), direction, port
+					sid, port := "", ""
+					if len(r.Index) >= 10 {
+						var b []byte
+						for _, x := range r.Index[:8] {
+							b = append(b, byte(x))
+						}
+						sid = fmt.Sprintf("%X", b)
+						port = pname(int(r.Index[9]))
+					}
+					ig.MSRPFailed = append(ig.MSRPFailed, model.MSRPFailure{StreamID: sid, Port: port, Decl: msrpDecl.Name(decl), Code: code})
+				}
+			}
+		}
+	}
 }
 
 func (w *worker) basePortToIf(bp int) int {

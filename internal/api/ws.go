@@ -211,6 +211,11 @@ func (s *Server) wsTerminal(w http.ResponseWriter, r *http.Request) {
 		if json.Unmarshal(data, &m) != nil {
 			continue
 		}
+		// ロック後の入力は1文字も実機へ転送しない（定期チェックを待たずに拒否）
+		if s.isLocked() {
+			conn.Close(websocket.StatusPolicyViolation, "閲覧専用ロックにより切断しました")
+			return
+		}
 		switch m.Type {
 		case "data":
 			if _, err := sess.Write([]byte(m.Data)); err != nil {

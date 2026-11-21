@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -99,5 +100,34 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if _, err := r.DB.Exec(`DELETE FROM events`); err == nil {
 		t.Error("再生DBが書き込み可能になっている")
+	}
+}
+
+// 監査2周目A-1の回帰テスト: 旧スキーマDBでも移行後はIDが再利用されない
+func TestMigrateSwitchesAutoinc(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "old.db")
+	old, err := sql.Open("sqlite", "file:"+p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old.Exec(`CREATE TABLE switches (id INTEGER PRIMARY KEY, profile_id INTEGER NOT NULL, name TEXT NOT NULL, group_tag TEXT NOT NULL DEFAULT '',
+  ip TEXT NOT NULL, snmp_port INTEGER NOT NULL DEFAULT 161, community_ro TEXT NOT NULL DEFAULT 'public',
+  web_url TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', fw_version TEXT NOT NULL DEFAULT '',
+  sys_object_id TEXT NOT NULL DEFAULT '', oid_capabilities_json TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1)`)
+	old.Exec(`INSERT INTO switches(id,profile_id,name,ip) VALUES(1,1,'A','10.0.0.1'),(2,1,'B','10.0.0.2')`)
+	old.Close()
+	s, err := Open(p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	s.InsertEvent(&model.Event{TS: time.Now(), SwitchID: 2, Category: "ANOMALY", Severity: "INFO", Code: "X", Title: "旧Bの履歴"})
+	s.DeleteSwitch(2)
+	n := model.SwitchConfig{ProfileID: 1, Name: "C", IP: "10.0.0.3", Enabled: true}
+	if err := s.SaveSwitch(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n.ID <= 2 {
+		t.Fatalf("削除済みIDが再利用された: %d", n.ID)
 	}
 }

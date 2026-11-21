@@ -25,27 +25,27 @@ const (
 
 // SwitchState はスイッチ1台の最新状態。
 type SwitchState struct {
-	ID          int64      `json:"id"`
-	Name        string     `json:"name"`
-	IP          string     `json:"ip"`
-	GroupTag    string     `json:"group_tag"`
-	Reachable   bool       `json:"reachable"`
-	LastError   string     `json:"last_error,omitempty"`
-	LastPoll    time.Time  `json:"last_poll"`
-	SysName     string     `json:"sys_name"`
-	SysDescr    string     `json:"sys_descr"`
-	SysObjectID string     `json:"sys_object_id"`
-	Model       string     `json:"model"`
-	FW          string     `json:"fw"`
-	Serial      string     `json:"serial"`
-	UptimeSec   int64      `json:"uptime_sec"`
-	BaseMAC     string     `json:"base_mac"`
-	Ports       []*Port    `json:"ports"`
-	Health      Health     `json:"health"`
-	IGMP        IGMP       `json:"igmp"`
-	DHCP        DHCP       `json:"dhcp"`
-	Config      SwitchConf `json:"config"`
-	Neighbors   []Neighbor `json:"neighbors"`
+	ID          int64             `json:"id"`
+	Name        string            `json:"name"`
+	IP          string            `json:"ip"`
+	GroupTag    string            `json:"group_tag"`
+	Reachable   bool              `json:"reachable"`
+	LastError   string            `json:"last_error,omitempty"`
+	LastPoll    time.Time         `json:"last_poll"`
+	SysName     string            `json:"sys_name"`
+	SysDescr    string            `json:"sys_descr"`
+	SysObjectID string            `json:"sys_object_id"`
+	Model       string            `json:"model"`
+	FW          string            `json:"fw"`
+	Serial      string            `json:"serial"`
+	UptimeSec   int64             `json:"uptime_sec"`
+	BaseMAC     string            `json:"base_mac"`
+	Ports       []*Port           `json:"ports"`
+	Health      Health            `json:"health"`
+	IGMP        IGMP              `json:"igmp"`
+	DHCP        DHCP              `json:"dhcp"`
+	Config      SwitchConf        `json:"config"`
+	Neighbors   []Neighbor        `json:"neighbors"`
 	Caps        map[string]string `json:"caps"` // 機能グループ→SUPPORTED/UNSUPPORTED/FALLBACK_USED
 	AlertCounts map[string]int    `json:"alert_counts"`
 }
@@ -85,49 +85,49 @@ type Port struct {
 	ErrSinceReset     uint64 `json:"err_since_reset"`
 	DiscardSinceReset uint64 `json:"discard_since_reset"`
 
-	PoE      *PoE    `json:"poe,omitempty"`
-	SFP      *SFP    `json:"sfp,omitempty"`
-	EEE      string  `json:"eee"`
-	Pause    string  `json:"pause"`
-	MaxFrame int     `json:"max_frame"`
-	UDLD     string  `json:"udld"`
-	StpState string  `json:"stp_state"`
-	Trust    string  `json:"trust"`
-	McastCtl bool    `json:"mcast_storm_ctl"`
-	BcastCtl bool    `json:"bcast_storm_ctl"`
-	Excluded bool    `json:"excluded"`
-	AVRole   string  `json:"av_role,omitempty"`
-	ExpectedSpeed int `json:"expected_speed_mbps,omitempty"`
-	Devices  []Device `json:"devices"`
-	Cable    *Cable  `json:"cable,omitempty"`
-	LastChange time.Time `json:"last_change"`
+	PoE           *PoE      `json:"poe,omitempty"`
+	SFP           *SFP      `json:"sfp,omitempty"`
+	EEE           string    `json:"eee"`
+	Pause         string    `json:"pause"`
+	MaxFrame      int       `json:"max_frame"`
+	UDLD          string    `json:"udld"`
+	StpState      string    `json:"stp_state"`
+	Trust         string    `json:"trust"`
+	McastCtl      bool      `json:"mcast_storm_ctl"`
+	BcastCtl      bool      `json:"bcast_storm_ctl"`
+	Excluded      bool      `json:"excluded"`
+	AVRole        string    `json:"av_role,omitempty"`
+	ExpectedSpeed int       `json:"expected_speed_mbps,omitempty"`
+	Devices       []Device  `json:"devices"`
+	Cable         *Cable    `json:"cable,omitempty"`
+	LastChange    time.Time `json:"last_change"`
 }
 
 // PoE はポートのPoE状態。
 type PoE struct {
-	Detect  string  `json:"detect"`
-	Class   int     `json:"class"`
-	PowerW  float64 `json:"power_w"`
-	CurrentMA int   `json:"current_ma"`
-	Volts   int     `json:"volts"`
-	Fault   string  `json:"fault"`
-	DeniedCnt   uint64 `json:"denied_cnt"`
-	OverloadCnt uint64 `json:"overload_cnt"`
-	ShortCnt    uint64 `json:"short_cnt"`
+	Detect      string  `json:"detect"`
+	Class       int     `json:"class"`
+	PowerW      float64 `json:"power_w"`
+	CurrentMA   int     `json:"current_ma"`
+	Volts       int     `json:"volts"`
+	Fault       string  `json:"fault"`
+	DeniedCnt   uint64  `json:"denied_cnt"`
+	OverloadCnt uint64  `json:"overload_cnt"`
+	ShortCnt    uint64  `json:"short_cnt"`
 }
 
 // SFP はDOM値。
 type SFP struct {
-	RxDBm   float64 `json:"rx_dbm"`
-	TxDBm   float64 `json:"tx_dbm"`
-	TempC   float64 `json:"temp_c"`
-	Volts   float64 `json:"volts"`
-	BiasMA  float64 `json:"bias_ma"`
-	LOS     bool    `json:"los"`
-	TxFault bool    `json:"tx_fault"`
-	Vendor  string  `json:"vendor"`
-	PartNo  string  `json:"part_no"`
-	Supported string `json:"supported"`
+	RxDBm     float64 `json:"rx_dbm"`
+	TxDBm     float64 `json:"tx_dbm"`
+	TempC     float64 `json:"temp_c"`
+	Volts     float64 `json:"volts"`
+	BiasMA    float64 `json:"bias_ma"`
+	LOS       bool    `json:"los"`
+	TxFault   bool    `json:"tx_fault"`
+	Vendor    string  `json:"vendor"`
+	PartNo    string  `json:"part_no"`
+	Supported string  `json:"supported"`
 }
 
 // Cable はTDR結果。
@@ -166,21 +166,21 @@ type Neighbor struct {
 
 // Health は筐体ヘルス。
 type Health struct {
-	CPU5s           float64     `json:"cpu_5s"`
-	CPU60s          float64     `json:"cpu_60s"`
-	CPU300s         float64     `json:"cpu_300s"`
-	MemFreePct      float64     `json:"mem_free_pct"`
-	MbufUsedPct     float64     `json:"mbuf_used_pct"`
-	MbufAllocFails  uint64      `json:"mbuf_alloc_fails"`
-	MbufFailDelta   uint64      `json:"mbuf_fail_delta"`
-	TempMaxC        float64     `json:"temp_max_c"`
-	TempState       string      `json:"temp_state"`
-	Temps           []float64   `json:"temps"`
-	Fans            []Item      `json:"fans"`
-	PSUs            []Item      `json:"psus"`
-	PoEBudgetW      float64     `json:"poe_budget_w"`
-	PoEUsedW        float64     `json:"poe_used_w"`
-	Processes       []Process   `json:"processes"`
+	CPU5s          float64   `json:"cpu_5s"`
+	CPU60s         float64   `json:"cpu_60s"`
+	CPU300s        float64   `json:"cpu_300s"`
+	MemFreePct     float64   `json:"mem_free_pct"`
+	MbufUsedPct    float64   `json:"mbuf_used_pct"`
+	MbufAllocFails uint64    `json:"mbuf_alloc_fails"`
+	MbufFailDelta  uint64    `json:"mbuf_fail_delta"`
+	TempMaxC       float64   `json:"temp_max_c"`
+	TempState      string    `json:"temp_state"`
+	Temps          []float64 `json:"temps"`
+	Fans           []Item    `json:"fans"`
+	PSUs           []Item    `json:"psus"`
+	PoEBudgetW     float64   `json:"poe_budget_w"`
+	PoEUsedW       float64   `json:"poe_used_w"`
+	Processes      []Process `json:"processes"`
 }
 
 // Item はファン・電源ユニット。
@@ -200,13 +200,18 @@ type Process struct {
 
 // IGMP はSnooping/クエリア/グループ。
 type IGMP struct {
-	SnoopingOn bool            `json:"snooping_on"`
-	Vlans      []VlanIGMP      `json:"vlans"`
-	Groups     []McastGroup    `json:"groups"`
-	Mrouters   []Mrouter       `json:"mrouters"`
-	MVR        bool            `json:"mvr"`
-	GPTP       *GPTP           `json:"gptp,omitempty"`
-	MSRPStreams int            `json:"msrp_streams"`
+	SnoopingOn       bool          `json:"snooping_on"`
+	Vlans            []VlanIGMP    `json:"vlans"`
+	Groups           []McastGroup  `json:"groups"`
+	Mrouters         []Mrouter     `json:"mrouters"`
+	MVR              bool          `json:"mvr"`
+	GPTP             *GPTP         `json:"gptp,omitempty"`
+	MSRPStreams      int           `json:"msrp_streams"`
+	MSRPReservations int           `json:"msrp_reservations"`
+	MSRPFailed       []MSRPFailure `json:"msrp_failed"`
+	MVRGroups        []MVRGroup    `json:"mvr_groups"`
+	MVRRxFailures    uint64        `json:"mvr_rx_failures"`
+	MVRRxFailDelta   uint64        `json:"mvr_rx_fail_delta"`
 }
 
 // VlanIGMP はVLANのSnooping・クエリア状態。
@@ -233,6 +238,21 @@ type McastGroup struct {
 	Source   string   `json:"source"`   // ssm/l2
 }
 
+// MSRPFailure はAVB/Milanの帯域予約失敗。
+type MSRPFailure struct {
+	StreamID string `json:"stream_id"`
+	Port     string `json:"port"`
+	Decl     string `json:"declaration"`
+	Code     int    `json:"failure_code"`
+}
+
+// MVRGroup はMVRグループと所属ポート。
+type MVRGroup struct {
+	Group  string   `json:"group"`
+	Active bool     `json:"active"`
+	Ports  []string `json:"ports"`
+}
+
 // Mrouter はMRouterポート。
 type Mrouter struct {
 	Port string `json:"port"`
@@ -241,21 +261,21 @@ type Mrouter struct {
 
 // GPTP は802.1AS状態。
 type GPTP struct {
-	ClockID       string `json:"clock_id"`
-	Grandmaster   string `json:"grandmaster"`
-	StepsRemoved  int    `json:"steps_removed"`
+	ClockID      string `json:"clock_id"`
+	Grandmaster  string `json:"grandmaster"`
+	StepsRemoved int    `json:"steps_removed"`
 }
 
 // DHCP はサーバー・Snooping状態。
 type DHCP struct {
-	ServerOn     bool        `json:"server_on"`
-	Pools        []string    `json:"pools"`
-	Leases       []Lease     `json:"leases"`
-	Conflicts    []string    `json:"conflicts"`
-	SnoopingOn   bool        `json:"snooping_on"`
-	InvalidServerMsgs uint64 `json:"invalid_server_msgs"`
-	InvalidDelta uint64      `json:"invalid_delta"`
-	DeclineRx    uint64      `json:"decline_rx"`
+	ServerOn          bool     `json:"server_on"`
+	Pools             []string `json:"pools"`
+	Leases            []Lease  `json:"leases"`
+	Conflicts         []string `json:"conflicts"`
+	SnoopingOn        bool     `json:"snooping_on"`
+	InvalidServerMsgs uint64   `json:"invalid_server_msgs"`
+	InvalidDelta      uint64   `json:"invalid_delta"`
+	DeclineRx         uint64   `json:"decline_rx"`
 }
 
 // Lease はDHCPリース。
@@ -268,35 +288,35 @@ type Lease struct {
 
 // SwitchConf はSlow周期の設定値（監査用）。
 type SwitchConf struct {
-	StpVersion   string `json:"stp_version"`
-	StpPriority  int    `json:"stp_priority"`
-	BridgeID     string `json:"bridge_id"`
-	RootID       string `json:"root_id"`
-	IsRoot       bool   `json:"is_root"`
-	TopoChanges  uint64 `json:"topo_changes"`
-	Bonjour      bool   `json:"bonjour"`
-	BcastStormGlobal bool `json:"bcast_storm_global"`
-	McastStormGlobal bool `json:"mcast_storm_global"`
-	HTTPS        bool   `json:"https"`
-	HTTPSPort    int    `json:"https_port"`
-	SSH          bool   `json:"ssh"`
-	SSHPort      int    `json:"ssh_port"`
-	TelnetPort   int    `json:"telnet_port"`
+	StpVersion       string `json:"stp_version"`
+	StpPriority      int    `json:"stp_priority"`
+	BridgeID         string `json:"bridge_id"`
+	RootID           string `json:"root_id"`
+	IsRoot           bool   `json:"is_root"`
+	TopoChanges      uint64 `json:"topo_changes"`
+	Bonjour          bool   `json:"bonjour"`
+	BcastStormGlobal bool   `json:"bcast_storm_global"`
+	McastStormGlobal bool   `json:"mcast_storm_global"`
+	HTTPS            bool   `json:"https"`
+	HTTPSPort        int    `json:"https_port"`
+	SSH              bool   `json:"ssh"`
+	SSHPort          int    `json:"ssh_port"`
+	TelnetPort       int    `json:"telnet_port"`
 }
 
 // Event はTrap・異常・接続変化・内部ログ・マーカーの統合イベント。
 type Event struct {
-	ID       int64          `json:"id"`
-	TS       time.Time      `json:"ts"`
-	SwitchID int64          `json:"switch_id"`
-	IfIndex  int            `json:"if_index"`
-	Category string         `json:"category"` // TRAP/ANOMALY/CONNECT/SYSLOG/BASELINE/MARKER/SYSTEM
-	Severity string         `json:"severity"`
-	Code     string         `json:"code"`
-	Title    string         `json:"title"`
-	Detail   map[string]any `json:"detail,omitempty"`
-	Hint     string         `json:"hint,omitempty"`
-	Acked    bool           `json:"acked"`
-	SwitchName string       `json:"switch_name,omitempty"`
-	Dedupe   string         `json:"-"` // 重複排除キー（内部ログ等）
+	ID         int64          `json:"id"`
+	TS         time.Time      `json:"ts"`
+	SwitchID   int64          `json:"switch_id"`
+	IfIndex    int            `json:"if_index"`
+	Category   string         `json:"category"` // TRAP/ANOMALY/CONNECT/SYSLOG/BASELINE/MARKER/SYSTEM
+	Severity   string         `json:"severity"`
+	Code       string         `json:"code"`
+	Title      string         `json:"title"`
+	Detail     map[string]any `json:"detail,omitempty"`
+	Hint       string         `json:"hint,omitempty"`
+	Acked      bool           `json:"acked"`
+	SwitchName string         `json:"switch_name,omitempty"`
+	Dedupe     string         `json:"-"` // 重複排除キー（内部ログ等）
 }

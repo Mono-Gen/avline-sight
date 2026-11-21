@@ -36,12 +36,12 @@ func codes(t *testing.T, st *store.Store) map[string]int {
 func TestRulesFromSpec(t *testing.T) {
 	e, st := newTestEngine(t)
 	s := &model.SwitchState{ID: 1, Name: "SW", Reachable: true, Ports: []*model.Port{
-		{IfIndex: 1, Name: "1/0/1", Oper: "up", SpeedMbps: 1000, FCSDelta: 1},                                         // 物理エラー+1 → CRITICAL
-		{IfIndex: 2, Name: "1/0/2", Oper: "up", SpeedMbps: 1000, PauseDelta: 5, AVRole: "ndi4"},                        // NDI4はPAUSE許容
-		{IfIndex: 3, Name: "1/0/3", Oper: "up", SpeedMbps: 1000, PauseDelta: 5, AVRole: "dante", EEE: "enable"},       // PAUSE+EEE警告
-		{IfIndex: 4, Name: "1/0/4", Oper: "up", SpeedMbps: 10000, SFP: &model.SFP{RxDBm: -10.5}},                       // -10dBm未満
-		{IfIndex: 5, Name: "1/0/5", Oper: "up", SpeedMbps: 1000, FCSDelta: 9, Excluded: true},                          // 監視除外
-		{IfIndex: 6, Name: "1/0/6", Oper: "up", SpeedMbps: 10000, SFP: &model.SFP{RxDBm: -9.9}},                        // 基準内
+		{IfIndex: 1, Name: "1/0/1", Oper: "up", SpeedMbps: 1000, FCSDelta: 1},                                   // 物理エラー+1 → CRITICAL
+		{IfIndex: 2, Name: "1/0/2", Oper: "up", SpeedMbps: 1000, PauseDelta: 5, AVRole: "ndi4"},                 // NDI4はPAUSE許容
+		{IfIndex: 3, Name: "1/0/3", Oper: "up", SpeedMbps: 1000, PauseDelta: 5, AVRole: "dante", EEE: "enable"}, // PAUSE+EEE警告
+		{IfIndex: 4, Name: "1/0/4", Oper: "up", SpeedMbps: 10000, SFP: &model.SFP{RxDBm: -10.5}},                // -10dBm未満
+		{IfIndex: 5, Name: "1/0/5", Oper: "up", SpeedMbps: 1000, FCSDelta: 9, Excluded: true},                   // 監視除外
+		{IfIndex: 6, Name: "1/0/6", Oper: "up", SpeedMbps: 10000, SFP: &model.SFP{RxDBm: -9.9}},                 // 基準内
 	}, Health: model.Health{CPU5s: 80, MemFreePct: 15, TempMaxC: 40}}
 	e.OnState(s, "medium")
 	c := codes(t, st)

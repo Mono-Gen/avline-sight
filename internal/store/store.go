@@ -106,23 +106,62 @@ func Open(path string, readOnly bool) (*Store, error) {
 			db.Close()
 			return nil, fmt.Errorf("スキーマ適用に失敗: %w", err)
 		}
+		if err := migrateSwitchesAutoinc(db); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("DB移行に失敗: %w", err)
+		}
 	}
 	return s, nil
+}
+
+// migrateSwitchesAutoinc は旧版DBの switches を AUTOINCREMENT 付きへ作り直す。
+// 削除済みスイッチのIDが再利用されると、残存する時系列・イベントが新しい機器に紐付いてしまうため。
+func migrateSwitchesAutoinc(db *sql.DB) error {
+	var ddl string
+	if err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='switches'`).Scan(&ddl); err != nil {
+		return err
+	}
+	if strings.Contains(strings.ToUpper(ddl), "AUTOINCREMENT") {
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var maxHist sql.NullInt64
+	tx.QueryRow(`SELECT MAX(m) FROM (SELECT MAX(switch_id) m FROM port_metrics_raw UNION ALL SELECT MAX(switch_id) FROM events
+		UNION ALL SELECT MAX(switch_id) FROM switch_health_raw UNION ALL SELECT MAX(switch_id) FROM device_bindings UNION ALL SELECT MAX(id) FROM switches)`).Scan(&maxHist)
+	newDDL := strings.Replace(ddl, "switches", "switches_new", 1)
+	newDDL = strings.Replace(newDDL, "id INTEGER PRIMARY KEY,", "id INTEGER PRIMARY KEY AUTOINCREMENT,", 1)
+	for _, q := range []string{newDDL, `INSERT INTO switches_new SELECT * FROM switches`, `DROP TABLE switches`, `ALTER TABLE switches_new RENAME TO switches`} {
+		if _, err := tx.Exec(q); err != nil {
+			return err
+		}
+	}
+	// 履歴に残る最大IDより後から採番させる
+	if _, err := tx.Exec(`DELETE FROM sqlite_sequence WHERE name='switches'`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO sqlite_sequence(name,seq) VALUES('switches',?)`, maxHist.Int64); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // Close はDBを閉じる。
 func (s *Store) Close() error { return s.DB.Close() }
 
-func ms(t time.Time) int64 { return t.UnixMilli() }
+func ms(t time.Time) int64     { return t.UnixMilli() }
 func fromMS(v int64) time.Time { return time.UnixMilli(v).UTC() }
 
 // ---- プロファイル ----
 
 // Profile は現場プロファイル。
 type Profile struct {
-	ID     int64           `json:"id"`
-	Name   string          `json:"name"`
-	Active bool            `json:"active"`
+	ID     int64  `json:"id"`
+	Name   string `json:"name"`
+	Active bool   `json:"active"`
 }
 
 // EnsureDefaultProfile は初回起動時に既定プロファイルを作り、アクティブIDを返す。

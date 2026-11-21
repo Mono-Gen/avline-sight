@@ -66,7 +66,7 @@ type Port struct {
 
 	// 障害注入で設定するレート（/秒）
 	FCSRate, TooLongRate, PauseRate, LPIRate, DiscRate float64
-	McastFloodPps                                    float64
+	McastFloodPps                                      float64
 }
 
 // Switch は1台の仮想M4250。
@@ -107,19 +107,21 @@ type Switch struct {
 	logSeq        int
 	EEEGlobal     bool
 	Cable         CableResult
+	AVBDemo       bool    // MVRグループとMSRPストリーム（予約失敗あり）を公開する
+	MvrRxFail     float64 // MVR IGMP受信失敗カウンタ
 
 	trapHook func(name string, vbs []extraVB)
 }
 
 // QuerierState はVLANのIGMPクエリア状態。
 type QuerierState struct {
-	Snooping   bool
-	AdminOn    bool
-	Oper       int    // 0=disabled 1=querier 2=non-querier
-	Address    string // 自身のクエリアIP
-	LastAddr   string
-	LastVer    int
-	OperVer    int
+	Snooping bool
+	AdminOn  bool
+	Oper     int    // 0=disabled 1=querier 2=non-querier
+	Address  string // 自身のクエリアIP
+	LastAddr string
+	LastVer  int
+	OperVer  int
 }
 
 // LogEntry はスイッチ内部メモリログ1行。

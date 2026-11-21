@@ -10,25 +10,25 @@ import (
 
 // ルールベース診断の原因候補ヒント（仕様3.6の表）
 const (
-	hintPhy      = "物理ケーブル不良・コネクタ接触不良・ノイズ混入・SFP光劣化の疑い（公式基準: 正常は完全ゼロ。1件でも要確認）"
-	hintDiscard  = "帯域輻輳・Storm Control干渉・QoSキュー溢れの疑い（10分間観測で傾向確認推奨）"
-	hintMTU      = "接続機器または対向スイッチとのMTU（ジャンボフレーム / Q-SYS MTU 1500等）不一致の疑い"
-	hintSpeed    = "LANケーブル芯線断線（4芯落ち）・コネクタ圧着不良・オートネゴ不整合の疑い"
-	hintCos      = "特定ポートの帯域飽和・マイクロバースト・QoS優先度設定の要確認"
-	hintPause    = "Flow Control作動によるストリーム遅延の恐れ。AV用途では無効化推奨（NDI4除く）"
-	hintEEE      = "省電力イーサネット(802.3az)が有効。Dante/PTP同期不安定・音切れの原因"
-	hintSFP      = "光ファイバ端面汚れ・曲げ損失・断線・モジュール不良（SFP清掃・再挿抜推奨）"
-	hintUDLD     = "光ファイバ片芯断線・Tx/Rx異常"
-	hintDuplex   = "Duplex不整合（片側固定・片側オート）の疑い"
-	hintChassis  = "スイッチ過負荷・冷却異常・電源瞬断/再起動"
-	hintDHCP     = "不正ルーター持ち込み・二重DHCP・固定IPとの重複"
-	hintPoE      = "PoE電力不足または受電機器側の異常・短絡の疑い"
-	hintStp      = "物理ループ発生（Show STPで破線リンク確認・対象ポート切り分け）またはIGMP+非推奨のMSTP設定"
-	hintQuerier  = "最小IPルールによるエッジ選出、または外部機器（例：Crestron PRO4等）がクエリ送信しフラッディングさせている可能性"
-	hintNoQuery  = "クエリア不在によりマルチキャストが1〜5分後に途絶する恐れ。コアスイッチでIGMP Querierを有効化してください"
-	hintFlood    = "Unknown Multicastフラッディング発生の疑い（Snooping/Querier確認）"
-	hintFW       = "ネットワーク不安定の主要因（公式トラブルシュート Step 1）。バージョン統一を推奨"
-	hintStpPrio  = "全スイッチが既定優先度32768のままだとエッジがRoot Bridgeになり得ます。推奨: コア=0(Primary)、予備コア=8192(Backup)"
+	hintPhy     = "物理ケーブル不良・コネクタ接触不良・ノイズ混入・SFP光劣化の疑い（公式基準: 正常は完全ゼロ。1件でも要確認）"
+	hintDiscard = "帯域輻輳・Storm Control干渉・QoSキュー溢れの疑い（10分間観測で傾向確認推奨）"
+	hintMTU     = "接続機器または対向スイッチとのMTU（ジャンボフレーム / Q-SYS MTU 1500等）不一致の疑い"
+	hintSpeed   = "LANケーブル芯線断線（4芯落ち）・コネクタ圧着不良・オートネゴ不整合の疑い"
+	hintCos     = "特定ポートの帯域飽和・マイクロバースト・QoS優先度設定の要確認"
+	hintPause   = "Flow Control作動によるストリーム遅延の恐れ。AV用途では無効化推奨（NDI4除く）"
+	hintEEE     = "省電力イーサネット(802.3az)が有効。Dante/PTP同期不安定・音切れの原因"
+	hintSFP     = "光ファイバ端面汚れ・曲げ損失・断線・モジュール不良（SFP清掃・再挿抜推奨）"
+	hintUDLD    = "光ファイバ片芯断線・Tx/Rx異常"
+	hintDuplex  = "Duplex不整合（片側固定・片側オート）の疑い"
+	hintChassis = "スイッチ過負荷・冷却異常・電源瞬断/再起動"
+	hintDHCP    = "不正ルーター持ち込み・二重DHCP・固定IPとの重複"
+	hintPoE     = "PoE電力不足または受電機器側の異常・短絡の疑い"
+	hintStp     = "物理ループ発生（Show STPで破線リンク確認・対象ポート切り分け）またはIGMP+非推奨のMSTP設定"
+	hintQuerier = "最小IPルールによるエッジ選出、または外部機器（例：Crestron PRO4等）がクエリ送信しフラッディングさせている可能性"
+	hintNoQuery = "クエリア不在によりマルチキャストが1〜5分後に途絶する恐れ。コアスイッチでIGMP Querierを有効化してください"
+	hintFlood   = "Unknown Multicastフラッディング発生の疑い（Snooping/Querier確認）"
+	hintFW      = "ネットワーク不安定の主要因（公式トラブルシュート Step 1）。バージョン統一を推奨"
+	hintStpPrio = "全スイッチが既定優先度32768のままだとエッジがRoot Bridgeになり得ます。推奨: コア=0(Primary)、予備コア=8192(Backup)"
 )
 
 // ndi4系はFlow Control必要（公式ガイド）。PAUSE警告を出し分ける
@@ -50,7 +50,9 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 	ev := func(sev, code, title, hint string, ix int, det map[string]any) model.Event {
 		return model.Event{SwitchID: st.ID, SwitchName: st.Name, IfIndex: ix, Category: "ANOMALY", Severity: sev, Code: code, Title: title, Hint: hint, Detail: det}
 	}
-	key := func(sev, code string, ix int) string { return sw + "|" + sev + "|" + code + "|" + itoa(ix) + "|" + tier }
+	key := func(sev, code string, ix int) string {
+		return sw + "|" + sev + "|" + code + "|" + itoa(ix) + "|" + tier
+	}
 
 	if tier == "fast" || tier == "medium" {
 		for _, p := range st.Ports {
@@ -154,6 +156,14 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 			if p.StpState == "discarding" && p.Oper == "up" {
 				e.raise(seen, key(model.SevWarning, "STP_BLOCKING", p.IfIndex), ev(model.SevWarning, "STP_BLOCKING", fmt.Sprintf("%s STP Blocking", p.Name), hintStp, p.IfIndex, nil))
 			}
+		}
+		if n := len(st.IGMP.MSRPFailed); n > 0 {
+			e.raise(seen, key(model.SevWarning, "MSRP_RESV_FAILED", 0), ev(model.SevWarning, "MSRP_RESV_FAILED", fmt.Sprintf("AVB/Milan 帯域予約失敗 %d件", n),
+				"MSRP予約失敗。帯域不足・経路上のAVB非対応機器・VLAN不一致を確認してください", 0, nil))
+		}
+		if st.IGMP.MVRRxFailDelta > 0 {
+			e.raise(seen, key(model.SevWarning, "MVR_RX_FAIL", 0), ev(model.SevWarning, "MVR_RX_FAIL", fmt.Sprintf("MVR IGMPパケット受信失敗 +%d", st.IGMP.MVRRxFailDelta),
+				"MVR設定（ソース/レシーバーポート、MVR VLAN）の不整合を確認してください", 0, nil))
 		}
 		if st.Config.StpVersion == "mstp" {
 			e.raise(seen, key(model.SevWarning, "STP_MSTP", 0), ev(model.SevWarning, "STP_MSTP", "MSTPが稼働中（ProAVではRSTP推奨）", hintStp, 0, nil))

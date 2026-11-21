@@ -63,19 +63,19 @@ type Broadcaster interface {
 
 // Engine は監視中の全状態を保持する。
 type Engine struct {
-	mu        sync.RWMutex
-	st        *store.Store
-	profileID int64
-	states    map[int64]*model.SwitchState
-	order     []int64
-	settings  Settings
-	portCfg   map[int64]map[int]store.PortSetting
-	aliases   map[string]string // "mac|<MAC>" / "port|<swid>:<ifIndex>" → ラベル
-	active    map[string]time.Time // 発報中アラートキー → 最終発報
-	baseline  map[string]float64   // SFP Rx 基準（ベースライン比較用）
-	hub       Broadcaster
-	lastSnap  time.Time
-	snapDirty bool
+	mu          sync.RWMutex
+	st          *store.Store
+	profileID   int64
+	states      map[int64]*model.SwitchState
+	order       []int64
+	settings    Settings
+	portCfg     map[int64]map[int]store.PortSetting
+	aliases     map[string]string    // "mac|<MAC>" / "port|<swid>:<ifIndex>" → ラベル
+	active      map[string]time.Time // 発報中アラートキー → 最終発報
+	baseline    map[string]float64   // SFP Rx 基準（ベースライン比較用）
+	hub         Broadcaster
+	lastSnap    time.Time
+	snapDirty   bool
 	prevQuerier map[string]string
 	mediumFresh map[int64]bool // Medium更新後、まだFastで時系列へ書いていないか
 }

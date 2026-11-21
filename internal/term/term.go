@@ -44,10 +44,10 @@ func Dial(ctx context.Context, proto, host string, port int, user, pass string, 
 // ---- SSH ----
 
 type sshSession struct {
-	cl   *ssh.Client
-	s    *ssh.Session
-	in   io.WriteCloser
-	out  io.Reader
+	cl  *ssh.Client
+	s   *ssh.Session
+	in  io.WriteCloser
+	out io.Reader
 }
 
 func dialSSH(addr, user, pass string, cols, rows int) (Session, string, error) {
@@ -103,7 +103,7 @@ func dialSSH(addr, user, pass string, cols, rows int) (Session, string, error) {
 
 func (s *sshSession) Read(p []byte) (int, error)  { return s.out.Read(p) }
 func (s *sshSession) Write(p []byte) (int, error) { return s.in.Write(p) }
-func (s *sshSession) Resize(c, r int) error        { return s.s.WindowChange(r, c) }
+func (s *sshSession) Resize(c, r int) error       { return s.s.WindowChange(r, c) }
 func (s *sshSession) Close() error {
 	s.s.Close()
 	return s.cl.Close()
@@ -112,13 +112,13 @@ func (s *sshSession) Close() error {
 // ---- Telnet（IACネゴシエーション処理） ----
 
 const (
-	iac  = 255
-	dont = 254
-	do   = 253
-	wont = 252
-	will = 251
-	sb   = 250
-	se   = 240
+	iac     = 255
+	dont    = 254
+	do      = 253
+	wont    = 252
+	will    = 251
+	sb      = 250
+	se      = 240
 	optEcho = 1
 	optSGA  = 3
 	optNAWS = 31

@@ -413,7 +413,24 @@ func (s *Switch) build(lab *Lab) []entry {
 	b.scalar(mib.SSHAdminMode, I, 1)
 	b.scalar(mib.SSHMgmtPortNum, I, 22)
 	b.scalar(mib.TelnetMgmtPortNum, I, 23)
-	b.scalar(mib.MvrAdminMode, I, 2)
+	if s.AVBDemo {
+		b.scalar(mib.MvrAdminMode, I, 1)
+		g := []uint32{239, 1, 1, 1}
+		b.add(mib.MvrGroupStatus, g, I, 1)
+		for _, px := range []uint32{1, 2} {
+			b.add(mib.MvrPortMemberRow, append(append([]uint32{}, g...), px), I, 1)
+		}
+		b.scalar(mib.MvrIGMPRxFailures, G, uint(s.MvrRxFail))
+		sid := []uint32{0x28, 0xC6, 0x8E, 0x10, 0, 0, 0, 1}
+		b.add(mib.MsrpStreamID, i1(1), OS, []byte{0x28, 0xC6, 0x8E, 0x10, 0, 0, 0, 1})
+		// 予約: talker側は失敗(1)、listener側は準備完了(3)
+		b.add(mib.MsrpResvDeclType, append(append([]uint32{}, sid...), 0, 1), I, 1)
+		b.add(mib.MsrpResvFailureCode, append(append([]uint32{}, sid...), 0, 1), I, 1)
+		b.add(mib.MsrpResvDeclType, append(append([]uint32{}, sid...), 1, 2), I, 3)
+		b.add(mib.MsrpResvFailureCode, append(append([]uint32{}, sid...), 1, 2), I, 0)
+	} else {
+		b.scalar(mib.MvrAdminMode, I, 2)
+	}
 	b.scalar(mib.MulticastStormAction, I, 0)
 	b.scalar(mib.BroadcastControlModeGlobal, I, 2)
 	b.scalar(mib.MulticastControlModeGlobal, I, 2)

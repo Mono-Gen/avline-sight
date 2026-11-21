@@ -131,16 +131,16 @@ type worker struct {
 	cancel   context.CancelFunc
 	probeNow chan struct{}
 
-	c            *sx.Client
-	st           *model.SwitchState
-	cnt          counters
-	lastUptime   int64
-	basePort     map[int]int
-	vlanNames    map[int]string
-	lastLogIdx   int
-	devSeen      map[int]string // ifIndex → MAC集合の署名（接続変化検知）
-	failures     int
-	lastUpSpeed  map[int]int // ポート毎の直近リンクアップ速度
+	c           *sx.Client
+	st          *model.SwitchState
+	cnt         counters
+	lastUptime  int64
+	basePort    map[int]int
+	vlanNames   map[int]string
+	lastLogIdx  int
+	devSeen     map[int]string // ifIndex → MAC集合の署名（接続変化検知）
+	failures    int
+	lastUpSpeed map[int]int // ポート毎の直近リンクアップ速度
 }
 
 func newWorker(cfg model.SwitchConfig, iv Intervals, sink Sink, alias AliasFunc, cancel context.CancelFunc) *worker {
