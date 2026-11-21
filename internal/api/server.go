@@ -117,6 +117,7 @@ func (s *Server) Handler() http.Handler {
 	h("GET /api/switches/{id}/access-info", s.accessInfo)
 	h("POST /api/device-aliases", s.saveAlias)
 
+	h("GET /api/models", s.panelModels)
 	h("GET /api/overview", s.overview)
 	h("GET /api/ports/search", s.searchPorts)
 	h("GET /api/metrics/port", s.portMetrics)
