@@ -1,2 +1,98 @@
-import React,{useEffect,useState} from 'react';import {api,json} from '../api';import type {SwitchConfig} from '../types';import type {ViewProps} from './props';import {DiscoveryWizard,LabPanel,SwitchForm} from '../components/Dialogs';
-export function OverviewView(p:ViewProps){const [configs,setConfigs]=useState<SwitchConfig[]>([]);const [edit,setEdit]=useState<SwitchConfig|null>();const [discover,setDiscover]=useState(false);const [tag,setTag]=useState('');const refresh=()=>api<SwitchConfig[]>('/api/switches').then(setConfigs).catch(()=>setConfigs([]));useEffect(()=>{void refresh()},[]);const preset=p.settings?.views?.find(v=>v.id===p.part);const switches=(p.replay?p.replay.map(s=>({id:s.id,name:s.name,ip:s.ip,group_tag:s.group_tag,reachable:s.reachable,model:s.model,fw:s.fw,ports_up:(s.ports||[]).filter(x=>x.oper==='up').length,ports_total:(s.ports||[]).length,cpu_5s:s.health.cpu_5s,temp_max_c:s.health.temp_max_c,alerts:{critical:s.alert_counts?.CRITICAL||0,warning:s.alert_counts?.WARNING||0}})):p.overview.switches||[]).filter(s=>(!tag||s.group_tag===tag)&&(!preset?.tags?.length||preset.tags.includes(s.group_tag)));return <><div className="flex gap-2"><select value={tag} onChange={e=>setTag(e.target.value)}><option value="">すべてのグループ</option>{Array.from(new Set((p.replay||p.overview.switches||[]).map(s=>s.group_tag))).map(t=><option key={t}>{t}</option>)}</select><button disabled={p.locked} onClick={()=>setEdit(null)}>追加</button><button disabled={p.locked} onClick={()=>setDiscover(true)}>探索</button></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{switches.map(s=><article className="panel space-y-2" key={s.id}><h2 className="text-xl font-bold">{s.reachable?'🟢 接続中':'⚪ 未接続'} {s.name}</h2><p>{s.ip} · {s.group_tag} · {s.model} {s.fw}</p><p>ポート {s.ports_up}/{s.ports_total} · CPU {s.cpu_5s}% · 温度 {s.temp_max_c}℃</p><p>🔴 {s.alerts?.critical||0} ⚠ {s.alerts?.warning||0}</p><div className="flex flex-wrap gap-1"><button onClick={()=>p.select(s.id)}>ポート</button><button disabled={!!p.replay} onClick={()=>p.run(async()=>{const a=await api<{web_url:string}>(`/api/switches/${s.id}/access-info`);const u=new URL(a.web_url);if(!['http:','https:'].includes(u.protocol))throw new Error('URLが不正です。アクセス設定を確認してください。');window.open(u.href,'_blank','noopener,noreferrer')})}>WebUI</button><button disabled={p.locked} onClick={()=>p.openTerminal(s.id)}>ターミナル</button><button disabled={p.locked} onClick={()=>setEdit(configs.find(c=>c.id===s.id)??null)}>編集</button><button disabled={p.locked||p.busy} onClick={()=>{if(confirm(`${s.name} を削除しますか？`))p.run(async()=>{await api(`/api/switches/${s.id}`,json('DELETE'));await refresh()})}}>削除</button></div></article>)}</div>{!p.replay&&<section className="panel"><h2>最近のイベント</h2>{(p.overview.recent_events||[]).slice(0,20).map(e=><p key={e.id}>{e.ts} {e.severity} {e.title}</p>)}</section>}{p.status?.lab&&!p.replay&&<LabPanel run={p.run} busy={p.busy||p.locked}/>} {edit!==undefined&&<SwitchForm value={edit||undefined} close={()=>{setEdit(undefined);void refresh()}} run={p.run} busy={p.busy}/>} {discover&&<DiscoveryWizard close={()=>{setDiscover(false);void refresh()}} run={p.run} busy={p.busy}/>}</>}
+import { useEffect, useState } from 'react';
+import { api } from '../api';
+import { Badge } from '../components/Badge';
+import { DiscoveryWizard, LabPanel, SwitchForm } from '../components/Dialogs';
+import { SwitchCard } from '../components/SwitchCard';
+import { asArray, formatTime } from '../format';
+import type { SwitchConfig, SwitchState, SwitchSummary } from '../types';
+import type { ViewProps } from './props';
+
+function replaySummary(state: SwitchState): SwitchSummary {
+  const ports = asArray(state.ports);
+  const health = state.health;
+  return {
+    id: state.id,
+    name: state.name,
+    ip: state.ip,
+    group_tag: state.group_tag,
+    reachable: state.reachable,
+    last_error: state.last_error || '',
+    model: state.model,
+    fw: state.fw,
+    uptime_sec: state.uptime_sec,
+    cpu_5s: health.cpu_5s,
+    mem_free_pct: health.mem_free_pct,
+    mbuf_used_pct: health.mbuf_used_pct,
+    temp_max_c: health.temp_max_c,
+    temp_state: health.temp_state,
+    fans_ok: asArray(health.fans).every(item => item.state === 'operational' || item.state === 'normal'),
+    psu_ok: asArray(health.psus).every(item => item.state === 'operational' || item.state === 'normal'),
+    poe_budget_w: health.poe_budget_w,
+    poe_used_w: health.poe_used_w,
+    ports_up: asArray(ports).filter(port => port.oper === 'up').length,
+    ports_total: ports.length,
+    rx_bps: asArray(ports).reduce((sum, port) => sum + port.rx_bps, 0),
+    tx_bps: asArray(ports).reduce((sum, port) => sum + port.tx_bps, 0),
+    alerts: {
+      critical: state.alert_counts?.CRITICAL || 0,
+      warning: state.alert_counts?.WARNING || 0
+    },
+  };
+}
+
+export function OverviewView(props: ViewProps) {
+  const [edit, setEdit] = useState<SwitchConfig | null>();
+  const [discover, setDiscover] = useState(false);
+  const [tag, setTag] = useState('');
+  const [summaries, setSummaries] = useState<SwitchSummary[]>([]);
+  const refresh = async () => {
+    const overview = await api<{
+      switches: SwitchSummary[];
+    }>('/api/overview');
+    setSummaries(asArray(overview.switches));
+  };
+  useEffect(() => setSummaries(asArray(props.overview.switches)), [props.overview]);
+  const source = props.replay ? asArray(props.replay).map(replaySummary) : summaries;
+  const preset = asArray(props.settings?.views).find(view => view.id === props.part);
+  const switches = asArray(source).filter(item => (!tag || item.group_tag === tag) &&
+    (!asArray(preset?.tags).length || asArray(preset?.tags).includes(item.group_tag)));
+  return (
+    <>
+      <div className="flex gap-2">
+        <select aria-label="グループ" value={tag} onChange={event => setTag(event.target.value)}>
+          <option value="">すべてのグループ</option>
+          {Array.from(new Set(asArray(source).map(item => item.group_tag))).map(value => <option key={value}>{value}</option>)}
+        </select>
+        <button disabled={props.locked} onClick={() => setEdit(null)}>追加</button>
+        <button disabled={props.locked} onClick={() => setDiscover(true)}>探索</button>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {asArray(switches).map(item => <SwitchCard key={item.id} summary={item} actions={props} onEdit={setEdit} onRefresh={refresh} />)}
+      </div>
+      {!props.replay && <section className="panel">
+        <h2>最近のイベント</h2>
+        {asArray(asArray(props.overview.recent_events).slice(0, 20)).map(event => (
+          <p key={event.id}>{formatTime(event.ts)} <Badge text={event.severity} /> {event.title}</p>
+        ))}
+      </section>}
+      {props.status?.lab && !props.replay && <LabPanel run={props.run} busy={props.busy || props.locked} switches={asArray(props.overview.switches)} />}
+      {edit !== undefined && <SwitchForm
+        value={edit || undefined}
+        close={() => {
+          setEdit(undefined);
+          void refresh().catch(() => undefined);
+        }}
+        run={props.run}
+        busy={props.busy}
+      />}
+      {discover && <DiscoveryWizard
+        close={() => {
+          setDiscover(false);
+          void refresh().catch(() => undefined);
+        }}
+        run={props.run}
+        busy={props.busy}
+      />}
+    </>
+  );
+}

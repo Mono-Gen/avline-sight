@@ -1,0 +1,48 @@
+import { useEffect, useRef } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+import type { Event, Overview, Settings, SwitchState } from './types';
+import { asArray } from './format';
+import { LiveSocket } from './ws';
+
+const MAX_LIVE_EVENTS = 2000;
+
+export function useLiveFeed({ muted, replay, settings, setOverview, setState, setEvents, setOnline }: {
+  muted: boolean;
+  replay: boolean;
+  settings?: Settings;
+  setOverview: Dispatch<SetStateAction<Overview>>;
+  setState: Dispatch<SetStateAction<SwitchState | undefined>>;
+  setEvents: Dispatch<SetStateAction<Event[]>>;
+  setOnline: Dispatch<SetStateAction<boolean>>;
+}) {
+  const socket = useRef<LiveSocket>();
+  const preferences = useRef({ muted, replay, settings });
+  preferences.current = { muted, replay, settings };
+  useEffect(() => {
+    const live = new LiveSocket(message => {
+      if (message.type === 'overview_tick') setOverview(message.data);
+      if (message.type === 'switch_state') setState(message.data);
+      if (message.type !== 'event_pushed') return;
+      // 長時間稼働時のメモリ増加を抑え、同じIDの再配信でも重複させない。
+      setEvents(old => [message.data, ...asArray(old).filter(item => item.id !== message.data.id)].slice(0, MAX_LIVE_EVENTS));
+      const current = preferences.current;
+      if (message.data.severity !== 'CRITICAL' || current.replay || current.muted || !current.settings?.alert_sound) return;
+      try {
+        const context = new AudioContext();
+        const oscillator = context.createOscillator();
+        oscillator.connect(context.destination);
+        oscillator.onended = () => { void context.close(); };
+        oscillator.start();
+        oscillator.stop(context.currentTime + 0.15);
+      } catch {
+        // ブラウザーが音声を制限しても、画面と通知は継続する。
+      }
+    }, setOnline);
+    socket.current = live;
+    return () => {
+      live.close();
+      socket.current = undefined;
+    };
+  }, [setEvents, setOnline, setOverview, setState]);
+  return socket;
+}

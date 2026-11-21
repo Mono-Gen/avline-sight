@@ -243,21 +243,157 @@ export interface Event {
   acked: boolean;
   switch_name?: string;
 }
-export interface SwitchSummary {id:number;name:string;ip:string;group_tag:string;reachable:boolean;last_error:string;model:string;fw:string;uptime_sec:number;cpu_5s:number;mem_free_pct:number;mbuf_used_pct:number;temp_max_c:number;temp_state:string;fans_ok:boolean;psu_ok:boolean;poe_budget_w:number;poe_used_w:number;ports_up:number;ports_total:number;rx_bps:number;tx_bps:number;alerts:{critical:number;warning:number}}
-export interface Overview {switches:SwitchSummary[];alerts:{critical:number;warning:number;info:number};recent_events:Event[]}
-export interface Profile {id:number;name:string;active:boolean}
-export interface Settings {thresholds:Record<string,number>;alert_sound:boolean;views:ViewPreset[]}
-export interface ViewPreset {id:string;name:string;vlans:number[];tags:string[];categories:string[]}
-export interface Status {version:string;mode:string;lab:boolean;locked:boolean;pin_set:boolean;profile:{id:number;name:string};trap:{addr:string;ok:boolean;error:string};web_addr:string}
-export interface Finding {severity:string;code:string;title:string;hint:string;switch_id:number;switch_name:string;port?:string}
-export interface TopologyNode {id:string;label:string;kind:string;switch_id?:number;reachable?:boolean;is_root?:boolean;x?:number;y?:number}
-export interface TopologyEdge {id:string;source:string;target:string;local_port:string;remote_port:string;blocking:boolean;speed_mbps:number;util_pct:number}
-export interface Topology {nodes:TopologyNode[];edges:TopologyEdge[];background:string|null}
-export interface WatchItem {switch_id:number;if_index:number;label:string}
-export interface NamedSwitch {switch_id:number;switch_name:string}
-export interface Multicast {vlans:(VlanIGMP & NamedSwitch)[];groups:(McastGroup & NamedSwitch)[];mrouters:(Mrouter & NamedSwitch)[];gptp:(GPTP & NamedSwitch)[];findings:Finding[]}
-export interface DhcpData {servers:(NamedSwitch & {server_on:boolean;pools:string[];lease_count:number;decline_rx:number;snooping_on:boolean;invalid_server_msgs:number})[];leases:(Lease & NamedSwitch)[];conflicts:(NamedSwitch & {ip:string})[];findings:Finding[]}
-export interface Audit {findings:Finding[];fw_versions:Record<string,string[]>}
-export interface MetricResult {resolution:string;points:Record<string,number|string>[]}
-export interface Timeline {from:string;to:string;markers:{ts:string;severity:string;title:string;category:string}[]}
-
+export interface SwitchSummary {
+  id: number;
+  name: string;
+  ip: string;
+  group_tag: string;
+  reachable: boolean;
+  last_error: string;
+  model: string;
+  fw: string;
+  uptime_sec: number;
+  cpu_5s: number;
+  mem_free_pct: number;
+  mbuf_used_pct: number;
+  temp_max_c: number;
+  temp_state: string;
+  fans_ok: boolean;
+  psu_ok: boolean;
+  poe_budget_w: number;
+  poe_used_w: number;
+  ports_up: number;
+  ports_total: number;
+  rx_bps: number;
+  tx_bps: number;
+  alerts: {
+    critical: number;
+    warning: number;
+  };
+}
+export interface Overview {
+  switches: SwitchSummary[];
+  alerts: {
+    critical: number;
+    warning: number;
+    info: number;
+  };
+  recent_events: Event[];
+}
+export interface Profile {
+  id: number;
+  name: string;
+  active: boolean;
+}
+export interface Settings {
+  thresholds: Record<string, number>;
+  alert_sound: boolean;
+  views: ViewPreset[];
+}
+export interface ViewPreset {
+  id: string;
+  name: string;
+  vlans: number[];
+  tags: string[];
+  categories: string[];
+}
+export interface Status {
+  version: string;
+  mode: string;
+  lab: boolean;
+  locked: boolean;
+  pin_set: boolean;
+  profile: {
+    id: number;
+    name: string;
+  };
+  trap: {
+    addr: string;
+    ok: boolean;
+    error: string;
+  };
+  web_addr: string;
+}
+export interface Finding {
+  severity: string;
+  code: string;
+  title: string;
+  hint: string;
+  switch_id: number;
+  switch_name: string;
+  port?: string;
+}
+export interface TopologyNode {
+  id: string;
+  label: string;
+  kind: string;
+  switch_id?: number;
+  reachable?: boolean;
+  is_root?: boolean;
+  x?: number;
+  y?: number;
+}
+export interface TopologyEdge {
+  id: string;
+  source: string;
+  target: string;
+  local_port: string;
+  remote_port: string;
+  blocking: boolean;
+  speed_mbps: number;
+  util_pct: number;
+}
+export interface Topology {
+  nodes: TopologyNode[];
+  edges: TopologyEdge[];
+  background: string | null;
+}
+export interface WatchItem {
+  switch_id: number;
+  if_index: number;
+  label: string;
+}
+export interface NamedSwitch {
+  switch_id: number;
+  switch_name: string;
+}
+export interface Multicast {
+  vlans: (VlanIGMP & NamedSwitch)[];
+  groups: (McastGroup & NamedSwitch)[];
+  mrouters: (Mrouter & NamedSwitch)[];
+  gptp: (GPTP & NamedSwitch)[];
+  findings: Finding[];
+}
+export interface DhcpData {
+  servers: (NamedSwitch & {
+    server_on: boolean;
+    pools: string[];
+    lease_count: number;
+    decline_rx: number;
+    snooping_on: boolean;
+    invalid_server_msgs: number;
+  })[];
+  leases: (Lease & NamedSwitch)[];
+  conflicts: (NamedSwitch & {
+    ip: string;
+  })[];
+  findings: Finding[];
+}
+export interface Audit {
+  findings: Finding[];
+  fw_versions: Record<string, string[]>;
+}
+export interface MetricResult {
+  resolution: string;
+  points: Record<string, number | string>[];
+}
+export interface Timeline {
+  from: string;
+  to: string;
+  markers: {
+    ts: string;
+    severity: string;
+    title: string;
+    category: string;
+  }[];
+}

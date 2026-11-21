@@ -1,6 +1,127 @@
-import React,{useEffect,useRef,useState} from 'react';
-import {Terminal} from '@xterm/xterm';import {FitAddon} from '@xterm/addon-fit';import '@xterm/xterm/css/xterm.css';import {download,wsUrl} from '../api';
-const commands=['show igmpsnooping','show igmpsnooping querier','show igmpsnooping mrouter','show poe status','show poe port info all','show fiber-ports optical-transceiver all','show logging buffered','show mac-addr-table','show lldp remote-device all','show running-config'];
-export function TerminalDrawer({id,close}:{id:number;close:()=>void}){const [user,setUser]=useState('');const [password,setPassword]=useState('');const [proto,setProto]=useState('ssh');const [active,setActive]=useState(false);const [error,setError]=useState('');const host=useRef<HTMLDivElement>(null);const socket=useRef<WebSocket>();const output=useRef('');
-useEffect(()=>{if(!active||!host.current)return;const term=new Terminal({scrollback:5000});const fit=new FitAddon();term.loadAddon(fit);term.open(host.current);fit.fit();const ws=new WebSocket(wsUrl(`/ws/terminal/${id}?proto=${proto}`));socket.current=ws;ws.onopen=()=>{ws.send(JSON.stringify({type:'auth',user,password,cols:term.cols,rows:term.rows}));setPassword('')};ws.onmessage=e=>{const s=String(e.data);term.write(s);output.current=(output.current+s).slice(-1000000)};ws.onclose=e=>{term.writeln(`\r\n切断: ${e.reason||'接続終了'}`);socket.current=undefined};ws.onerror=()=>setError('端末に接続できません（通信エラー）。スイッチと認証情報を確認してください。');const input=term.onData(data=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'data',data}))});const resize=()=>{fit.fit();if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'resize',cols:term.cols,rows:term.rows}))};window.addEventListener('resize',resize);return()=>{window.removeEventListener('resize',resize);input.dispose();ws.close();term.dispose()}},[active,id,proto]);
-return <div className="fixed inset-x-0 bottom-0 z-40 max-h-[75vh] overflow-auto bg-slate-900 p-3 text-white shadow-xl"><p className="bg-amber-200 p-2 text-black">⚠ Engage / AV UI 管理下のスイッチでCLIから設定変更すると設定不整合・上書きの原因になるため、原則 show 確認用途で使用してください</p><button onClick={close}>閉じる</button> <button onClick={()=>download(new Blob([output.current],{type:'text/plain;charset=utf-8'}),'terminal.txt')}>出力保存</button>{!active&&<form onSubmit={e=>{e.preventDefault();setActive(true)}}><select value={proto} onChange={e=>setProto(e.target.value)}><option>ssh</option><option>telnet</option></select><input placeholder="ユーザー" value={user} onChange={e=>setUser(e.target.value)}/><input type="password" placeholder="パスワード" value={password} onChange={e=>setPassword(e.target.value)}/><button>接続</button></form>}{error&&<p role="alert">{error}</p>}{active&&<><div className="flex flex-wrap gap-1">{commands.map(c=><button key={c} onClick={()=>socket.current?.send(JSON.stringify({type:'data',data:c+'\r'}))}>{c}</button>)}</div><div ref={host} className="h-64"/></>}</div>}
+import { FitAddon } from '@xterm/addon-fit';
+import { Terminal } from '@xterm/xterm';
+import '@xterm/xterm/css/xterm.css';
+import { useEffect, useRef, useState } from 'react';
+import { download, wsUrl } from '../api';
+import { asArray } from '../format';
+const commands = [
+  'show igmpsnooping',
+  'show igmpsnooping querier',
+  'show igmpsnooping mrouter',
+  'show poe status',
+  'show poe port info all',
+  'show fiber-ports optical-transceiver all',
+  'show logging buffered',
+  'show mac-addr-table',
+  'show lldp remote-device all',
+  'show running-config'
+];
+export function TerminalDrawer({ id, close }: {
+  id: number;
+  close: () => void;
+}) {
+  const [user, setUser] = useState('');
+  const [password, setPassword] = useState('');
+  const [proto, setProto] = useState('ssh');
+  const [active, setActive] = useState(false);
+  const [error, setError] = useState('');
+  const host = useRef<HTMLDivElement>(null);
+  const socket = useRef<WebSocket>();
+  const output = useRef('');
+  useEffect(() => {
+    if (!active || !host.current) return;
+    const term = new Terminal({ scrollback: 5000 });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(host.current);
+    fit.fit();
+    const ws = new WebSocket(wsUrl(`/ws/terminal/${id}?proto=${proto}`));
+    socket.current = ws;
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        type: 'auth',
+        user,
+        password,
+        cols: term.cols,
+        rows: term.rows
+      }));
+      setPassword('');
+    };
+    ws.onmessage = e => {
+      const s = String(e.data);
+      term.write(s);
+      output.current = (output.current + s).slice(-1000000);
+    };
+    ws.onclose = e => {
+      term.writeln(`\r\n切断: ${e.reason || '接続終了'}`);
+      socket.current = undefined;
+    };
+    ws.onerror = () => setError('端末に接続できません（通信エラー）。スイッチと認証情報を確認してください。');
+    const input = term.onData(data => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({
+        type: 'data',
+        data
+      }));
+    });
+    const resize = () => {
+      fit.fit();
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({
+        type: 'resize',
+        cols: term.cols,
+        rows: term.rows
+      }));
+    };
+    window.addEventListener('resize', resize);
+    return () => {
+      window.removeEventListener('resize', resize);
+      input.dispose();
+      ws.close();
+      term.dispose();
+    };
+  }, [active, id, proto]);
+  return <div
+    className="fixed inset-x-0 bottom-0 z-40 max-h-[75vh] overflow-auto bg-slate-900 p-3 text-white shadow-xl"
+  >
+    <p className="bg-amber-200 p-2 text-black">⚠ Engage / AV UI 管理下のスイッチでCLIから設定変更すると設定不整合・上書きの原因になるため、原則 show 確認用途で使用してください
+    </p>
+    <button onClick={close}>閉じる
+    </button>
+
+    <button
+      onClick={() => download(new Blob([output.current], { type: 'text/plain;charset=utf-8' }), 'terminal.txt')}
+    >出力保存
+    </button>
+    {!active && <form onSubmit={e => {
+      e.preventDefault();
+      setActive(true);
+    }}>
+      <select value={proto} onChange={e => setProto(e.target.value)}>
+        <option>ssh
+        </option>
+        <option>telnet
+        </option>
+      </select>
+      <input placeholder="ユーザー" value={user} onChange={e => setUser(e.target.value)} />
+      <input type="password" placeholder="パスワード" value={password} onChange={e => setPassword(e.target.value)} />
+      <button>接続
+      </button>
+    </form>}
+    {error && <p role="alert">
+      {error}
+    </p>}
+    {active && <>
+      <div className="flex flex-wrap gap-1">
+        {asArray(commands).map(c => <button
+          key={c}
+          onClick={() => socket.current?.send(JSON.stringify({
+            type: 'data',
+            data: c + '\r'
+          }))}
+        >
+          {c}
+        </button>)}
+      </div>
+      <div ref={host} className="h-64" />
+    </>}
+  </div>;
+}
