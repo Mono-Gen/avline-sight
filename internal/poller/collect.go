@@ -115,6 +115,9 @@ func (w *worker) collectFast() error {
 			w.onLinkChange(p, oper, spd)
 		}
 		p.Oper, p.SpeedMbps = oper, spd
+		if oper == "up" && spd > 0 {
+			defer func(ix, sp int) { w.lastUpSpeed[ix] = sp }(ix, spd)
+		}
 		rate := func(col string, is32 bool) (float64, uint64) {
 			d, ok := w.cnt.delta(col+"|"+strconv.Itoa(ix), sx.U64(r.Cols[col]), is32)
 			if !ok || dt <= 0 {

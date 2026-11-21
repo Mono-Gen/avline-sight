@@ -140,12 +140,13 @@ type worker struct {
 	lastLogIdx   int
 	devSeen      map[int]string // ifIndex → MAC集合の署名（接続変化検知）
 	failures     int
+	lastUpSpeed  map[int]int // ポート毎の直近リンクアップ速度
 }
 
 func newWorker(cfg model.SwitchConfig, iv Intervals, sink Sink, alias AliasFunc, cancel context.CancelFunc) *worker {
 	return &worker{cfg: cfg, iv: iv, sink: sink, alias: alias, cancel: cancel, probeNow: make(chan struct{}, 1),
 		st:  &model.SwitchState{ID: cfg.ID, Name: cfg.Name, IP: cfg.IP, GroupTag: cfg.GroupTag, Caps: map[string]string{}},
-		cnt: counters{vals: map[string]uint64{}}, basePort: map[int]int{}, vlanNames: map[int]string{}, devSeen: map[int]string{}}
+		cnt: counters{vals: map[string]uint64{}}, basePort: map[int]int{}, vlanNames: map[int]string{}, devSeen: map[int]string{}, lastUpSpeed: map[int]int{}}
 }
 
 func (w *worker) emit(ev model.Event) {
@@ -299,6 +300,12 @@ func (w *worker) onLinkChange(p *model.Port, oper string, spd int) {
 		w.emit(model.Event{Category: "CONNECT", Severity: model.SevWarning, Code: "LINK_DOWN", IfIndex: p.IfIndex,
 			Title: fmt.Sprintf("%s リンクダウン", p.Name), Detail: map[string]any{"port": p.Name}})
 	case p.Oper != "up" && oper == "up":
+		// LinkDown → 低速で再接続（例 1G→100M）は芯線断線の典型（仕様3.6）
+		if prev := w.lastUpSpeed[p.IfIndex]; prev > 0 && spd > 0 && spd < prev {
+			w.emit(model.Event{Category: "ANOMALY", Severity: model.SevCritical, Code: "RELINK_SLOWER", IfIndex: p.IfIndex,
+				Title: fmt.Sprintf("%s 再接続後に速度低下 %dM → %dM", p.Name, prev, spd), Hint: "LANケーブル芯線断線（4芯落ち）・コネクタ圧着不良・オートネゴ不整合の疑い",
+				Detail: map[string]any{"from": prev, "to": spd}})
+		}
 		w.emit(model.Event{Category: "CONNECT", Severity: model.SevInfo, Code: "LINK_UP", IfIndex: p.IfIndex,
 			Title: fmt.Sprintf("%s リンクアップ（%dMbps）", p.Name, spd), Detail: map[string]any{"port": p.Name, "speed": spd}})
 	case p.SpeedMbps != spd:
