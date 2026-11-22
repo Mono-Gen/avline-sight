@@ -65,6 +65,7 @@ func (systemPinger) One(ctx context.Context, ip string, timeout time.Duration) p
 }
 
 type DevicePing struct {
+	IP     string    `json:"-"`
 	OK     bool      `json:"ok"`
 	RTTms  float64   `json:"rtt_ms"`
 	TS     time.Time `json:"ts"`
@@ -406,7 +407,7 @@ send:
 		res := results[i]
 		now := time.Now().UTC()
 		e.mu.Lock()
-		e.pingResults[r.MAC] = DevicePing{OK: res.Status == ping.StatusOK, RTTms: res.RTTms, TS: now, Source: "periodic", Status: string(res.Status)}
+		e.pingResults[r.MAC] = DevicePing{IP: r.IP, OK: res.Status == ping.StatusOK, RTTms: res.RTTms, TS: now, Source: "periodic", Status: string(res.Status)}
 		if res.Status == ping.StatusOK {
 			e.pingFails[r.MAC] = 0
 		} else if e.pingFails[r.MAC] < failureThreshold {

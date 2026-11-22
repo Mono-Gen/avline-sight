@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, json, message } from './api';
 import { AppHeader } from './components/AppHeader';
 import { ExportDialog, ScrubBar, SettingsDialog } from './components/Dialogs';
+import { submitPhase } from './components/PhaseControls';
+import { ShowChecklist } from './components/ShowChecklist';
+import type { ChecklistTarget } from './components/ShowChecklist';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TerminalDrawer } from './components/TerminalDrawer';
 import { TrapHelp } from './components/TrapHelp';
@@ -99,6 +102,7 @@ export default function App() {
     }
   };
   const [dialog, setDialog] = useState('');
+  const [deviceTarget, setDeviceTarget] = useState('');
   const trapHelpShown = useRef(false);
   const [replay, setReplay] = useState<ReplaySession | null>(null);
   const replayId = replay?.id;
@@ -218,6 +222,13 @@ export default function App() {
     setPage('switch');
   };
   const operations = useOperations({ online, replay: !!replay, profileId, setStatus, run });
+  const phase = operations.phase || status?.phase;
+  useEffect(() => {
+    if (dialog === 'show-gate' && phase !== 'rehearsal' ||
+        dialog === 'show-checklist' && phase !== 'setup' && phase !== 'rehearsal') {
+      setDialog('');
+    }
+  }, [dialog, phase]);
   const groupNames = [...new Set(replay ? asArray(replay.states).map(sw => sw.group_tag) :
     [...asArray(operations.groups).map(item => item.name), ...asArray(overview.switches).map(sw => sw.group_tag)])];
   const hasGroup = group !== undefined && groupNames.includes(group);
@@ -268,10 +279,27 @@ export default function App() {
     watch,
     setWatch
   };
+  const openChecklistTarget = (target: ChecklistTarget) => {
+    setDialog(target.destination === 'trap' || target.destination === 'settings' ? target.destination : '');
+    if (target.mac) {
+      setGroupSelection('');
+      setDeviceTarget(target.mac);
+      setPage('devices');
+    } else if (target.switch_id) {
+      props.openPortMonitor({ switchId: target.switch_id, ifIndex: target.if_index });
+    } else if (target.destination === 'logs') {
+      setGroupSelection('');
+      setPage('logs');
+    }
+  };
   return <div className={wall ? 'wall-shell' : 'min-h-screen'}>
-    <AppHeader {...{ online, phase: operations.phase || status?.phase, onPhase: operations.setPhase, onTrapHelp: props.onTrapHelp,
+    <AppHeader {...{ online, phase, onPhase: operations.setPhase, onTrapHelp: props.onTrapHelp,
       wall, setWall, expert, status, busy, locked, profiles, settings, groupSelection, groupNames, replay, markerInput, run, refresh, setDialog, summary,
       updatedAt: replay ? replay.ts : live.updatedAt }}
+      openChecklist={gate => {
+        setError('');
+        setDialog(gate ? 'show-gate' : 'show-checklist');
+      }}
       setGroupSelection={value => {
         if (value === groupSelection) return;
         setMonitorTarget(undefined);
@@ -304,7 +332,7 @@ export default function App() {
           key={v}
           disabled={!!replay && !replayPages.includes(v)}
           aria-current={page === v || page === 'switch' && v === 'monitor' ? 'page' : undefined}
-          onClick={() => { setMonitorTarget(undefined); setPage(v); }}
+          onClick={() => { setMonitorTarget(undefined); setDeviceTarget(''); setPage(v); }}
         >
           {v === 'details' ? t('cleanup.details') : t(`rack.nav.${v}`)}
         </button>)}
@@ -321,7 +349,7 @@ export default function App() {
           {!wall && page === 'switch' && <SwitchPorts {...props} />}
 
 
-          {!wall && page === 'devices' && <Devices {...props} />}
+          {!wall && page === 'devices' && <Devices key={deviceTarget} {...props} initialQuery={deviceTarget} />}
 
           {!wall && expert && page === 'details' && <>
             <div role="tablist" aria-label={t('cleanup.details')} className="detail-tabs">
@@ -346,6 +374,14 @@ export default function App() {
     {!wall && expert && terminal > 0 && !locked && <TerminalDrawer id={terminal} close={() => setTerminal(0)} />}
 
     {!wall && !locked && dialog === 'export' && <ExportDialog close={() => setDialog('')} busy={busy} run={run} />}
+
+    {!wall && !replay && (phase === 'setup' || phase === 'rehearsal') &&
+      (dialog === 'show-checklist' || dialog === 'show-gate' && phase === 'rehearsal') &&
+      <ShowChecklist key={profileId} gate={dialog === 'show-gate'} busy={busy} locked={locked} actionError={error} close={() => setDialog('')}
+        onTarget={openChecklistTarget} onStart={confirmChecklist => run(async () => {
+          await submitPhase('show', operations.setPhase, confirmChecklist);
+          setDialog('');
+        })} />}
 
     {!wall && dialog === 'trap' && <TrapHelp close={() => setDialog('')} error={status?.trap.error} />}
     {!wall && dialog === 'settings' && settings && <SettingsDialog

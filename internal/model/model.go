@@ -55,6 +55,8 @@ type SwitchState struct {
 	Caps        map[string]string `json:"caps"` // 機能グループ→SUPPORTED/UNSUPPORTED/FALLBACK_USED
 	AlertCounts map[string]int    `json:"alert_counts"`
 
+	ClockOffsetSeconds *float64 `json:"clock_offset_seconds,omitempty"`
+
 	MbufFailCounters          map[string]string `json:"-"`
 	DHCPInvalidServerCounters map[string]string `json:"-"`
 }

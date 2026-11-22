@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gosnmp/gosnmp"
 
@@ -900,8 +901,13 @@ func (s *Server) exportTable(w http.ResponseWriter, r *http.Request) {
 
 // csvSafe は表計算ソフトの数式インジェクションを防ぐ。
 func csvSafe(v string) string {
-	if v != "" && strings.ContainsRune("=+-@", rune(v[0])) {
-		if _, err := strconv.ParseFloat(v, 64); err != nil {
+	trimmed := strings.TrimSpace(v)
+	if strings.HasPrefix(v, "\t") || strings.HasPrefix(v, "\r") || strings.HasPrefix(v, "\n") {
+		return "'" + v
+	}
+	first, _ := utf8.DecodeRuneInString(trimmed)
+	if strings.ContainsRune("=+-@＝＋－＠", first) {
+		if _, err := strconv.ParseFloat(trimmed, 64); err != nil {
 			return "'" + v
 		}
 	}

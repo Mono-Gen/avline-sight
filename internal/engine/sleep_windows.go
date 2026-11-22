@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-func preventSleep(ctx context.Context) error {
+func preventSleep(ctx context.Context, notify ...func(bool)) error {
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -21,6 +21,10 @@ func preventSleep(ctx context.Context) error {
 	const systemRequired = 0x00000001
 	if result, _, err := setState.Call(continuous | systemRequired); result == 0 {
 		return fmt.Errorf("prevent system sleep: %w", err)
+	}
+	for _, setActive := range notify {
+		setActive(true)
+		defer setActive(false)
 	}
 	<-ctx.Done()
 	if result, _, err := setState.Call(continuous); result == 0 {

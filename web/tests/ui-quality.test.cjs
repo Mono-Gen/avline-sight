@@ -1127,3 +1127,72 @@ test('任意PC通知は新規の未確認異常だけを無音で通知し、履
   assert.equal(delivered.length, 2);
   assert.ok(refs[0].current.ids.size <= 2);
 });
+
+test('Pre-show checklist is offered in setup and rehearsal, and hidden during show or replay', () => {
+  const props = { online: true, wall: false, profiles: [], run: noop, openChecklist: noop };
+  for (const phase of ['setup', 'rehearsal']) {
+    assert.match(render(AppHeader, { ...props, phase }), /data-action="pre-show-checklist"/);
+  }
+  for (const extra of [{ phase: 'show' }, { phase: 'setup', replay: true }, { phase: undefined }]) {
+    assert.doesNotMatch(render(AppHeader, { ...props, ...extra }), /data-action="pre-show-checklist"/);
+  }
+});
+
+test('Rehearsal to show opens the gate and only explicit confirmation requests remainder logging', async () => {
+  let opened = 0;
+  const requests = [];
+  const phaseChanges = [];
+  const phaseControls = sourceWith('../src/components/PhaseControls.tsx', {
+    '../api': {
+      api: async (url, options) => { requests.push({ url, ...options }); return { phase: 'show' }; },
+      json: (method, payload) => ({ method, body: JSON.stringify(payload) }),
+    },
+  }, { window: { confirm: () => assert.fail('The checklist is the confirmation dialog') } });
+  const { PhaseControls: Selector, submitPhase } = phaseControls;
+  const selector = Selector({ phase: 'rehearsal', openChecklist: () => { opened++; },
+    run: () => assert.fail('Opening the checklist must not send a phase change'), onPhase: noop });
+  elements(selector, element => element.type === 'select')[0].props.onChange({ target: { value: 'show' } });
+  assert.equal(opened, 1);
+  assert.deepEqual(requests, []);
+
+  const result = { data: { items: [{ id: 'clock', state: 'review', reason: 'Clock data unavailable',
+    action: 'Check synchronization', findings: [{ state: 'review', reason: 'Unavailable', target: { switch_id: 2, label: 'Switch B' } }] }] },
+    pending: false, error: '' };
+  const { ShowChecklist } = sourceWith('../src/components/ShowChecklist.tsx', {
+    '../usePolling': { usePolling: () => result, STATE_REFRESH_MS: 5000 },
+  });
+  let closed = 0;
+  let action;
+  const targetCalls = [];
+  const draw = gate => ShowChecklist({ gate, busy: false, locked: false, close: () => { closed++; },
+    onTarget: target => targetCalls.push(target), onStart: confirmed => { action = submitPhase('show', phase => phaseChanges.push(phase), confirmed); } });
+  const findButton = (tree, key) => elements(tree, element => element.type === 'button' && element.props.children === t(key))[0];
+  assert.equal(findButton(draw(false), 'checklist.startWithRemaining'), undefined);
+  const gate = draw(true);
+  assert.match(render(() => gate, {}), /Switch B.*Unavailable.*Check synchronization/);
+  const rows = elements(gate, element => element.type?.name === 'ChecklistRows')[0];
+  elements(rows.type(rows.props), element => element.type === 'button')[0].props.onClick();
+  assert.deepEqual(targetCalls, [{ switch_id: 2, label: 'Switch B' }]);
+  findButton(gate, 'checklist.cancel').props.onClick();
+  assert.equal(closed, 1);
+  assert.deepEqual(requests, []);
+  findButton(gate, 'checklist.startWithRemaining').props.onClick();
+  await action;
+  assert.equal(requests[0].url, '/api/phase');
+  assert.equal(requests[0].method, 'PUT');
+  assert.deepEqual(JSON.parse(requests[0].body), { phase: 'show', confirm_checklist: true });
+  assert.deepEqual(phaseChanges, ['show']);
+  result.data.items[0] = { id: 'clock', state: 'pass', reason: 'Within 60 seconds' };
+  findButton(draw(true), 'checklist.start').props.onClick();
+  await action;
+  assert.deepEqual(JSON.parse(requests[1].body), { phase: 'show', confirm_checklist: false });
+});
+
+test('The post-show report defaults to latest and supports a JST range', () => {
+  const { showReportURL } = require('../src/components/ShowReportButton.tsx');
+  assert.equal(showReportURL(), '/api/export/show-report.csv');
+  const query = new URLSearchParams(showReportURL('2024-01-03T01:00', '2024-01-03T02:00').split('?')[1]);
+  assert.equal(query.get('from'), '2024-01-02T16:00:00.000Z');
+  assert.equal(query.get('to'), '2024-01-02T17:00:00.000Z');
+  assert.throws(() => showReportURL('2024-01-03T01:00'));
+});

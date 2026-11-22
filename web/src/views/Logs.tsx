@@ -6,6 +6,7 @@ import { confirmAck } from '../useOperations';
 import { Badge } from '../components/Badge';
 import { AlertTechnicalDetails } from '../components/AlertTechnicalDetails';
 import { PollingStatus } from '../components/PollingStatus';
+import { ShowReportButton } from '../components/ShowReportButton';
 import type { EventFilters } from '../events';
 import { acknowledgeableEventIds, canAcknowledgeEvent, logRows, SEARCH_EVENT_LIMIT, syslogMessage } from '../events';
 import { asArray } from '../format';
@@ -137,6 +138,7 @@ export function Logs(props: ViewProps) {
         <button aria-pressed={filter.category === 'MARKER'} onClick={() => changeFilter('category', filter.category === 'MARKER' ? '' : 'MARKER')}>{t('logs.marker')}</button>
         <a href="/api/export/csv?type=events">CSV</a>
         <a href="/api/export/json?type=events">JSON</a>
+        {!props.replay && <ShowReportButton run={props.run} busy={props.busy} from={filter.from} to={filter.to} />}
       </div>
       <div className="operation-area" role="group" aria-label={t('rack.actions')}>
         <button className="button-primary" data-action="ack-all" disabled={disabled || !ackIds.length}

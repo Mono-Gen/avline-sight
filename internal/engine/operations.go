@@ -1,16 +1,17 @@
 package engine
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Mono-Gen/avline-sight/internal/model"
-	"github.com/Mono-Gen/avline-sight/internal/store"
 )
 
 func (e *Engine) loadOperations() {
@@ -39,29 +40,73 @@ func validPhase(p string) bool {
 func (e *Engine) Phase() string { e.mu.RLock(); defer e.mu.RUnlock(); return e.phase }
 
 func (e *Engine) SetPhase(phase string) error {
+	return e.setPhase(phase, nil)
+}
+
+var ErrChecklistConfirmation = errors.New("confirmation of the remaining pre-show checks is required")
+
+func (e *Engine) SetPhaseWithChecklist(ctx context.Context, phase string, trapReady, confirm bool) error {
+	return e.setPhase(phase, func() ([]ChecklistItem, error) {
+		checklist, err := e.ShowChecklist(ctx, trapReady, false)
+		if err != nil {
+			return nil, err
+		}
+		remaining := checklist.remaining()
+		if len(remaining) > 0 && !confirm {
+			return nil, ErrChecklistConfirmation
+		}
+		return remaining, nil
+	})
+}
+
+func (e *Engine) setPhase(phase string, check func() ([]ChecklistItem, error)) error {
 	if !validPhase(phase) {
 		return fmt.Errorf("phase は setup/rehearsal/show です")
 	}
 	e.operationMu.Lock()
 	defer e.operationMu.Unlock()
-	e.mu.Lock()
-	if e.phase == phase {
-		e.mu.Unlock()
+	previous := e.Phase()
+	if previous == phase {
 		return nil
 	}
+	var remaining []ChecklistItem
+	if phase == "show" && previous == "rehearsal" && check != nil {
+		var err error
+		remaining, err = check()
+		if err != nil {
+			return err
+		}
+	}
+	now := time.Now().UTC()
+	change := model.Event{TS: now, Category: "SYSTEM", Severity: model.SevInfo, Code: "PHASE_CHANGED",
+		Title: "運用フェーズを変更: " + phase, Detail: map[string]any{"phase": phase}}
+	events := []*model.Event{&change}
+	if len(remaining) > 0 {
+		reasons := make([]string, 0, len(remaining))
+		for _, item := range remaining {
+			for _, finding := range item.Findings {
+				reasons = append(reasons, strings.TrimSpace(finding.Target.Label+" "+finding.Reason))
+			}
+		}
+		events = append(events, &model.Event{TS: now, Category: "SYSTEM", Severity: model.SevInfo,
+			Code: "PRE_SHOW_CHECKLIST_REMAINDER", Title: "本番前チェックの残項目: " + strings.Join(reasons, " / "),
+			Detail: map[string]any{"count": len(remaining), "items": remaining}})
+	}
+	e.mu.Lock()
 	var name string
 	var err error
 	if phase == "show" {
-		name = productionBaselineName(time.Now())
-		_, err = e.saveBaselineLocked(name, phase)
+		name = productionBaselineName(now)
+		_, err = e.saveBaselineLocked(name, phase, events...)
 	} else {
-		_, err = e.st.DB.Exec(store.UpdatePhaseSQL, phase)
+		err = e.st.SavePhase(phase, &change)
 	}
 	if err != nil {
 		e.mu.Unlock()
 		return err
 	}
 	e.phase = phase
+	e.snapDirty = true
 	if e.pingCancel != nil {
 		e.pingCancel()
 	}
@@ -75,8 +120,10 @@ func (e *Engine) SetPhase(phase string) error {
 	case e.phaseWake <- struct{}{}:
 	default:
 	}
-	e.OnEvent(model.Event{Category: "SYSTEM", Severity: model.SevInfo, Code: "PHASE_CHANGED", Title: "運用フェーズを変更: " + phase, Detail: map[string]any{"phase": phase}})
 	if e.hub != nil {
+		for _, event := range events {
+			e.hub.Broadcast("event_pushed", *event)
+		}
 		e.hub.Broadcast("phase_changed", map[string]string{"phase": phase})
 	}
 	e.broadcastAlerts()

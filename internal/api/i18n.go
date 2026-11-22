@@ -99,6 +99,16 @@ var errorFragments = [][2]string{
 }
 
 var errorEnglish = map[string]string{
+	"本番前チェックに残項目があります":                                            "Some pre-show checks still need review",
+	"チェックリストを更新して確認してください":                                        "Refresh the checklist and review the remaining items",
+	"本番前チェックを取得できません":                                             "Could not load the pre-show checklist",
+	"本番の開始記録がありません":                                               "No recorded show start was found",
+	"出力期間を指定してください":                                               "Select a start and end time in Logs",
+	"本番期間を取得できません":                                                "Could not find the latest show period",
+	"期間を指定して再試行してください":                                            "Select a time range and try again",
+	"出力期間が不正です":                                                   "Invalid report time range",
+	"開始と終了を指定し、開始を終了より前にしてください":                                   "Set both times and make sure the start is before the end",
+	"本番後レポートを出力できません":                                             "Could not export the post-show report",
 	"プロファイルIDが不正です":                                               "Invalid profile ID",
 	"表示中のプロファイルが変更されました":                                          "The active profile has changed",
 	"画面を更新してから再試行してください":                                          "Refresh the page and try again",

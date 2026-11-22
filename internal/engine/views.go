@@ -386,10 +386,10 @@ func (e *Engine) CreateBaseline(name string) (int64, error) {
 	return id, err
 }
 
-func (e *Engine) saveBaselineLocked(name, phase string) (id int64, err error) {
+func (e *Engine) saveBaselineLocked(name, phase string, events ...*model.Event) (id int64, err error) {
 	states := e.statesLocked()
 	if phase != "" {
-		id, err = e.st.SavePhaseBaseline(phase, e.profileID, name, states)
+		id, err = e.st.SavePhaseBaseline(phase, e.profileID, name, states, events...)
 	} else {
 		id, err = e.st.SaveBaseline(e.profileID, name, states)
 	}

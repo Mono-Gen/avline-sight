@@ -37,6 +37,9 @@ async function consumeResponse<T>(path: string, options: RequestInit, consume: (
 export function response(path: string, options: RequestInit = {}): Promise<Response> {
   return consumeResponse(path, options, async result => result);
 }
+export function responseBlob(path: string): Promise<Blob> {
+  return consumeResponse(path, {}, result => result.blob(), 35000);
+}
 
 export async function api<T>(path: string, options: RequestInit = {}, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   try {

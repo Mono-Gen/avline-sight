@@ -3,6 +3,18 @@ import { eventEn } from './eventEn';
 import type { Dictionary } from './index';
 import { rackEn } from './rack';
 export const en: Dictionary = {
+  checklist: {
+    title: 'Pre-show checklist', pass: 'Pass', review: 'Needs review', pending: 'Pending', other: 'Other checks',
+    reach: 'All switches reachable', trap: 'Trap receipt confirmed', clock: 'Clock offset within 60 seconds',
+    devices: 'All registered devices visible', unacked: 'No unacknowledged alerts', active: 'No active alerts (including acknowledged alerts)',
+    initial: 'Initial collection complete for all switches', host: 'Trap listener and sleep prevention active',
+    excluded: 'Excluded ports', ping: 'Registered device ping and planned IP', recent: 'Recent errors and link interruptions',
+    optics: 'SFP receive power headroom', uplink: 'Uplink speeds', power: 'PoE and temperature headroom', config: 'Recent configuration changes',
+    start: 'Start show', startWithRemaining: 'Start show after review', cancel: 'Cancel',
+    report: 'Post-show report (CSV)', reportLatest: 'Export the latest show period',
+    reportSelectedRange: 'Export the start and end range selected in the log',
+    reportRangeError: 'Set both dates and make sure the start is before the end.',
+  },
   topology: {
     core: 'Path origin', autoCore: 'Automatic', chooseCore: 'Select the core switch to view impact and paths.',
     querierVlan: 'Querier VLAN', noVlan: 'None selected', querierBadge: 'VLAN {vlan} querier',

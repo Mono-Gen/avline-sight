@@ -6,6 +6,7 @@ import { t, useLang } from '../i18n';
 import type { ReplaySession, SwitchGroup } from '../types';
 import { GroupEditDialog } from './GroupEditDialog';
 import { ImportReplay } from './ImportReplay';
+import { ShowReportButton } from './ShowReportButton';
 
 export function SettingsTools({ theme, setTheme, notifications, setNotifications, expert = false, setExpert, busy, locked, replay, groups, profileId, run, refresh, setDialog, setReplay }: {
   theme: string; setTheme: (value: string) => void;
@@ -41,6 +42,7 @@ export function SettingsTools({ theme, setTheme, notifications, setNotifications
       {notice && <p role="alert">⚠ {notice}</p>}
       <h3>{t('cleanup.transfers')}</h3>
       <button disabled={busy || locked} onClick={() => setDialog('export')}>{t('rack.export')}</button>
+      {!replay && <ShowReportButton run={run} busy={busy} />}
       <ImportReplay run={run} disabled={busy || locked} onImport={(id, timeline) => { setReplay({ id, timeline, states: [] }); setDialog(''); }} />
       {!replay && <div className="flex flex-wrap gap-2">
         <label>{t('cleanup.csvGroup')} <select value={scope} onChange={event => setScope(event.target.value)}>

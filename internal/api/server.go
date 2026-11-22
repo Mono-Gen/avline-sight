@@ -84,6 +84,7 @@ func (s *Server) Handler() http.Handler {
 	h("GET /api/alerts", s.displayAlerts)
 	h("GET /api/phase", s.getPhase)
 	h("PUT /api/phase", s.putPhase)
+	h("GET /api/checklist/pre-show", s.showChecklist)
 	h("GET /api/groups", s.groups)
 	h("PUT /api/groups/{name}", s.renameGroup)
 	h("PUT /api/groups/{$}", s.renameGroup)
@@ -148,6 +149,7 @@ func (s *Server) Handler() http.Handler {
 
 	h("POST /api/export/pack", s.exportPack)
 	h("GET /api/export/csv", s.exportTable)
+	h("GET /api/export/show-report.csv", s.showReport)
 	h("GET /api/export/json", s.exportTable)
 	h("POST /api/replay/import", s.replayImport)
 	h("GET /api/replay/{sid}/timeline", s.replayTimeline)

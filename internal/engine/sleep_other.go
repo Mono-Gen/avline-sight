@@ -4,4 +4,4 @@ package engine
 
 import "context"
 
-func preventSleep(context.Context) error { return nil }
+func preventSleep(context.Context, ...func(bool)) error { return nil }

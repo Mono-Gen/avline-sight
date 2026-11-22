@@ -564,7 +564,7 @@ func (e *Engine) RecordPing(results map[string]PingMark) {
 	for ip, m := range results {
 		for _, r := range rows {
 			if r.IP == ip || r.PlannedIP == ip {
-				e.pingResults[r.MAC] = DevicePing{OK: m.Status == "ok", RTTms: m.RTTms, TS: m.At, Source: "manual", Status: m.Status}
+				e.pingResults[r.MAC] = DevicePing{IP: ip, OK: m.Status == "ok", RTTms: m.RTTms, TS: m.At, Source: "manual", Status: m.Status}
 				if m.Status == "ok" {
 					e.pingFails[r.MAC] = 0
 					recovered[r.MAC] = true

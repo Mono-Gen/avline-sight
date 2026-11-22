@@ -2,6 +2,18 @@ import { operationsJa } from './operations';
 import { eventJa } from './eventJa';
 import { rackJa } from './rack';
 export const ja = {
+  checklist: {
+    title: '本番前チェック', pass: '合格', review: '要確認', pending: '判定中', other: 'その他の注意',
+    reach: '全スイッチ到達', trap: 'Trap受信確認', clock: '時刻ずれ60秒以内',
+    devices: '登録機器がすべて見えている', unacked: '未確認アラート0件', active: '発生中アラート0件（確認済み含む）',
+    initial: '全スイッチの初回取得完了', host: 'Trap待受とスリープ抑止が有効',
+    excluded: '監視除外ポートの残り', ping: '登録機器のPing・予定IP一致', recent: '直近数分のエラー・断続',
+    optics: 'SFP受光の余裕', uplink: '上位回線の速度', power: 'PoE・温度の余裕', config: '直近の設定変化',
+    start: '本番を開始', startWithRemaining: '確認したうえで本番を開始', cancel: 'キャンセル',
+    report: '本番後レポート（CSV）', reportLatest: '直近の本番期間を出力します',
+    reportSelectedRange: 'ログ欄で指定した開始・終了の期間を出力します',
+    reportRangeError: '開始と終了を指定し、開始を終了より前にしてください。',
+  },
   topology: {
     core: '経路の起点', autoCore: '自動', chooseCore: '影響範囲と経路を表示するには、起点となるコアスイッチを選択してください。',
     querierVlan: 'クエリアのVLAN', noVlan: '指定なし', querierBadge: 'VLAN {vlan} クエリア',

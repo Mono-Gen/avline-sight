@@ -77,9 +77,9 @@ export function DeviceInventoryTable({ rows, alerts = [], onNavigate }: {
   );
 }
 
-export function Devices(p: ViewProps) {
+export function Devices(p: ViewProps & { initialQuery?: string }) {
   const [scope, setScope] = useState<DeviceScope>('all');
-  const [q, setQuery] = useState('');
+  const [q, setQuery] = useState(p.initialQuery ?? '');
   const [importOpen, setImportOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [revision, setRevision] = useState(0);

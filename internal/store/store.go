@@ -426,17 +426,21 @@ type Alias struct {
 }
 
 func (s *Store) Aliases(profileID int64) ([]Alias, error) {
+	return s.AliasesContext(context.Background(), profileID)
+}
+
+func (s *Store) AliasesContext(ctx context.Context, profileID int64) ([]Alias, error) {
 	planned := "planned_ip"
 	if s.readOnly {
 		var n int
-		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('device_aliases') WHERE name='planned_ip'`).Scan(&n); err != nil {
+		if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('device_aliases') WHERE name='planned_ip'`).Scan(&n); err != nil {
 			return nil, err
 		}
 		if n == 0 {
 			planned = "''"
 		}
 	}
-	rows, err := s.DB.Query(`SELECT id,match_type,match_key,label,note,`+planned+` FROM device_aliases WHERE profile_id=?`, profileID)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,match_type,match_key,label,note,`+planned+` FROM device_aliases WHERE profile_id=?`, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -541,16 +545,24 @@ type LastSeen struct {
 // 見えていない登録済み機器の表示・Ping用。再生では at に再生時刻を渡し、未来の観測を混ぜない。
 // 相関サブクエリを使わず1回の走査で集計する（履歴が多くても単一DB接続を長く占有しないため）。
 func (s *Store) LastSeenByMAC(profileID int64, at time.Time) (map[string]LastSeen, error) {
-	return s.LastSeenByMACPreferringPorts(profileID, at, nil)
+	return s.LastSeenByMACContext(context.Background(), profileID, at)
+}
+
+func (s *Store) LastSeenByMACContext(ctx context.Context, profileID int64, at time.Time) (map[string]LastSeen, error) {
+	return s.lastSeenByMAC(ctx, profileID, at, nil)
 }
 
 // LastSeenByMACPreferringPorts はライブ監視で信頼できるポートを観測時刻より優先する。
 func (s *Store) LastSeenByMACPreferringPorts(profileID int64, at time.Time, preferred func(int64, int) int) (map[string]LastSeen, error) {
+	return s.lastSeenByMAC(context.Background(), profileID, at, preferred)
+}
+
+func (s *Store) lastSeenByMAC(ctx context.Context, profileID int64, at time.Time, preferred func(int64, int) int) (map[string]LastSeen, error) {
 	cut := ms(at)
-	rows, err := s.DB.Query(`SELECT mac, last_seen_ts, ip, switch_id, if_index FROM device_bindings WHERE profile_id=? AND first_seen_ts<=? ORDER BY id`, profileID, cut)
+	rows, err := s.DB.QueryContext(ctx, `SELECT mac, last_seen_ts, ip, switch_id, if_index FROM device_bindings WHERE profile_id=? AND first_seen_ts<=? ORDER BY id`, profileID, cut)
 	if err != nil {
 		// 旧版で書き出した再生データ（profile_id 列なし、読み取り専用で移行不可）はスイッチ経由で絞る
-		rows, err = s.DB.Query(`SELECT b.mac, b.last_seen_ts, b.ip, b.switch_id, b.if_index FROM device_bindings b JOIN switches w ON w.id=b.switch_id
+		rows, err = s.DB.QueryContext(ctx, `SELECT b.mac, b.last_seen_ts, b.ip, b.switch_id, b.if_index FROM device_bindings b JOIN switches w ON w.id=b.switch_id
 			WHERE w.profile_id=? AND b.first_seen_ts<=?`, profileID, cut)
 		if err != nil {
 			return nil, err
@@ -802,7 +814,18 @@ func (s *Store) Purge(ctx context.Context, r Retention, now time.Time) error {
 
 // InsertEvent はイベントを保存しIDを返す。Dedupe一致で既存の場合は id=0, inserted=false。
 func (s *Store) InsertEvent(e *model.Event) (bool, error) {
-	det, _ := json.Marshal(e.Detail)
+	return insertEvent(s.DB, e)
+}
+
+type sqlExecer interface {
+	Exec(string, ...any) (sql.Result, error)
+}
+
+func insertEvent(db sqlExecer, e *model.Event) (bool, error) {
+	det, err := json.Marshal(e.Detail)
+	if err != nil {
+		return false, err
+	}
 	var dk any
 	if e.Dedupe != "" {
 		dk = e.Dedupe
@@ -811,7 +834,7 @@ func (s *Store) InsertEvent(e *model.Event) (bool, error) {
 	if e.ClearedAt != nil {
 		cleared = ms(*e.ClearedAt)
 	}
-	r, err := s.DB.Exec(`INSERT OR IGNORE INTO events(ts,switch_id,switch_name,if_index,category,severity,code,title,detail_json,hint_text,acked,dedupe_key,cleared_at)
+	r, err := db.Exec(`INSERT OR IGNORE INTO events(ts,switch_id,switch_name,if_index,category,severity,code,title,detail_json,hint_text,acked,dedupe_key,cleared_at)
 		VALUES(?,?,?,?,?,?,?,?,?,?,0,?,?)`, ms(e.TS), e.SwitchID, e.SwitchName, e.IfIndex, e.Category, e.Severity, e.Code, e.Title, string(det), e.Hint, dk, cleared)
 	if err != nil {
 		return false, err
@@ -1070,7 +1093,18 @@ func (s *Store) SaveBaseline(profileID int64, name string, states []*model.Switc
 	return insertBaseline(s.DB, profileID, name, states)
 }
 
-func (s *Store) SavePhaseBaseline(phase string, profileID int64, name string, states []*model.SwitchState) (int64, error) {
+func (s *Store) SavePhaseBaseline(phase string, profileID int64, name string, states []*model.SwitchState, events ...*model.Event) (int64, error) {
+	return s.savePhase(phase, events, func(tx *sql.Tx) (int64, error) {
+		return insertBaseline(tx, profileID, name, states)
+	})
+}
+
+func (s *Store) SavePhase(phase string, event *model.Event) error {
+	_, err := s.savePhase(phase, []*model.Event{event}, nil)
+	return err
+}
+
+func (s *Store) savePhase(phase string, events []*model.Event, baseline func(*sql.Tx) (int64, error)) (int64, error) {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return 0, err
@@ -1079,18 +1113,28 @@ func (s *Store) SavePhaseBaseline(phase string, profileID int64, name string, st
 	if _, err := tx.Exec(UpdatePhaseSQL, phase); err != nil {
 		return 0, err
 	}
-	id, err := insertBaseline(tx, profileID, name, states)
-	if err != nil {
-		return 0, err
+	var id int64
+	if baseline != nil {
+		id, err = baseline(tx)
+		if err != nil {
+			return 0, err
+		}
+	}
+	for _, event := range events {
+		inserted, err := insertEvent(tx, event)
+		if err != nil {
+			return 0, err
+		}
+		if !inserted {
+			return 0, fmt.Errorf("phase event %s was not inserted", event.Code)
+		}
 	}
 	return id, tx.Commit()
 }
 
 const UpdatePhaseSQL = `INSERT INTO meta(k,v) VALUES('op_phase',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`
 
-func insertBaseline(db interface {
-	Exec(string, ...any) (sql.Result, error)
-}, profileID int64, name string, states []*model.SwitchState) (int64, error) {
+func insertBaseline(db sqlExecer, profileID int64, name string, states []*model.SwitchState) (int64, error) {
 	b, err := gz(states)
 	if err != nil {
 		return 0, err

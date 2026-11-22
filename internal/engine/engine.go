@@ -95,6 +95,9 @@ type Engine struct {
 	snapDirty    bool
 	prevQuerier  map[string]string
 	mediumFresh  map[int64]bool // Medium更新後、まだFastで時系列へ書いていないか
+
+	startedAt      time.Time
+	sleepInhibited bool
 }
 
 // New を作る。
@@ -104,7 +107,8 @@ func New(st *store.Store, profileID int64, hub Broadcaster) *Engine {
 		phase: "show", phaseWake: make(chan struct{}, 1), pinger: systemPinger{},
 		pingResults: map[string]DevicePing{}, pingFails: map[string]int{}, missing: map[string]missingCheck{},
 		switchGroups: map[int64]string{}, lastTraps: map[int64]time.Time{},
-		baseline: map[string]float64{}, prevQuerier: map[string]string{}, mediumFresh: map[int64]bool{}}
+		startedAt: time.Now().Truncate(time.Millisecond),
+		baseline:  map[string]float64{}, prevQuerier: map[string]string{}, mediumFresh: map[int64]bool{}}
 	e.Reload()
 	e.loadOperations()
 	e.restoreAlerts()
@@ -201,6 +205,8 @@ func (e *Engine) reload() {
 
 // SetProfile はアクティブプロファイルを切替える。
 func (e *Engine) SetProfile(id int64) {
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
 	e.stateMu.Lock()
 	defer e.stateMu.Unlock()
 	e.eventMu.Lock()
@@ -548,7 +554,11 @@ func (e *Engine) Run(ctx context.Context, ret store.Retention) {
 	awakeDone := make(chan struct{})
 	go func() {
 		defer close(awakeDone)
-		if err := preventSleep(ctx); err != nil {
+		if err := preventSleep(ctx, func(active bool) {
+			e.mu.Lock()
+			e.sleepInhibited = active
+			e.mu.Unlock()
+		}); err != nil {
 			slog.Warn("スリープ抑止に失敗", "err", err)
 		}
 	}()

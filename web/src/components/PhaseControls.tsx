@@ -5,21 +5,29 @@ import type { Phase } from '../types';
 
 const phases: Phase[] = ['setup', 'rehearsal', 'show'];
 
-export function changePhase(phase: Phase, run: (action: () => Promise<void>) => void, onPhase: (phase: Phase) => void) {
-  if (!window.confirm(t('rack.phaseConfirm', { phase: t(`rack.${phase}`), effect: t(`rack.${phase}Effect`) }))) return;
-  run(async () => {
-    const result = await api<{ phase: Phase }>('/api/phase', json('PUT', { phase }));
-    onPhase(result.phase);
-  });
+export async function submitPhase(phase: Phase, onPhase: (phase: Phase) => void, confirmChecklist = false) {
+  const result = await api<{ phase: Phase }>('/api/phase', json('PUT', { phase, confirm_checklist: confirmChecklist }));
+  onPhase(result.phase);
 }
 
-export function PhaseControls({ phase, locked, busy, wall, run, onPhase }: {
+export function changePhase(phase: Phase, run: (action: () => Promise<void>) => void, onPhase: (phase: Phase) => void,
+  current?: Phase, openChecklist?: () => void) {
+  if (current === 'rehearsal' && phase === 'show' && openChecklist) {
+    openChecklist();
+    return;
+  }
+  if (!window.confirm(t('rack.phaseConfirm', { phase: t(`rack.${phase}`), effect: t(`rack.${phase}Effect`) }))) return;
+  run(() => submitPhase(phase, onPhase));
+}
+
+export function PhaseControls({ phase, locked, busy, wall, run, onPhase, openChecklist }: {
   phase?: Phase; locked: boolean; busy: boolean; wall: boolean;
   run: (action: () => Promise<void>) => void; onPhase: (phase: Phase) => void;
+  openChecklist?: () => void;
 }) {
   return <div className="phase-control">
     {!wall && !locked && phase ? <select className={`phase-selector phase-${phase}`} data-action="phase" aria-label={t('rack.phase')} value={phase} disabled={busy}
-      onChange={event => changePhase(event.target.value as Phase, run, onPhase)}>
+      onChange={event => changePhase(event.target.value as Phase, run, onPhase, phase, openChecklist)}>
       {phases.map(value => <option key={value} value={value}>{t('rack.phase')} · {t(`rack.${value}`)}</option>)}
     </select> : <span className={`phase-pill phase-${phase || 'unknown'}`}>{t('rack.phase')} · {phase ? t(`rack.${phase}`) : '—'}</span>}
   </div>;

@@ -13,12 +13,14 @@ interface HeaderProps {
   profiles: Profile[]; settings?: Settings; groupSelection: string; setGroupSelection: (value: string) => void; groupNames?: string[];
   replay: unknown; markerInput: RefObject<HTMLInputElement>; summary?: ReactNode;
   updatedAt?: number | string;
+  openChecklist?: (gate: boolean) => void;
   run: (action: () => Promise<void>) => void; refresh: () => Promise<void>; setDialog: (value: string) => void;
 }
 export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, expert, status, busy, locked,
-  profiles, settings, groupSelection, setGroupSelection, groupNames = [], replay, markerInput, run, refresh, setDialog, summary, updatedAt }: HeaderProps) {
+  profiles, settings, groupSelection, setGroupSelection, groupNames = [], replay, markerInput, run, refresh, setDialog, summary, updatedAt, openChecklist }: HeaderProps) {
   const [note, setNote] = useState('');
-  const phaseControl = <PhaseControls {...{ phase, locked, busy, wall, run, onPhase }} />;
+  const phaseControl = <PhaseControls {...{ phase, locked, busy, wall, run, onPhase }}
+    openChecklist={openChecklist && (() => openChecklist(true))} />;
   const expertBadge = expert && <Badge text={t('expert.badge')} />;
   const clock = <div className="header-time"><PcClock /><small>{t('rack.lastUpdated', { at: jstTime(updatedAt ?? NaN) })}</small></div>;
   const groupFilter = <label>{t('pages.groupLabel')} <select aria-label={t('pages.group')} value={groupSelection}
@@ -39,6 +41,8 @@ export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, e
       {expertBadge}
       <span>{replay ? t('rack.replay') : online ? '● LIVE' : t('rack.connecting')}</span>
       {phaseControl}
+      {!replay && (phase === 'setup' || phase === 'rehearsal') &&
+        <button type="button" data-action="pre-show-checklist" disabled={busy} onClick={() => openChecklist?.(false)}>{t('checklist.title')}</button>}
       {status?.trap && <button onClick={onTrapHelp} title={[status.trap.addr, status.trap.error].filter(Boolean).join(' · ')}
         className={status.trap.ok ? 'trap-ready' : 'trap-failed'}>{t(status.trap.ok ? 'rack.trapOK' : 'rack.trapFail')} ⓘ</button>}
       <select aria-label={t('rack.profile')} value={status?.profile.id || ''} disabled={busy || locked} onChange={event => {

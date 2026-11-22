@@ -1,8 +1,11 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"time"
+
+	"github.com/Mono-Gen/avline-sight/internal/engine"
 )
 
 func (s *Server) getPhase(w http.ResponseWriter, r *http.Request) {
@@ -11,7 +14,8 @@ func (s *Server) getPhase(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) putPhase(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Phase string `json:"phase"`
+		Phase            string `json:"phase"`
+		ConfirmChecklist bool   `json:"confirm_checklist"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, 400, "運用フェーズを変更できません", err.Error(), "")
@@ -21,7 +25,11 @@ func (s *Server) putPhase(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "運用フェーズが不正です", "setup/rehearsal/show から指定してください", "")
 		return
 	}
-	if err := s.Engine.SetPhase(in.Phase); err != nil {
+	if err := s.Engine.SetPhaseWithChecklist(r.Context(), in.Phase, s.trapReady(), in.ConfirmChecklist); err != nil {
+		if errors.Is(err, engine.ErrChecklistConfirmation) {
+			writeErr(w, 409, "本番前チェックに残項目があります", "", "チェックリストを更新して確認してください")
+			return
+		}
 		writeErr(w, 500, "運用フェーズを保存できません", err.Error(), "")
 		return
 	}
