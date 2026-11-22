@@ -3,7 +3,7 @@ import { api, json } from '../api';
 import { Badge } from '../components/Badge';
 import { DeviceCsvImportDialog } from '../components/DeviceCsvImportDialog';
 import { PollingStatus } from '../components/PollingStatus';
-import { deviceUrl, importSummary, MAX_BULK_PING, pingLabel, pingTargets } from '../deviceCsv';
+import { bulkPingTimeoutMs, deviceUrl, importSummary, MAX_BULK_PING, pingLabel, pingTargets } from '../deviceCsv';
 import type { DeviceScope } from '../deviceCsv';
 import { asArray, decimal, formatTime } from '../format';
 import type { BulkPingResult, BulkPingResponse, InventoryRow } from '../types';
@@ -95,7 +95,9 @@ export function Devices(p: ViewProps) {
     : p.locked ? '閲覧専用ロック中は手入力のPingはできません（一覧の機器へのPingは可能です）。' : undefined;
   const runPing = (body: { ips?: string[]; manual?: string }) => p.run(async () => {
     setNotice('');
-    const r = await api<BulkPingResponse>('/api/diagnostics/ping-bulk', json('POST', body));
+    // 手入力は展開後の件数が画面側では分からないため、上限件数で待つ
+    const r = await api<BulkPingResponse>('/api/diagnostics/ping-bulk', json('POST', body),
+      bulkPingTimeoutMs(body.ips ? body.ips.length : MAX_BULK_PING));
     const listed = new Set(rows.map(row => row.ip));
     // 一覧にないIP（手入力）の結果だけ別表に出す。一覧の行は再取得した ping 列に反映される
     setManualResults(asArray(r.results).filter(x => !listed.has(x.ip)));

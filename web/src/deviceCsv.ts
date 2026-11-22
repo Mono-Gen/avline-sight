@@ -41,6 +41,14 @@ export function importSummary(response: DeviceAliasImportResponse): string {
 /** 一括Pingの上限（サーバーの maxBulkPing と同じ）。 */
 export const MAX_BULK_PING = 256;
 
+/**
+ * 一括Pingの応答待ち上限。サーバーは16並列・1宛先最大2回×1秒なので、全宛先が無応答だと
+ * ceil(件数/16)×2秒かかる（256件で32秒）。それに通信の余裕10秒を足す。
+ */
+export function bulkPingTimeoutMs(count: number): number {
+  return Math.ceil(Math.max(count, 1) / 16) * 2000 + 10000;
+}
+
 /** 表示中の行から、Pingを打てるIP（重複なし）を集める。過去のIPも含める（電源断・抜線の切り分けに使うため）。 */
 export function pingTargets(rows: readonly InventoryRow[]): string[] {
   const seen = new Set<string>();

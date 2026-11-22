@@ -70,14 +70,16 @@ func (s *Server) replayInventory(w http.ResponseWriter, r *http.Request) ([]engi
 			aliases, _ = rp.st.Aliases(pid)
 		}
 	}
-	// 再生では「その時点で見えていない登録機器」の最終観測は記録期間内の値しか持たない
-	last, _ := rp.st.LastSeenByMAC()
-	for mac, ls := range last {
-		if ls.TS.After(at) {
-			delete(last, mac) // 再生時刻より後の観測は「その時点の最終確認」ではない
+	// 再生時刻以前の観測だけから最終確認を求める（記録期間内の履歴に限られる）
+	var last map[string]store.LastSeen
+	if len(states) > 0 {
+		if pid, err := rp.st.ProfileOfSwitch(states[0].ID); err == nil {
+			last, _ = rp.st.LastSeenByMAC(pid, at)
 		}
 	}
-	return engine.BuildInventory(states, aliases, last, inventoryOptions(r), at), at, true
+	opt := inventoryOptions(r)
+	opt.SnapshotLabels = true
+	return engine.BuildInventory(states, aliases, last, opt, at), at, true
 }
 
 func (s *Server) replayDevices(w http.ResponseWriter, r *http.Request) {

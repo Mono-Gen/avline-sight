@@ -54,6 +54,8 @@ type InventoryOptions struct {
 	Group string // 担当パート（スイッチの group_tag）。空なら全体
 	Query string // MAC / IP / 名称 / メーカー / LLDP名 / スイッチ / ポート の部分一致
 	VLANs []int  // 担当パート（表示プリセット）のVLAN。空なら全VLAN
+	// SnapshotLabels: 再生用。スナップショットに記録された名称を登録名より優先する
+	SnapshotLabels bool
 }
 
 // BuildInventory は状態から MAC ごとに1行の一覧を作る。
@@ -64,9 +66,15 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 		row    InventoryRow
 		uplink bool
 		lldp   bool
+		live   bool // スイッチから現在取得できている観測か
 	}
 	best := map[string]cand{}
+	// 所在とは別に、MAC単位で判明している属性を集める（所在に選ばれた観測でIPが不明でも、他の観測のIPを使う）
+	anyIP, anyVendor, anyLLDP := map[string]string{}, map[string]string{}, map[string]string{}
 	better := func(a, b cand) bool { // a が b より所在として確からしいか
+		if a.live != b.live {
+			return a.live
+		}
 		if a.uplink != b.uplink {
 			return !a.uplink
 		}
@@ -79,12 +87,27 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 		if s == nil {
 			continue
 		}
+		// 到達不能なスイッチの機器一覧はポーラーが最後に取れた時点のもの。見えている扱いにしない
+		live := s.Reachable
+		seenAt := at
+		if !live {
+			seenAt = s.LastOK
+		}
 		for _, p := range s.Ports {
 			up := isUplink(s, p)
 			for _, d := range p.Devices {
+				if d.IP != "" && (anyIP[d.MAC] == "" || !up) {
+					anyIP[d.MAC] = d.IP
+				}
+				if d.Vendor != "" {
+					anyVendor[d.MAC] = d.Vendor
+				}
+				if d.LLDPName != "" {
+					anyLLDP[d.MAC] = d.LLDPName
+				}
 				r := InventoryRow{MAC: d.MAC, Label: d.Label, IP: d.IP, Vendor: d.Vendor, LLDPName: d.LLDPName,
 					SwitchID: s.ID, SwitchName: s.Name, GroupTag: s.GroupTag, Port: p.Name, IfIndex: p.IfIndex,
-					VLAN: d.VLAN, SpeedMbps: p.SpeedMbps, Seen: true, LastSeen: at, Source: d.Source, ViaUplink: up}
+					VLAN: d.VLAN, SpeedMbps: p.SpeedMbps, Seen: live, LastSeen: seenAt, Source: d.Source, ViaUplink: up}
 				if r.VLAN == 0 {
 					r.VLAN = p.PVID
 				}
@@ -93,7 +116,7 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 					w := p.PoE.PowerW
 					r.PoEW = &w
 				}
-				c := cand{row: r, uplink: up, lldp: d.Source == "lldp"}
+				c := cand{row: r, uplink: up, lldp: d.Source == "lldp", live: live}
 				if old, ok := best[d.MAC]; !ok || better(c, old) {
 					best[d.MAC] = c
 				}
@@ -101,8 +124,18 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 		}
 	}
 	rows := make([]InventoryRow, 0, len(best)+len(aliases))
-	for _, c := range best {
-		rows = append(rows, c.row)
+	for mac, c := range best {
+		r := c.row
+		if r.IP == "" {
+			r.IP = anyIP[mac]
+		}
+		if r.Vendor == "" {
+			r.Vendor = anyVendor[mac]
+		}
+		if r.LLDPName == "" {
+			r.LLDPName = anyLLDP[mac]
+		}
+		rows = append(rows, r)
 	}
 	// 登録名とメモを反映し、見えていない登録済み機器を加える
 	byMAC := map[string]store.Alias{}
@@ -113,7 +146,11 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 	}
 	for i := range rows {
 		if a, ok := byMAC[rows[i].MAC]; ok {
-			rows[i].Label, rows[i].Note = a.Label, a.Note
+			// 再生ではスナップショット記録時点の名称を保つ（書出後に変えた登録名で過去を上書きしない）
+			if !opt.SnapshotLabels || rows[i].Label == "" {
+				rows[i].Label = a.Label
+			}
+			rows[i].Note = a.Note
 		}
 	}
 	for mac, a := range byMAC {
@@ -227,7 +264,8 @@ func csvSafe(s string) string {
 	if s == "" {
 		return s
 	}
-	if s[0] == '\t' || s[0] == '\r' {
+	// 元から ' で始まる値にも ' を足す（読込時に1つだけ外すので、書出→読込で名称が変わらない）
+	if s[0] == '\t' || s[0] == '\r' || s[0] == '\'' {
 		return "'" + s
 	}
 	if strings.ContainsRune("=+-@", rune(s[0])) {
@@ -263,7 +301,7 @@ func ParseAliasCSV(text string) (rows []AliasCSVRow, skipped int, errs []AliasCS
 	text = strings.TrimPrefix(text, "\uFEFF")
 	cr := csv.NewReader(strings.NewReader(text))
 	cr.FieldsPerRecord = -1 // 列数の揃わない行（末尾の空列省略など）も受け付ける
-	cr.LazyQuotes = true
+	// 引用符は厳密に扱う。閉じ忘れを許すと後続行がメモに吸収され、置換モードで登録名を消してしまう
 	colMAC, colLabel, colNote := 0, 1, 2
 	seen := map[string]int{}
 	first := true
@@ -372,7 +410,7 @@ func isBlank(rec []string) bool {
 
 // unCSVSafe は書出時に付けた無害化の ' を外す（書出→編集→読込の往復で名称が変わらないように）。
 func unCSVSafe(s string) string {
-	if len(s) >= 2 && s[0] == '\'' && strings.ContainsRune("=+-@", rune(s[1])) {
+	if len(s) >= 2 && s[0] == '\'' && strings.ContainsRune("=+-@'\t", rune(s[1])) {
 		return s[1:]
 	}
 	return s
@@ -401,7 +439,7 @@ func (e *Engine) Inventory(opt InventoryOptions) ([]InventoryRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	last, err := e.st.LastSeenByMAC()
+	last, err := e.st.LastSeenByMAC(e.ProfileID(), time.Now())
 	if err != nil {
 		return nil, err
 	}

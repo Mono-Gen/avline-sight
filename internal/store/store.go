@@ -465,11 +465,13 @@ type LastSeen struct {
 	IP string
 }
 
-// LastSeenByMAC はMACごとの最終観測（接続履歴から）。見えていない登録済み機器の表示・Ping用。
-func (s *Store) LastSeenByMAC() (map[string]LastSeen, error) {
-	// MACごとに最新の行を1つ選ぶ（同時刻の重複は rowid の大きい方）
-	rows, err := s.DB.Query(`SELECT mac, last_seen_ts, ip FROM device_bindings b
-		WHERE rowid = (SELECT rowid FROM device_bindings x WHERE x.mac=b.mac ORDER BY last_seen_ts DESC, rowid DESC LIMIT 1)`)
+// LastSeenByMAC はプロファイル内のスイッチで観測されたMACごとの最終観測（at 以前）。
+// 見えていない登録済み機器の表示・Ping用。再生では at に再生時刻を渡し、未来の観測を混ぜない。
+// 相関サブクエリを使わず1回の走査で集計する（履歴が多くても単一DB接続を長く占有しないため）。
+func (s *Store) LastSeenByMAC(profileID int64, at time.Time) (map[string]LastSeen, error) {
+	cut := ms(at)
+	rows, err := s.DB.Query(`SELECT b.mac, b.last_seen_ts, b.ip FROM device_bindings b JOIN switches w ON w.id=b.switch_id
+		WHERE w.profile_id=? AND b.first_seen_ts<=?`, profileID, cut)
 	if err != nil {
 		return nil, err
 	}
@@ -482,7 +484,13 @@ func (s *Store) LastSeenByMAC() (map[string]LastSeen, error) {
 		if err := rows.Scan(&mac, &ts, &ip); err != nil {
 			return nil, err
 		}
-		out[strings.ToUpper(mac)] = LastSeen{TS: fromMS(ts), IP: ip.String}
+		if ts > cut {
+			ts = cut // at の時点ではまだ接続中だった（その時点が最終確認）
+		}
+		mac = strings.ToUpper(mac)
+		if cur, ok := out[mac]; !ok || ms(cur.TS) < ts || (ms(cur.TS) == ts && cur.IP == "") {
+			out[mac] = LastSeen{TS: fromMS(ts), IP: ip.String}
+		}
 	}
 	return out, rows.Err()
 }

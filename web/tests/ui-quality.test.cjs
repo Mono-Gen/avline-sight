@@ -444,3 +444,10 @@ test('一括Ping: 結果表示は記号と文字を併記し、無応答を故�
   assert.match(html, /⚠ 無応答/);
   assert.doesNotMatch(html, /故障/);
 });
+
+test('一括Ping: 応答待ちは全宛先が無応答でも打ち切られない長さにする（監査指摘#6）', () => {
+  const { bulkPingTimeoutMs, MAX_BULK_PING } = require('../src/deviceCsv.ts');
+  // サーバーの最悪時間: ceil(256/16)=16巡 × 2回 × 1秒 = 32秒
+  assert.ok(bulkPingTimeoutMs(MAX_BULK_PING) > 32000);
+  assert.ok(bulkPingTimeoutMs(1) > 2000);
+});

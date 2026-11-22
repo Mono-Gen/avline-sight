@@ -1,9 +1,12 @@
-async function consumeResponse<T>(path: string, options: RequestInit, consume: (response: Response) => Promise<T>): Promise<T> {
+/** 既定の応答待ち上限。通常のAPIは数百msで返るため、15秒で打ち切って画面を固めない。 */
+export const DEFAULT_TIMEOUT_MS = 15000;
+
+async function consumeResponse<T>(path: string, options: RequestInit, consume: (response: Response) => Promise<T>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (options.signal?.aborted) abort();
   options.signal?.addEventListener('abort', abort, { once: true });
-  const timer = window.setTimeout(() => controller.abort(), 15000);
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const r = await fetch(path, {
       ...options,
@@ -31,14 +34,14 @@ export function response(path: string, options: RequestInit = {}): Promise<Respo
   return consumeResponse(path, options, async result => result);
 }
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function api<T>(path: string, options: RequestInit = {}, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   try {
     // JSON本文の読込中も、画面切替の中断とタイムアウトを有効に保つ。
     return await consumeResponse(path, options, async result => {
       if (result.status === 204) return undefined as T;
       const text = await result.text();
       return (text ? JSON.parse(text) : undefined) as T;
-    });
+    }, timeoutMs);
   } catch (error) {
     if (!options.signal?.aborted) window.dispatchEvent(new CustomEvent('api-error', { detail: message(error) }));
     throw error;

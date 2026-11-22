@@ -32,6 +32,7 @@ type SwitchState struct {
 	Reachable   bool              `json:"reachable"`
 	LastError   string            `json:"last_error,omitempty"`
 	LastPoll    time.Time         `json:"last_poll"`
+	LastOK      time.Time         `json:"last_ok"` // 最後に取得が成功した時刻（到達不能中の機器一覧の鮮度表示用）
 	SysName     string            `json:"sys_name"`
 	SysDescr    string            `json:"sys_descr"`
 	SysObjectID string            `json:"sys_object_id"`

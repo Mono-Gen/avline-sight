@@ -181,3 +181,40 @@ func TestApplyMACAliases(t *testing.T) {
 		t.Fatalf("merge後: %d件", len(al))
 	}
 }
+
+// 監査指摘#3/#8: 最終観測は現場（プロファイル）内に限り、指定時刻より後の観測を混ぜない
+func TestLastSeenByMACScoped(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "a.db"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	p1, _ := s.EnsureDefaultProfile()
+	p2, _ := s.CreateProfile("別現場")
+	a := model.SwitchConfig{ProfileID: p1, Name: "A", IP: "10.0.0.1", Enabled: true}
+	b := model.SwitchConfig{ProfileID: p2, Name: "B", IP: "10.0.0.2", Enabled: true}
+	s.SaveSwitch(&a)
+	s.SaveSwitch(&b)
+	t0 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	mac := "AA:00:00:00:00:01"
+	// 現場1: 10:00 に 10.1.1.1、消失後 12:00 に 10.1.1.2 で再接続
+	s.UpsertBinding(a.ID, 1, model.Device{MAC: mac, IP: "10.1.1.1"}, t0)
+	s.UpsertBinding(a.ID, 1, model.Device{MAC: mac, IP: "10.1.1.1"}, t0.Add(30*time.Minute))
+	s.DeactivateBinding(a.ID, 1, mac)
+	s.UpsertBinding(a.ID, 1, model.Device{MAC: mac, IP: "10.1.1.2"}, t0.Add(2*time.Hour))
+	// 別現場ではもっと新しい観測
+	s.UpsertBinding(b.ID, 1, model.Device{MAC: mac, IP: "192.0.2.9"}, t0.Add(5*time.Hour))
+
+	ls, err := s.LastSeenByMAC(p1, t0.Add(6*time.Hour))
+	if err != nil || ls[mac].IP != "10.1.1.2" || !ls[mac].TS.Equal(t0.Add(2*time.Hour)) {
+		t.Fatalf("現在: %+v %v（別現場の観測を混ぜてはいけない）", ls[mac], err)
+	}
+	ls, _ = s.LastSeenByMAC(p1, t0.Add(time.Hour)) // 消失中の時点
+	if ls[mac].IP != "10.1.1.1" || !ls[mac].TS.Equal(t0.Add(30*time.Minute)) {
+		t.Fatalf("消失中の時点: %+v（未来の再接続で過去の記録を消してはいけない）", ls[mac])
+	}
+	ls, _ = s.LastSeenByMAC(p1, t0.Add(10*time.Minute)) // 接続中の時点
+	if !ls[mac].TS.Equal(t0.Add(10 * time.Minute)) {
+		t.Fatalf("接続中の時点の最終確認はその時刻: %+v", ls[mac])
+	}
+}

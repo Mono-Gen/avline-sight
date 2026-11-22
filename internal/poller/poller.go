@@ -248,6 +248,9 @@ func (w *worker) run(ctx context.Context) {
 			w.mu.Lock()
 			err := t.fn()
 			w.st.LastPoll = time.Now().UTC()
+			if err == nil {
+				w.st.LastOK = w.st.LastPoll
+			}
 			wasUp := w.st.Reachable
 			if err != nil {
 				w.failures++

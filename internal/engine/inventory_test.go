@@ -14,7 +14,7 @@ import (
 
 func invStates() []*model.SwitchState {
 	pw := func(w float64) *model.PoE { return &model.PoE{PowerW: w} }
-	sw1 := &model.SwitchState{ID: 1, Name: "SW1", GroupTag: "FOH", Ports: []*model.Port{
+	sw1 := &model.SwitchState{ID: 1, Name: "SW1", GroupTag: "FOH", Reachable: true, Ports: []*model.Port{
 		{IfIndex: 5, Name: "1/0/5", SpeedMbps: 1000, PVID: 10, PoE: pw(12.5), Devices: []model.Device{
 			{MAC: "00:11:22:33:44:55", Vendor: "Yamaha", VLAN: 10, Source: "fdb"}}},
 		{IfIndex: 6, Name: "1/0/6", SpeedMbps: 100, PVID: 20, PoE: pw(30), Devices: []model.Device{ // 配下にハブ: PoEは機器ごとでない
@@ -23,7 +23,7 @@ func invStates() []*model.SwitchState {
 		{IfIndex: 25, Name: "1/0/25", AVRole: "uplink", SpeedMbps: 10000, Devices: []model.Device{
 			{MAC: "CC:00:00:00:00:01", Source: "fdb"}}},
 	}}
-	sw2 := &model.SwitchState{ID: 2, Name: "SW2", GroupTag: "STAGE", Ports: []*model.Port{
+	sw2 := &model.SwitchState{ID: 2, Name: "SW2", GroupTag: "STAGE", Reachable: true, Ports: []*model.Port{
 		{IfIndex: 24, Name: "lag 1", Type: "lag", Devices: []model.Device{
 			{MAC: "00:11:22:33:44:55", Source: "fdb"}, // SW1のアクセスポートの機器が経路上に見えている
 			{MAC: "CC:00:00:00:00:01", LLDPName: "=cmd|evil", Source: "lldp"}}},
@@ -190,5 +190,50 @@ func TestPingCell(t *testing.T) {
 	}
 	if pingCell(nil, time.UTC) != "" {
 		t.Fatal("未実施は空欄")
+	}
+}
+
+// 監査指摘#4/#7/#5: 到達不能スイッチの一覧は過去の観測、IPは他の観測から補完、再生は記録時の名称を保つ
+func TestInventoryAuditFixes(t *testing.T) {
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	lastOK := now.Add(-10 * time.Minute)
+	down := &model.SwitchState{ID: 3, Name: "SW3", Reachable: false, LastOK: lastOK, Ports: []*model.Port{
+		{IfIndex: 1, Name: "1/0/1", Devices: []model.Device{{MAC: "EE:00:00:00:00:01", Label: "記録時の名前", Source: "fdb"}}}}}
+	up := &model.SwitchState{ID: 4, Name: "SW4", Reachable: true, Ports: []*model.Port{
+		{IfIndex: 2, Name: "1/0/2", Devices: []model.Device{{MAC: "EE:00:00:00:00:02", Source: "fdb"}}},
+		{IfIndex: 25, Name: "1/0/25", AVRole: "uplink", Devices: []model.Device{{MAC: "EE:00:00:00:00:02", IP: "10.0.0.2", Source: "arp"}}}}}
+	rows := BuildInventory([]*model.SwitchState{down, up}, nil, nil, InventoryOptions{}, now)
+	by := map[string]InventoryRow{}
+	for _, r := range rows {
+		by[r.MAC] = r
+	}
+	if r := by["EE:00:00:00:00:01"]; r.Seen || !r.LastSeen.Equal(lastOK) || r.Port != "1/0/1" {
+		t.Fatalf("到達不能スイッチの機器を見えている扱い: %+v", r)
+	}
+	if r := by["EE:00:00:00:00:02"]; r.Port != "1/0/2" || r.IP != "10.0.0.2" {
+		t.Fatalf("所在はアクセスポート、IPはアップリンク側の観測から補完すべき: %+v", r)
+	}
+	al := []store.Alias{{MatchType: "mac", MatchKey: "EE:00:00:00:00:01", Label: "書出後に変えた名前", Note: "n"}}
+	if r := BuildInventory([]*model.SwitchState{down}, al, nil, InventoryOptions{SnapshotLabels: true}, now)[0]; r.Label != "記録時の名前" || r.Note != "n" {
+		t.Fatalf("再生で記録時の名称を上書き: %+v", r)
+	}
+	if r := BuildInventory([]*model.SwitchState{down}, al, nil, InventoryOptions{}, now)[0]; r.Label != "書出後に変えた名前" {
+		t.Fatalf("ライブは登録名を優先: %+v", r)
+	}
+}
+
+// 監査指摘#2/#1: 先頭が ' の名称も往復で変わらない。引用符の閉じ忘れはエラー（後続行を吸収しない）
+func TestAliasCSVEdgeCases(t *testing.T) {
+	for _, label := range []string{"'-FOH", "''x", "-FOH", "'abc", "=1+2"} {
+		var buf bytes.Buffer
+		WriteInventoryCSV(&buf, []InventoryRow{{MAC: "00:11:22:33:44:55", Label: label}}, time.UTC)
+		rows, _, errs := ParseAliasCSV(buf.String())
+		if len(errs) != 0 || len(rows) != 1 || rows[0].Label != label {
+			t.Fatalf("%q が往復で変化: %+v %+v", label, rows, errs)
+		}
+	}
+	rows, _, errs := ParseAliasCSV("MAC,名称,メモ\n00:11:22:33:44:01,A,\"閉じ忘れ\n00:11:22:33:44:02,B,\n")
+	if len(errs) == 0 {
+		t.Fatalf("引用符の閉じ忘れを検出していない: %+v", rows)
 	}
 }
