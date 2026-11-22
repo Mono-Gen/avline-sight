@@ -422,3 +422,25 @@ test('JSON本文の読込中にも外部中断が届き、通常エラーとし�
   await assert.rejects(pending, { name: 'AbortError' });
   assert.equal(notices, 0);
 });
+
+test('一括Ping: 宛先は表示中の行のIPを重複なく集め、過去のIPも含める', () => {
+  const { pingTargets } = require('../src/deviceCsv.ts');
+  const rows = [
+    { ip: '10.0.0.1' }, { ip: '' }, { ip: '10.0.0.1' }, { ip: '10.0.0.9', ip_stale: true },
+  ];
+  assert.deepEqual(pingTargets(rows), ['10.0.0.1', '10.0.0.9']);
+});
+
+test('一括Ping: 結果表示は記号と文字を併記し、無応答を故障と断定しない', () => {
+  const { pingLabel } = require('../src/deviceCsv.ts');
+  assert.equal(pingLabel('ok', 2.6), '✓ 応答 3ms');
+  assert.equal(pingLabel('timeout', -1), '⚠ 無応答');
+  assert.equal(pingLabel('unreachable', -1), '⚠ 到達不能');
+  const html = renderToStaticMarkup(React.createElement(DeviceInventoryTable, { rows: [{
+    mac: 'AA:BB:CC:DD:EE:FF', label: '卓', note: '', ip: '10.0.0.1', vendor: '', lldp_name: '', switch_name: 'SW', group_tag: '',
+    port: '1/0/1', vlan: 10, speed_mbps: 1000, seen: true, source: 'fdb', via_uplink: false,
+    ping: { status: 'timeout', rtt_ms: -1, at: '2026-01-02T03:04:05Z' },
+  }] }));
+  assert.match(html, /⚠ 無応答/);
+  assert.doesNotMatch(html, /故障/);
+});

@@ -611,13 +611,19 @@ func (s *Server) pingBulk(w http.ResponseWriter, r *http.Request) {
 	res := ping.Many(r.Context(), targets, ping.DefaultTimeout)
 	out := make([]map[string]any, len(res))
 	okN := 0
+	now := time.Now().UTC()
+	marks := map[string]engine.PingMark{}
+	for _, x := range res {
+		marks[x.IP] = engine.PingMark{Status: string(x.Status), RTTms: x.RTTms, At: now}
+	}
+	s.Engine.RecordPing(marks)
 	for i, x := range res {
 		if x.Status == ping.StatusOK {
 			okN++
 		}
 		out[i] = map[string]any{"ip": x.IP, "status": x.Status, "rtt_ms": x.RTTms, "detail": x.Detail, "source": source[x.IP]}
 	}
-	writeJSON(w, 200, map[string]any{"results": out, "ok": okN, "total": len(res), "elapsed_ms": time.Since(start).Milliseconds(), "at": time.Now().UTC()})
+	writeJSON(w, 200, map[string]any{"results": out, "ok": okN, "total": len(res), "elapsed_ms": time.Since(start).Milliseconds(), "at": now})
 }
 
 // ---- イベント ----

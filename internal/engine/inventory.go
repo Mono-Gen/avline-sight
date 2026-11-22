@@ -37,7 +37,15 @@ type InventoryRow struct {
 	LastSeen   time.Time `json:"last_seen,omitempty"` // 見えていない登録済み機器の最終観測（不明ならゼロ）
 	IPStale    bool      `json:"ip_stale,omitempty"`  // IP は最終観測時のもの（現在も同じとは限らない）
 	Source     string    `json:"source"`
-	ViaUplink  bool      `json:"via_uplink"` // スイッチ間リンクでしか見えていない（所在は経路上の推定）
+	ViaUplink  bool      `json:"via_uplink"`     // スイッチ間リンクでしか見えていない（所在は経路上の推定）
+	Ping       *PingMark `json:"ping,omitempty"` // このIPへの直近の一括Ping結果（ライブのみ）
+}
+
+// PingMark はIPごとの直近Ping結果（一覧とCSVに載せるため engine が保持する。再起動で消える）。
+type PingMark struct {
+	Status string    `json:"status"` // ok / timeout / unreachable / error
+	RTTms  float64   `json:"rtt_ms"`
+	At     time.Time `json:"at"`
 }
 
 // InventoryOptions は一覧の絞込条件。
@@ -150,7 +158,7 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 }
 
 // InventoryCSVHeader は書出・読込共通の列。読込は先頭3列（MAC・名称・メモ）だけを使う。
-var InventoryCSVHeader = []string{"MAC", "名称", "メモ", "IP", "メーカー", "LLDP名", "スイッチ", "ポート", "VLAN", "PoE(W)", "リンク速度", "最終確認", "検出元"}
+var InventoryCSVHeader = []string{"MAC", "名称", "メモ", "IP", "メーカー", "LLDP名", "スイッチ", "ポート", "VLAN", "PoE(W)", "リンク速度", "最終確認", "検出元", "Ping"}
 
 // WriteInventoryCSV はExcelでそのまま開けるよう BOM付きUTF-8・CRLF で書く。loc は時刻表示のタイムゾーン。
 func WriteInventoryCSV(w io.Writer, rows []InventoryRow, loc *time.Location) error {
@@ -182,7 +190,7 @@ func WriteInventoryCSV(w io.Writer, rows []InventoryRow, loc *time.Location) err
 		if r.ViaUplink {
 			src += "(経路上)"
 		}
-		rec := []string{r.MAC, r.Label, r.Note, r.IP, r.Vendor, r.LLDPName, r.SwitchName, r.Port, vlan, poe, speed, last, src}
+		rec := []string{r.MAC, r.Label, r.Note, r.IP, r.Vendor, r.LLDPName, r.SwitchName, r.Port, vlan, poe, speed, last, src, pingCell(r.Ping, loc)}
 		for i := range rec {
 			rec[i] = csvSafe(rec[i])
 		}
@@ -192,6 +200,18 @@ func WriteInventoryCSV(w io.Writer, rows []InventoryRow, loc *time.Location) err
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+// pingCell は「応答 3ms (14:02:05)」「無応答 (14:02:05)」の形にする。未実施は空欄。
+func pingCell(p *PingMark, loc *time.Location) string {
+	if p == nil {
+		return ""
+	}
+	label := map[string]string{"timeout": "無応答", "unreachable": "到達不能", "error": "送信失敗"}[p.Status]
+	if p.Status == "ok" {
+		label = "応答 " + strconv.FormatFloat(p.RTTms, 'f', 0, 64) + "ms"
+	}
+	return label + " (" + p.At.In(loc).Format("15:04:05") + ")"
 }
 
 func formatSpeed(mbps int) string {
@@ -385,5 +405,26 @@ func (e *Engine) Inventory(opt InventoryOptions) ([]InventoryRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	return BuildInventory(e.States(), al, last, opt, time.Now()), nil
+	rows := BuildInventory(e.States(), al, last, opt, time.Now())
+	e.mu.RLock()
+	for i := range rows {
+		if m, ok := e.pings[rows[i].IP]; ok && rows[i].IP != "" {
+			m := m
+			rows[i].Ping = &m
+		}
+	}
+	e.mu.RUnlock()
+	return rows, nil
+}
+
+// RecordPing は一括Pingの結果を保持する（IPごとに最新のみ）。
+func (e *Engine) RecordPing(results map[string]PingMark) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.pings == nil {
+		e.pings = map[string]PingMark{}
+	}
+	for ip, m := range results {
+		e.pings[ip] = m
+	}
 }

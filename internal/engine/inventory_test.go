@@ -101,7 +101,7 @@ func TestInventoryCSVRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := buf.String()
-	if !strings.HasPrefix(out, "\uFEFFMAC,名称,メモ,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元\r\n") {
+	if !strings.HasPrefix(out, "\uFEFFMAC,名称,メモ,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元,Ping\r\n") {
 		t.Fatalf("見出し/BOM/CRLF: %q", out[:80])
 	}
 	if !strings.Contains(out, "'=cmd|evil") {
@@ -177,5 +177,18 @@ func TestNormalizeMAC(t *testing.T) {
 		if _, ok := NormalizeMAC(bad); ok {
 			t.Fatalf("%q を受理した", bad)
 		}
+	}
+}
+
+func TestPingCell(t *testing.T) {
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if got := pingCell(&PingMark{Status: "ok", RTTms: 2.6, At: at}, time.UTC); got != "応答 3ms (03:04:05)" {
+		t.Fatal(got)
+	}
+	if got := pingCell(&PingMark{Status: "timeout", RTTms: -1, At: at}, time.UTC); got != "無応答 (03:04:05)" {
+		t.Fatal(got)
+	}
+	if pingCell(nil, time.UTC) != "" {
+		t.Fatal("未実施は空欄")
 	}
 }

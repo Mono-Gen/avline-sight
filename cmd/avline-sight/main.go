@@ -52,6 +52,7 @@ func run() error {
 		listen   = flag.String("listen", "127.0.0.1:8080", "WebUI待受アドレス（LAN公開は 0.0.0.0:8080。閲覧専用ロック併用推奨）")
 		trapAddr = flag.String("trap", "", "SNMP Trap待受アドレス（既定 0.0.0.0:162、失敗時は設定画面で変更）")
 		lab      = flag.Int("lab", 0, "仮想M4250ラボを N 台起動して監視する（実機なし検証用、1〜20）")
+		labOff   = flag.Int("lab-port-offset", 0, "ラボのSNMP/Telnet/SSHポートをまとめてずらす（ラボを2つ同時に動かす検証用）")
 		openUI   = flag.Bool("open", false, "起動後に既定ブラウザでWebUIを開く")
 		fast     = flag.Duration("fast", poller.DefaultIntervals.Fast, "Fast周期")
 		medium   = flag.Duration("medium", poller.DefaultIntervals.Medium, "Medium周期")
@@ -64,6 +65,12 @@ func run() error {
 		lvl = slog.LevelDebug
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})))
+	if *labOff < 0 || *labOff > 10000 {
+		return fmt.Errorf("--lab-port-offset は 0〜10000 で指定してください")
+	}
+	api.LabSNMPBase += *labOff
+	api.LabCLIBase += *labOff
+	api.LabSSHBase += *labOff
 	if *lab < 0 || *lab > 20 {
 		return fmt.Errorf("--lab は 0〜20 で指定してください")
 	}

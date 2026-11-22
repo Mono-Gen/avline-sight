@@ -233,8 +233,9 @@ func (s *Server) wsTerminal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ラボのポート割当（cmd側と共有）
-const (
+// ラボのポート割当（cmd側と共有）。--lab-port-offset で起動時にまとめてずらせるよう変数にしている
+// （ラボを2つ同時に動かす検証用。監視開始後は変更しない）。
+var (
 	LabSNMPBase = 16100
 	LabCLIBase  = 2300
 	LabSSHBase  = 2400

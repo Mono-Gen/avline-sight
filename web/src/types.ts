@@ -461,6 +461,31 @@ export interface InventoryRow {
   last_seen?: string;
   source: string;
   via_uplink: boolean;
+  ping?: PingMark;
+}
+
+export type PingStatus = 'ok' | 'timeout' | 'unreachable' | 'error';
+
+export interface PingMark {
+  status: PingStatus;
+  rtt_ms: number;
+  at: string;
+}
+
+export interface BulkPingResult {
+  ip: string;
+  status: PingStatus;
+  rtt_ms: number;
+  detail?: string;
+  source: 'known' | 'manual';
+}
+
+export interface BulkPingResponse {
+  results: BulkPingResult[];
+  ok: number;
+  total: number;
+  elapsed_ms: number;
+  at: string;
 }
 
 export type DeviceAliasImportMode = 'merge' | 'replace';

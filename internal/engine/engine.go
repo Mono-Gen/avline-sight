@@ -71,6 +71,7 @@ type Engine struct {
 	settings    Settings
 	portCfg     map[int64]map[int]store.PortSetting
 	aliases     map[string]string    // "mac|<MAC>" / "port|<swid>:<ifIndex>" → ラベル
+	pings       map[string]PingMark  // IP → 直近の一括Ping結果
 	active      map[string]time.Time // 発報中アラートキー → 最終発報
 	baseline    map[string]float64   // SFP Rx 基準（ベースライン比較用）
 	hub         Broadcaster
