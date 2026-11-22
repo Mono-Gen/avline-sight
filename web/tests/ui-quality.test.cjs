@@ -28,11 +28,84 @@ const { SettingsDialog } = require('../src/components/SettingsDialog.tsx');
 const { PortHardware } = require('../src/components/PortHardware.tsx');
 const { ErrorBoundary } = require('../src/components/ErrorBoundary.tsx');
 const { OverviewView } = require('../src/views/Overview.tsx');
+const { decodeDeviceCsv, deviceUrl } = require('../src/deviceCsv.ts');
+const { DeviceInventoryTable, Devices } = require('../src/views/Devices.tsx');
+const { ScrubBar } = require('../src/components/ScrubBar.tsx');
 const render = (component, props) => renderToStaticMarkup(React.createElement(component, props));
 const port = (changes = {}) => ({
   name: '1/0/1', if_index: 1, type: 'rj45', oper: 'up', excluded: false,
   err_delta: 0, discard_delta: 0, fcs_delta: 0, cos_drop_delta: 0, err_since_reset: 0,
   ...changes,
+});
+
+test('機器名CSVの文字コードはBOM付きUTF-8、UTF-8、Shift_JISを判別する', () => {
+  const bytes = new TextEncoder().encode('MAC,名称\r\n');
+  assert.deepEqual(decodeDeviceCsv(Uint8Array.of(0xef, 0xbb, 0xbf, ...bytes)), {
+    csv: 'MAC,名称\r\n', encoding: 'UTF-8 (BOM付き)',
+  });
+  assert.deepEqual(decodeDeviceCsv(bytes), { csv: 'MAC,名称\r\n', encoding: 'UTF-8' });
+  // Shift_JISの「あ」は82 A0で、厳密なUTF-8では不正な並び。
+  assert.deepEqual(decodeDeviceCsv(Uint8Array.of(0x82, 0xa0, 0x2c, 0x31)), {
+    csv: 'あ,1', encoding: 'Shift_JIS',
+  });
+  assert.deepEqual(decodeDeviceCsv(new Uint8Array()), { csv: '', encoding: 'UTF-8' });
+});
+
+test('接続機器の一覧と書出URLにscope・検索・VLAN・再生時刻を渡す', () => {
+  const filters = { scope: 'unnamed', q: ' 音響 & AV+ ', vlans: [10, 20] };
+  assert.equal(deviceUrl({ scope: 'all', q: ' ', vlans: [] }), '/api/devices?scope=all');
+  const live = new URL(deviceUrl(filters, undefined, true), 'http://test.invalid');
+  assert.equal(live.pathname, '/api/devices/export.csv');
+  assert.deepEqual(Object.fromEntries(live.searchParams), { scope: 'unnamed', q: '音響 & AV+', vlans: '10,20' });
+  const replay = { id: 'id/1', ts: '2026-01-01T00:00:00+09:00' };
+  const recording = new URL(deviceUrl({ ...filters, scope: 'all' }, replay), 'http://test.invalid');
+  assert.equal(recording.pathname, '/api/replay/id%2F1/devices');
+  assert.deepEqual(Object.fromEntries(recording.searchParams), {
+    ts: replay.ts, scope: 'all', q: '音響 & AV+', vlans: '10,20',
+  });
+  assert.match(deviceUrl(filters, replay, true), /^\/api\/replay\/id%2F1\/devices\/export\.csv\?/);
+});
+
+test('接続機器一覧に未検出・経路上・記録なしを示す', () => {
+  const html = render(DeviceInventoryTable, { rows: [
+    { mac: '00:00:00:00:00:01', label: '', ip: '192.0.2.5', ip_stale: true, seen: false, last_seen: '0001-01-01T00:00:00Z' },
+    { mac: '00:00:00:00:00:02', label: '卓', seen: true, source: 'lldp', via_uplink: true, poe_w: 0 },
+  ] });
+  assert.match(html, /（名前なし）/);
+  assert.match(html, /○ 未検出/);
+  assert.match(html, /◷ 過去のIP/);
+  assert.match(html, /記録なし/);
+  assert.match(html, /スイッチ間リンク.*↪ 経路上/);
+  assert.match(html, />0\.0</);
+});
+
+test('再生中の接続機器は再生時刻と担当VLAN付きの書出を表示し読込を無効にする', () => {
+  const html = render(Devices, {
+    replay: [], replayRef: { id: 'replay-id', ts: '2026-01-01T00:00:00Z' },
+    part: 'audio', settings: { views: [{ id: 'audio', vlans: [10, 20] }] }, locked: true, busy: false,
+  });
+  const links = [...html.matchAll(/href="([^"]+)" download=""/g)].map(match => match[1].replaceAll('&amp;', '&'));
+  assert.equal(links.length, 2);
+  assert.deepEqual(links.map(link => new URL(link, 'http://test.invalid').searchParams.get('scope')), ['all', 'unnamed']);
+  for (const link of links) {
+    const parsed = new URL(link, 'http://test.invalid');
+    assert.equal(parsed.pathname, '/api/replay/replay-id/devices/export.csv');
+    assert.equal(parsed.searchParams.get('ts'), '2026-01-01T00:00:00Z');
+    assert.equal(parsed.searchParams.get('vlans'), '10,20');
+  }
+  assert.match(html, /disabled="" title="オフライン再生中はCSVを読み込めません。"/);
+});
+
+test('再生バーは表示中の時刻と移動先を別々に保ち、取得中は移動を無効にする', () => {
+  const ts = '2026-01-01T00:01:00Z';
+  const requestedTs = '2026-01-01T00:01:02Z';
+  const html = render(ScrubBar, {
+    sid: 'replay-id', ts, requestedTs, busy: true,
+    timeline: { from: '2026-01-01T00:00:00Z', to: '2026-01-01T00:04:00Z', markers: [{ ts, title: 'マーカー' }] },
+  });
+  assert.match(html, new RegExp(`<input[^>]*type="range"[^>]*disabled=""[^>]*value="${Date.parse(requestedTs)}"`));
+  assert.match(html, /<button[^>]*title="マーカー"[^>]*disabled=""/);
+  assert.ok(html.includes(new Date(ts).toLocaleString('ja-JP', { hour12: false })));
 });
 
 test('配列以外のAPI応答とnull要素を安全に扱う', () => {

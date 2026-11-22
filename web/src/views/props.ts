@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { Event, Overview, Settings, Status, SwitchState, WatchItem } from '../types';
+import type { Event, Overview, ReplayRef, Settings, Status, SwitchState, WatchItem } from '../types';
 export interface ViewProps {
   overview: Overview;
   status?: Status;
@@ -9,6 +9,7 @@ export interface ViewProps {
   select: (id: number) => void;
   state?: SwitchState;
   replay: SwitchState[] | null;
+  replayRef?: ReplayRef;
   events: Event[];
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
   run: (f: () => Promise<void>) => void;

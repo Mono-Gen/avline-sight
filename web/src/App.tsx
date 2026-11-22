@@ -5,13 +5,15 @@ import { ExportDialog, ScrubBar, SettingsDialog } from './components/Dialogs';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TerminalDrawer } from './components/TerminalDrawer';
 import { asArray } from './format';
-import type { Event, Overview, Profile, Settings, Status, SwitchState, Timeline, WatchItem } from './types';
+import type { Event, Overview, Profile, ReplaySession, ReplaySnapshot, Settings, Status, SwitchState, WatchItem } from './types';
+import { Devices } from './views/Devices';
 import { DhcpView, HealthAudit, Logs, MulticastView, PortMatrix } from './views/Monitoring';
 import { OverviewView } from './views/Overview';
 import { PortMonitor } from './views/PortMonitor';
 import { Topology } from './views/Topology';
 import { useLiveFeed } from './useLiveFeed';
-const pages = ['俯瞰', 'トポロジー', 'ポートモニター', 'ポート一覧', 'マルチキャスト・AV', 'DHCP', 'ヘルス・監査', 'ログ・イベント'];
+const pages = ['俯瞰', 'トポロジー', 'ポートモニター', 'ポート一覧', '接続機器', 'マルチキャスト・AV', 'DHCP', 'ヘルス・監査', 'ログ・イベント'];
+const replayPages = ['俯瞰', 'ポートモニター', '接続機器', 'マルチキャスト・AV', 'ヘルス・監査'];
 const empty: Overview = {
   switches: [],
   alerts: {
@@ -58,11 +60,9 @@ export default function App() {
   const [wall, setWall] = useState(false);
   const [terminal, setTerminal] = useState(0);
   const [dialog, setDialog] = useState('');
-  const [replay, setReplay] = useState<{
-    id: string;
-    timeline: Timeline;
-    states: SwitchState[];
-  } | null>(null);
+  const [replay, setReplay] = useState<ReplaySession | null>(null);
+  const replayId = replay?.id;
+  const replayStart = replay?.timeline.from;
   const socket = useLiveFeed({ muted, replay: !!replay, settings, setOverview, setState, setEvents, setOnline });
   const run = useCallback((f: () => Promise<void>) => {
     if (busyRef.current) return;
@@ -126,23 +126,25 @@ export default function App() {
     return () => window.removeEventListener('keydown', key);
   }, [marker, terminal]);
   useEffect(() => {
-    if (replay && replay.states.length === 0) {
-      api<{
-        switches: SwitchState[];
-      }>('/api/replay/' + encodeURIComponent(replay.id) + '/snapshot?ts=' + encodeURIComponent(replay.timeline.from)).then(r => setReplay(old => old ? {
-        ...old,
-        states: r.switches || []
-      } : old)).catch(e => setError(message(e)));
-    }
-  }, [replay?.id]);
+    if (!replayId || !replayStart) return;
+    const controller = new AbortController();
+    const url = `/api/replay/${encodeURIComponent(replayId)}/snapshot?ts=${encodeURIComponent(replayStart)}`;
+    void api<ReplaySnapshot>(url, { signal: controller.signal }).then(result => {
+      if (controller.signal.aborted) return;
+      // 初回取得より先にシークが完了した場合は、選択済みの時刻を保つ。
+      setReplay(old => old?.id === replayId && !old.ts
+        ? { ...old, ts: result.ts, requestedTs: replayStart, states: asArray(result.switches) }
+        : old);
+    }).catch(reason => {
+      if (!controller.signal.aborted) setError(message(reason));
+    });
+    return () => controller.abort();
+  }, [replayId, replayStart]);
   const snapshot = (id: string, ts: string) => run(async () => {
-    const r = await api<{
-      switches: SwitchState[];
-    }>(`/api/replay/${encodeURIComponent(id)}/snapshot?ts=${encodeURIComponent(ts)}`);
-    setReplay(old => old ? {
-      ...old,
-      states: r.switches || []
-    } : old);
+    const result = await api<ReplaySnapshot>(`/api/replay/${encodeURIComponent(id)}/snapshot?ts=${encodeURIComponent(ts)}`);
+    setReplay(old => old?.id === id
+      ? { ...old, ts: result.ts, requestedTs: ts, states: asArray(result.switches) }
+      : old);
   });
   const select = (id: number) => {
     setSelected(id);
@@ -158,6 +160,7 @@ export default function App() {
     select,
     state,
     replay: replay?.states || null,
+    replayRef: replay?.ts ? { id: replay.id, ts: replay.ts } : undefined,
     events,
     setEvents,
     run,
@@ -195,8 +198,12 @@ export default function App() {
       }}
     />
     {replay && <ScrubBar
+      key={replay.id}
       sid={replay.id}
       timeline={replay.timeline}
+      ts={replay.ts}
+      requestedTs={replay.requestedTs}
+      busy={busy}
       onSnapshot={ts => snapshot(replay.id, ts)}
       onClose={() => setReplay(null)}
       run={run}
@@ -218,7 +225,7 @@ export default function App() {
       {!wall && <nav className="flex flex-wrap gap-1 bg-slate-200 p-3 dark:bg-slate-900 md:w-52 md:flex-col">
         {asArray(pages).map(v => <button
           key={v}
-          disabled={!!replay && !asArray(['俯瞰', 'ポートモニター', 'マルチキャスト・AV', 'ヘルス・監査']).includes(v)}
+          disabled={!!replay && !replayPages.includes(v)}
           aria-current={page === v ? 'page' : undefined}
           onClick={() => setPage(v)}
         >
@@ -239,6 +246,8 @@ export default function App() {
           {!wall && page === 'ポートモニター' && <PortMonitor {...props} />}
 
           {!wall && page === 'ポート一覧' && <PortMatrix {...props} />}
+
+          {!wall && page === '接続機器' && <Devices {...props} />}
 
           {!wall && page === 'マルチキャスト・AV' && <MulticastView {...props} />}
 

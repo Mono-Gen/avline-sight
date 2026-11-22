@@ -423,3 +423,66 @@ export interface ModelDefinition {
 }
 
 export type ModelDefinitions = Record<string, ModelDefinition>;
+export interface ReplayRef {
+  id: string;
+  ts: string;
+}
+
+export interface ReplaySession {
+  id: string;
+  timeline: Timeline;
+  states: SwitchState[];
+  ts?: string;
+  requestedTs?: string;
+}
+
+export interface ReplaySnapshot {
+  ts: string;
+  switches: SwitchState[];
+}
+
+export interface InventoryRow {
+  mac: string;
+  label: string;
+  note: string;
+  ip: string;
+  ip_stale?: boolean;
+  vendor: string;
+  lldp_name: string;
+  switch_id?: number;
+  switch_name: string;
+  group_tag: string;
+  port: string;
+  if_index?: number;
+  vlan: number;
+  poe_w?: number;
+  speed_mbps: number;
+  seen: boolean;
+  last_seen?: string;
+  source: string;
+  via_uplink: boolean;
+}
+
+export type DeviceAliasImportMode = 'merge' | 'replace';
+
+export interface DeviceAliasImportRow {
+  line: number;
+  mac: string;
+  label: string;
+  note: string;
+  action: 'add' | 'update' | 'same';
+  old_label?: string;
+}
+
+export interface DeviceAliasImportResponse {
+  committed: boolean;
+  result: {
+    added: number;
+    updated: number;
+    unchanged: number;
+    deleted: number;
+  };
+  rows: DeviceAliasImportRow[];
+  skipped_empty: number;
+  errors: { line: number; reason: string }[];
+}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { api, json } from '../api';
 import { alertCount, asArray } from '../format';
-import type { Overview, Profile, Settings, Status, SwitchState, Timeline } from '../types';
+import type { Overview, Profile, ReplaySession, Settings, Status } from '../types';
 import { ImportReplay } from './ImportReplay';
 interface HeaderProps {
   online: boolean;
@@ -18,22 +18,14 @@ interface HeaderProps {
   settings?: Settings;
   part: string;
   setPart: (value: string) => void;
-  replay: {
-    id: string;
-    timeline: Timeline;
-    states: SwitchState[];
-  } | null;
+  replay: ReplaySession | null;
   overview: Overview;
   marker: () => void;
   run: (action: () => Promise<void>) => void;
   refresh: () => Promise<void>;
   setDialog: (value: string) => void;
   setPage: (value: string) => void;
-  setReplay: React.Dispatch<React.SetStateAction<{
-    id: string;
-    timeline: Timeline;
-    states: SwitchState[];
-  } | null>>;
+  setReplay: React.Dispatch<React.SetStateAction<ReplaySession | null>>;
 }
 export function AppHeader({
   online,
