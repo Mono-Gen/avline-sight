@@ -116,6 +116,11 @@ func (s *Server) Handler() http.Handler {
 	h("GET /api/switches/{id}/diagnostic-dump", s.diagDump)
 	h("GET /api/switches/{id}/access-info", s.accessInfo)
 	h("POST /api/device-aliases", s.saveAlias)
+	h("POST /api/device-aliases/import", s.importAliases)
+	h("GET /api/devices", s.devices)
+	h("GET /api/devices/export.csv", s.devicesCSV)
+	h("GET /api/replay/{sid}/devices", s.replayDevices)
+	h("GET /api/replay/{sid}/devices/export.csv", s.replayDevicesCSV)
 
 	h("GET /api/models", s.panelModels)
 	h("GET /api/overview", s.overview)

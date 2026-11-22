@@ -131,3 +131,53 @@ func TestMigrateSwitchesAutoinc(t *testing.T) {
 		t.Fatalf("削除済みIDが再利用された: %d", n.ID)
 	}
 }
+
+// CSV一括登録: プレビューは書き込まない／置換はMAC別名だけを消す／1トランザクションで反映
+func TestApplyMACAliases(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "a.db"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	pid, _ := s.EnsureDefaultProfile()
+	s.SaveAlias(pid, Alias{MatchType: "mac", MatchKey: "AA:00:00:00:00:01", Label: "旧名"})
+	s.SaveAlias(pid, Alias{MatchType: "mac", MatchKey: "AA:00:00:00:00:02", Label: "同じ"})
+	s.SaveAlias(pid, Alias{MatchType: "mac", MatchKey: "AA:00:00:00:00:09", Label: "ファイルにない"})
+	s.SaveAlias(pid, Alias{MatchType: "port", MatchKey: "1:5", Label: "ポート名"})
+	in := []Alias{
+		{MatchType: "mac", MatchKey: "AA:00:00:00:00:01", Label: "新名"},
+		{MatchType: "mac", MatchKey: "AA:00:00:00:00:02", Label: "同じ"},
+		{MatchType: "mac", MatchKey: "AA:00:00:00:00:03", Label: "追加"},
+	}
+	res, err := s.ApplyMACAliases(pid, in, true, false)
+	if err != nil || res != (AliasImportResult{Added: 1, Updated: 1, Unchanged: 1, Deleted: 1}) {
+		t.Fatalf("プレビュー集計: %+v %v", res, err)
+	}
+	if al, _ := s.Aliases(pid); len(al) != 4 {
+		t.Fatalf("プレビューで書き込まれた: %d件", len(al))
+	}
+	if _, err := s.ApplyMACAliases(pid, in, true, true); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	al, _ := s.Aliases(pid)
+	for _, a := range al {
+		got[a.MatchType+"|"+a.MatchKey] = a.Label
+	}
+	want := map[string]string{"mac|AA:00:00:00:00:01": "新名", "mac|AA:00:00:00:00:02": "同じ", "mac|AA:00:00:00:00:03": "追加", "port|1:5": "ポート名"}
+	if len(got) != len(want) {
+		t.Fatalf("置換後: %v", got)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("置換後 %s = %q（期待 %q）", k, got[k], v)
+		}
+	}
+	// 追加/上書きモードは既存を消さない
+	if res, _ := s.ApplyMACAliases(pid, in[:1], false, true); res.Deleted != 0 {
+		t.Fatalf("mergeで削除: %+v", res)
+	}
+	if al, _ := s.Aliases(pid); len(al) != 4 {
+		t.Fatalf("merge後: %d件", len(al))
+	}
+}

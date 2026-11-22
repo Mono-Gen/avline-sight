@@ -36,6 +36,12 @@
 | GET | `/api/switches/:id/diagnostic-dump` | JSONダウンロード |
 | GET | `/api/switches/:id/access-info` | `{web_url, https, ssh:{enabled,port}, telnet:{port}}` |
 | POST | `/api/device-aliases` | `{match_type:"mac"|"port", match_key, label, note}` |
+| POST | `/api/device-aliases/import` | `{csv, mode:"merge"|"replace", commit:bool}` → `{committed, result:{added,updated,unchanged,deleted}, rows:[{line,mac,label,note,action:"add"|"update"|"same",old_label?}], skipped_empty, errors:[{line,reason}]}`。commit=false は試行のみ（書込なし）。エラー行があると commit は 422。上限2MB/5000行 |
+| GET | `/api/devices?scope=all|unnamed&group=&vlans=10,20&q=` | 接続機器一覧 `[InventoryRow]`（MAC単位で所在1か所。スイッチ間リンクのみで見える機器は `via_uplink:true`。登録済みで見えない機器は `seen:false`） |
+| GET | `/api/devices/export.csv?…` | 同条件のCSV（BOM付きUTF-8）。列: MAC,名称,メモ,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元。読込は先頭3列のみ使用 |
+| GET | `/api/replay/:sid/devices?ts=RFC3339&…` / `/api/replay/:sid/devices/export.csv?ts=…` | 再生時刻のスナップショット基準の一覧/CSV |
+
+`InventoryRow`: `{mac,label,note,ip,vendor,lldp_name,switch_id?,switch_name,group_tag,port,if_index?,vlan,poe_w?,speed_mbps,seen,last_seen?,source,via_uplink}`
 
 ## 監視ビュー
 - `GET /api/overview` → `{switches:[SwitchSummary], alerts:{critical,warning,info}, recent_events:[Event]}`

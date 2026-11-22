@@ -392,6 +392,99 @@ func (s *Store) SaveAlias(profileID int64, a Alias) error {
 	return err
 }
 
+// AliasImportResult はCSV一括登録の集計。
+type AliasImportResult struct {
+	Added     int `json:"added"`
+	Updated   int `json:"updated"`
+	Unchanged int `json:"unchanged"`
+	Deleted   int `json:"deleted"` // 置換モードで消えるMAC別名
+}
+
+// ApplyMACAliases はMAC別名を一括で反映する。commit=false なら集計だけ返し何も書かない（プレビュー）。
+// replace=true ならファイルにないMAC別名を削除する（ポート別名は対象外）。全件を1トランザクションで行い、
+// 途中失敗で半端な状態を残さない。
+func (s *Store) ApplyMACAliases(profileID int64, rows []Alias, replace, commit bool) (AliasImportResult, error) {
+	var res AliasImportResult
+	cur, err := s.Aliases(profileID)
+	if err != nil {
+		return res, err
+	}
+	existing := map[string]Alias{}
+	for _, a := range cur {
+		if a.MatchType == "mac" {
+			existing[a.MatchKey] = a
+		}
+	}
+	inFile := map[string]bool{}
+	for _, r := range rows {
+		inFile[r.MatchKey] = true
+		old, ok := existing[r.MatchKey]
+		switch {
+		case !ok:
+			res.Added++
+		case old.Label == r.Label && old.Note == r.Note:
+			res.Unchanged++
+		default:
+			res.Updated++
+		}
+	}
+	var del []string
+	if replace {
+		for k := range existing {
+			if !inFile[k] {
+				del = append(del, k)
+			}
+		}
+	}
+	res.Deleted = len(del)
+	if !commit {
+		return res, nil
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return res, err
+	}
+	defer tx.Rollback()
+	for _, k := range del {
+		if _, err := tx.Exec(`DELETE FROM device_aliases WHERE profile_id=? AND match_type='mac' AND match_key=?`, profileID, k); err != nil {
+			return res, err
+		}
+	}
+	for _, r := range rows {
+		if _, err := tx.Exec(`INSERT INTO device_aliases(profile_id,match_type,match_key,label,note) VALUES(?,'mac',?,?,?)
+			ON CONFLICT(profile_id,match_type,match_key) DO UPDATE SET label=excluded.label, note=excluded.note`, profileID, r.MatchKey, r.Label, r.Note); err != nil {
+			return res, err
+		}
+	}
+	return res, tx.Commit()
+}
+
+// LastSeenByMAC はMACごとの最終観測時刻（接続履歴から）。見えていない登録済み機器の表示用。
+func (s *Store) LastSeenByMAC() (map[string]time.Time, error) {
+	rows, err := s.DB.Query(`SELECT mac, MAX(last_seen_ts) FROM device_bindings GROUP BY mac`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]time.Time{}
+	for rows.Next() {
+		var mac string
+		var ts int64
+		if err := rows.Scan(&mac, &ts); err != nil {
+			return nil, err
+		}
+		out[strings.ToUpper(mac)] = fromMS(ts)
+	}
+	return out, rows.Err()
+}
+
+// ProfileOfSwitch はスイッチの属するプロファイル（再生データで別名を引くため）。
+func (s *Store) ProfileOfSwitch(switchID int64) (int64, error) {
+	var id int64
+	err := s.DB.QueryRow(`SELECT profile_id FROM switches WHERE id=?`, switchID).Scan(&id)
+	return id, err
+}
+
 // ---- 時系列 ----
 
 // InsertPortMetrics はFastティック1回分を1トランザクションで書き込む。
