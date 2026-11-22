@@ -108,7 +108,7 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 				e.raise(seen, key(model.SevWarning, "MTU_MISMATCH", p.IfIndex), ev(model.SevWarning, "MTU_MISMATCH", fmt.Sprintf("%s FrameTooLongs +%d", nm, p.TooLongDelta), hintMTU, p.IfIndex,
 					counterDetails(p, nil, "dot3StatsFrameTooLongs")))
 			}
-			if p.LateColDelta > 0 {
+			if p.LateColDelta > 0 || p.Duplex == "halfDuplex" {
 				e.raise(seen, key(model.SevWarning, "DUPLEX", p.IfIndex), ev(model.SevWarning, "DUPLEX", fmt.Sprintf("%s Half-Duplex/Late Collision", nm), hintDuplex, p.IfIndex,
 					counterDetails(p, nil, "dot3StatsLateCollisions")))
 			}

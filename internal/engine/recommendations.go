@@ -6,7 +6,7 @@ func recommendationOnly(code string) bool {
 	switch code {
 	case "PAUSE_FRAMES", "EEE_ON_AV_PORT", "FLOWCTRL_ON_AV_PORT", "NDI4_NEEDS_FLOWCTRL", "DSCP_TRUST",
 		"STORM_CTRL_UPLINK", "QSYS_MTU", "UPLINK_MTU_MISMATCH", "FW_MISMATCH", "STP_MSTP", "STP_PRIORITY_DEFAULT",
-		"STP_EDGE_ROOT", "QUERIER_ON_EDGE", "SNOOP_MISMATCH", "IGMP_VERSION_MIX", "DAISY_CHAIN", "VLAN_CROWDED":
+		"STP_EDGE_ROOT", "QUERIER_ON_EDGE", "DAISY_CHAIN", "VLAN_CROWDED":
 		return true
 	}
 	return false
@@ -52,7 +52,12 @@ func PortRecommendations(states []*model.SwitchState) []PortRecommendation {
 			if av && p.EEE == "enable" {
 				add(s, p, "EEE_ON_AV_PORT", p.EEE, "disable", "", "")
 			}
-			switch p.Pause {
+			// dot3PauseOperMode is an operational value: only meaningful while the link is up.
+			pause := p.Pause
+			if p.Oper != "up" {
+				pause = ""
+			}
+			switch pause {
 			case "disabled":
 				if p.AVRole == "ndi4" {
 					add(s, p, "NDI4_NEEDS_FLOWCTRL", p.Pause, "enable", proAVGuide, "")
@@ -73,9 +78,6 @@ func PortRecommendations(states []*model.SwitchState) []PortRecommendation {
 			}
 			if p.AVRole == "qsys" && p.MaxFrame > 1522 {
 				add(s, p, "QSYS_MTU", itoa(p.MaxFrame), "1522", "", "")
-			}
-			if p.Duplex == "halfDuplex" {
-				add(s, p, "DUPLEX", p.Duplex, "fullDuplex", "", "")
 			}
 		}
 		for _, n := range s.Neighbors {

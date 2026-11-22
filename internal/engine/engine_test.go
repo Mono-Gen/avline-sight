@@ -135,12 +135,13 @@ func TestRecommendationsDoNotRaiseAlerts(t *testing.T) {
 	}
 	e.evaluateCross(DefaultSettings())
 	got := codes(t, st)
-	for _, code := range []string{"PHY_ERRORS", "MTU_MISMATCH", "SPEED_BELOW_EXPECTED", "POE_PORT_FAULT"} {
+	// DUPLEX (observed half duplex), IGMP_VERSION_MIX and SNOOP_MISMATCH are measured faults, so they still alert.
+	for _, code := range []string{"PHY_ERRORS", "MTU_MISMATCH", "SPEED_BELOW_EXPECTED", "POE_PORT_FAULT", "DUPLEX", "IGMP_VERSION_MIX", "SNOOP_MISMATCH"} {
 		if got[code] != 1 {
 			t.Errorf("%s: %v", code, got)
 		}
 	}
-	if len(got) != 4 {
+	if len(got) != 7 {
 		t.Errorf("unexpected events: %v", got)
 	}
 	var phy *Alert
@@ -154,7 +155,7 @@ func TestRecommendationsDoNotRaiseAlerts(t *testing.T) {
 	}
 	want := map[string][2]string{
 		"EEE_ON_AV_PORT": {"enable", "disable"}, "FLOWCTRL_ON_AV_PORT": {"enabledXmit", "disable"},
-		"DSCP_TRUST": {"trustDot1p", "trustIpDscp"}, "DUPLEX": {"halfDuplex", "fullDuplex"},
+		"DSCP_TRUST": {"trustDot1p", "trustIpDscp"},
 		"NDI4_NEEDS_FLOWCTRL": {"disabled", "enable"}, "QSYS_MTU": {"9216", "1522"},
 		"BCAST_STORM_CTRL_UPLINK": {"enable", "disable"}, "MCAST_STORM_CTRL_UPLINK": {"enable", "disable"},
 		"UPLINK_MTU_MISMATCH": {"9216", "1522"},
@@ -208,5 +209,15 @@ func TestPortRecommendationsSkipMissingAndUnreachableData(t *testing.T) {
 	}
 	if rows := PortRecommendations(states); len(rows) != 0 {
 		t.Fatalf("recommendations from unavailable data: %+v", rows)
+	}
+}
+
+// リンクダウン中のポートは dot3PauseOperMode が disabled になるため、Flow Control の推奨判定に使わない
+func TestPortRecommendationsIgnorePauseOnDownPort(t *testing.T) {
+	states := []*model.SwitchState{{ID: 1, Reachable: true, Ports: []*model.Port{{Name: "1/0/3", Oper: "down", AVRole: "ndi4", Pause: "disabled"}}}}
+	for _, row := range PortRecommendations(states) {
+		if row.Code == "NDI4_NEEDS_FLOWCTRL" {
+			t.Fatalf("pause judged on a down port: %+v", row)
+		}
 	}
 }

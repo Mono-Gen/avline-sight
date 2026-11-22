@@ -858,7 +858,8 @@ func (w *worker) collectConfig(pm map[int]*model.Port) {
 	tc := sx.U64(res[mib.StpMstTopoChangeCount+".0"])
 	if d, ok := w.cnt.delta("tcn", tc, true); ok && d >= 5 {
 		w.emit(model.Event{Category: "ANOMALY", Severity: model.SevWarning, Code: "STP_TCN_BURST", Title: fmt.Sprintf("STPトポロジー変更が急増（+%d）", d),
-			Hint: "物理ループ・リンクのフラップの可能性。Show STPで破線リンクを確認し、対象ポートを切り分けてください"})
+			Hint: "物理ループ・リンクのフラップの可能性。Show STPで破線リンクを確認し、対象ポートを切り分けてください",
+			Detail: map[string]any{"raw_counters": map[string]string{"agentDot1sMstTopologyChangeCount.0": strconv.FormatUint(tc, 10)}}})
 	}
 	cf.TopoChanges = tc
 	cf.Bonjour = sx.Int(res[mib.BonjourAdminMode]) == 1
