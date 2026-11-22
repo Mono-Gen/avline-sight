@@ -25,6 +25,9 @@ func TestLinkFlapOneShotDedupeAndSuppression(t *testing.T) {
 		if item.Active || item.Acked || item.State != "latched" || item.ClearedAt == nil {
 			t.Fatalf("即時ラッチ: %+v", item)
 		}
+		if item.IfIndex == 2 && item.Detail["count"] != 1 {
+			t.Fatalf("アラートの初回回数: %+v", item)
+		}
 	}
 	list, err := st.Events(store.EventFilter{Limit: 20})
 	if err != nil || len(list) != 2 {

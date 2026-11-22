@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const cytoscape = require('cytoscape');
 const { countId, countPosition, topologyStyles, updateTopology } = require('../src/topologyGraph.ts');
-const { automaticCore, buildTopology, topologyHighlights, topologyNodeDetails, topologyQueriers } = require('../src/topologyModel.ts');
+const { automaticCore, buildTopology, linkAppearance, topologyHighlights, topologyNodeDetails, topologyQueriers } = require('../src/topologyModel.ts');
 const { t } = require('../src/i18n/index.ts');
 
 const edge = (id, source, target, local_port, remote_port, fields = {}) => ({
@@ -83,7 +83,11 @@ test('Automatic path origin keeps the last known core through ambiguous election
 test('Topology inter-switch width and color reflect speed and utilization, including idle and unknown', context => {
   const graph = createGraph(context);
   const unknown = edge('unknown', 'a', 'd', '8', '8', { speed_mbps: 0, util_pct: 0 });
-  updateTopology(graph, buildTopology({ ...topology, edges: [...topology.edges, unknown] }, [], inventory));
+  const ports = [
+    { switch_id: 1, port: { name: '1', oper: 'up', speed_mbps: 10000, util_rx: 95, util_tx: 5 } },
+    { switch_id: 2, port: { name: '2', oper: 'up', speed_mbps: 100, util_rx: 0, util_tx: 0 } },
+  ];
+  updateTopology(graph, buildTopology({ ...topology, edges: [...topology.edges, unknown] }, ports, inventory));
   const fast = graph.getElementById(main.id);
   const idle = graph.getElementById(branch.id);
   const unavailable = graph.getElementById(unknown.id);
@@ -145,6 +149,68 @@ test('Topology remembers a device attachment across uplink-only sightings and mi
   assert.equal(restored.parent.get('device:CC'), 'a');
   assert.equal(restored.deviceRows.get('device:CC').port, '8');
   assert.equal(buildTopology(topology, [], [uplink], failed.edges, failed.deviceRows).parent.has('device:CC'), false);
+});
+
+test('On first load, topology recovers failed switch devices from access ports only', () => {
+  const failedTopology = { ...topology, nodes: topology.nodes.map(node =>
+    node.id === 'c' ? { ...node, reachable: false } : node) };
+  const port = (name, macs, fields = {}, switch_id = 3) => ({
+    switch_id,
+    port: {
+      name, if_index: Number(name), pvid: 20, speed_mbps: 1000,
+      devices: macs.map(mac => ({ mac, source: 'fdb', vlan: 0 })),
+      ...fields,
+    },
+  });
+  const ports = [
+    port('4', ['CC', 'CA', 'AA', '']),
+    port('1', ['INTERSWITCH']),
+    port('3', ['BLOCKING']),
+    port('5', ['UPLINK'], { av_role: 'uplink' }),
+    port('6', ['TRUNK'], { av_role: 'trunk' }),
+    port('7', ['LAG'], { type: 'lag' }),
+    port('4', ['REACHABLE'], {}, 2),
+    port('8', [], { devices: null }),
+  ];
+  const uplink = { ...inventory[1], switch_id: 1, switch_name: 'A', port: '1', if_index: 1, via_uplink: true };
+  const model = buildTopology(failedTopology, ports, [uplink, inventory[0]]);
+  assert.deepEqual([...model.parent], [['device:AA', 'a'], ['device:CC', 'c'], ['device:CA', 'c']]);
+  const recovered = model.deviceRows.get('device:CC');
+  assert.equal(recovered.label, 'Stagebox');
+  assert.equal(recovered.switch_id, 3);
+  assert.equal(recovered.switch_name, 'C');
+  assert.equal(recovered.port, '4');
+  assert.equal(recovered.if_index, 4);
+  assert.equal(recovered.vlan, 20);
+  assert.equal(recovered.seen, false);
+  assert.equal(recovered.via_uplink, false);
+  assert.ok(topologyHighlights(model, 'a').impacted.has('device:CC'));
+});
+
+test('Topology shows utilization only from operationally up ports on links that are up', context => {
+  const graph = createGraph(context);
+  const twoEnds = { ...topology, edges: [main] };
+  const port = (switch_id, oper, util_rx) => ({
+    switch_id, port: { name: '1', oper, speed_mbps: 1000, util_rx, util_tx: 0 },
+  });
+  const up = port(2, 'up', 23);
+  const testing = port(1, 'testing', 99);
+  const down = port(1, 'down', 99);
+  for (const [ports, util, isDown] of [
+    [[testing, up], 23, false],
+    [[testing], undefined, false],
+    [[], undefined, false],
+    [[down, up], undefined, true],
+  ]) {
+    const model = buildTopology(twoEnds, ports, []);
+    assert.equal(model.linkMetrics.get(main.id).util, util);
+    updateTopology(graph, model);
+    assert.equal(graph.getElementById(main.id).data('down'), isDown);
+    const label = graph.getElementById(main.id).data('edgeLabel');
+    if (util === undefined) assert.doesNotMatch(label, /%/);
+    else assert.match(label, /23[.,]0%/);
+  }
+  assert.equal(linkAppearance({ speed: 1000, util: 23 }, true).util, undefined);
 });
 
 test('Topology reads the reachable endpoint, refreshes retained link metrics, and drops stale samples', context => {

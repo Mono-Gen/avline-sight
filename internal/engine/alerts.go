@@ -23,6 +23,7 @@ type Alert struct {
 	Severity        string            `json:"severity"`
 	Code            string            `json:"code"`
 	Title           string            `json:"title"`
+	Detail          map[string]any    `json:"detail,omitempty"`
 	TS              time.Time         `json:"ts"`
 	Active          bool              `json:"active"`
 	Acked           bool              `json:"acked"`
@@ -85,6 +86,15 @@ func (e *Engine) recordTransientEvent(ev model.Event) {
 func alertFromEvent(ev model.Event) *Alert {
 	a := &Alert{EventID: ev.ID, SwitchID: ev.SwitchID, SwitchName: ev.SwitchName, IfIndex: ev.IfIndex,
 		Severity: ev.Severity, Code: ev.Code, Title: ev.Title, TS: ev.TS, Acked: ev.Acked, ClearedAt: ev.ClearedAt}
+	for key, value := range ev.Detail {
+		if strings.HasPrefix(key, "_") {
+			continue
+		}
+		if a.Detail == nil {
+			a.Detail = make(map[string]any)
+		}
+		a.Detail[key] = value
+	}
 	a.MAC, _ = ev.Detail["mac"].(string)
 	a.MAC = strings.ToUpper(a.MAC)
 	a.DeviceName, _ = ev.Detail["name"].(string)

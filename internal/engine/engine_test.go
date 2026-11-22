@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"encoding/json"
+	"maps"
 	"path/filepath"
 	"testing"
 	"time"
@@ -68,10 +70,49 @@ func TestClockSkewWarningAtSlowTierAndRecovery(t *testing.T) {
 		events[0].Detail["offset_seconds"] != offset || events[0].ClearedAt != nil {
 		t.Fatalf("expected one active warning with the measured offset: %v", events)
 	}
+	alerts := e.Alerts()
+	if len(alerts) != 1 || alerts[0].Code != "CLOCK_SKEW" || alerts[0].Detail["offset_seconds"] != offset {
+		t.Fatalf("expected the measured offset in the live alert: %+v", alerts)
+	}
 	poll("slow", &minus60)
 	events = skew()
 	if len(events) != 1 || events[0].ClearedAt == nil {
 		t.Fatalf("warning did not clear at the threshold: %v", events)
+	}
+}
+
+func TestAlertFromEventExportsOnlyPublicDetail(t *testing.T) {
+	ev := model.Event{Detail: map[string]any{
+		"offset_seconds": -61.0,
+		"vlan":           0.0,
+		"_suppressed":    true,
+		"_one_shot":      true,
+		"_profile_id":    1,
+	}}
+	alert := alertFromEvent(ev)
+	ev.Detail["offset_seconds"] = 50.0
+	if !alert.eventSuppressed {
+		t.Fatal("internal suppression flag must still be used by the engine")
+	}
+	readDetail := func(alert *Alert) map[string]any {
+		t.Helper()
+		data, err := json.Marshal(alert)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(data, &payload); err != nil {
+			t.Fatal(err)
+		}
+		detail, _ := payload["detail"].(map[string]any)
+		return detail
+	}
+	want := map[string]any{"offset_seconds": -61.0, "vlan": 0.0}
+	if got := readDetail(alert); !maps.Equal(got, want) {
+		t.Fatalf("alert JSON detail = %v, want %v", got, want)
+	}
+	if got := readDetail(alertFromEvent(model.Event{Detail: map[string]any{"_suppressed": true}})); got != nil {
+		t.Fatalf("internal-only detail must be omitted: %v", got)
 	}
 }
 

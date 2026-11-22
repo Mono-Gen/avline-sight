@@ -124,9 +124,8 @@ func (e *Engine) recordLinkFlap(ev model.Event) {
 		return
 	}
 	if !suppressed {
-		a.EventID, a.ClearedAt = ev.ID, &ev.TS
 		// 60秒を超える独立したフラップでは、前の未確認エントリに新しい発生を上書きしない。
-		e.active[linkFlapKey(ev)] = a
+		e.active[linkFlapKey(ev)] = alertFromEvent(ev)
 	}
 	e.snapDirty = true
 	e.mu.Unlock()

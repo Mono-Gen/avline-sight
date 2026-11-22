@@ -223,12 +223,12 @@ export default function App() {
   };
   const operations = useOperations({ online, replay: !!replay, profileId, setStatus, run });
   const phase = operations.phase || status?.phase;
+  const canOpenShowChecklist = phase === 'setup' || phase === 'rehearsal';
   useEffect(() => {
-    if (dialog === 'show-gate' && phase !== 'rehearsal' ||
-        dialog === 'show-checklist' && phase !== 'setup' && phase !== 'rehearsal') {
+    if ((dialog === 'show-gate' || dialog === 'show-checklist') && !canOpenShowChecklist) {
       setDialog('');
     }
-  }, [dialog, phase]);
+  }, [dialog, canOpenShowChecklist]);
   const groupNames = [...new Set(replay ? asArray(replay.states).map(sw => sw.group_tag) :
     [...asArray(operations.groups).map(item => item.name), ...asArray(overview.switches).map(sw => sw.group_tag)])];
   const hasGroup = group !== undefined && groupNames.includes(group);
@@ -375,8 +375,7 @@ export default function App() {
 
     {!wall && !locked && dialog === 'export' && <ExportDialog close={() => setDialog('')} busy={busy} run={run} />}
 
-    {!wall && !replay && (phase === 'setup' || phase === 'rehearsal') &&
-      (dialog === 'show-checklist' || dialog === 'show-gate' && phase === 'rehearsal') &&
+    {!wall && !replay && canOpenShowChecklist && (dialog === 'show-checklist' || dialog === 'show-gate') &&
       <ShowChecklist key={profileId} gate={dialog === 'show-gate'} busy={busy} locked={locked} actionError={error} close={() => setDialog('')}
         onTarget={openChecklistTarget} onStart={confirmChecklist => run(async () => {
           await submitPhase('show', operations.setPhase, confirmChecklist);

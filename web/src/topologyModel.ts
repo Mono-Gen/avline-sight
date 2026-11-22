@@ -36,14 +36,20 @@ export function buildTopology(
     (down(edge) || endpoints(edge).some(({ node }) => node?.reachable === false)));
   const edges = [...current, ...retained].filter(edge => edge.source !== edge.target &&
     byId.has(edge.source) && byId.has(edge.target) && (!edge.blocking || down(edge)));
+  const failedLinks = new Set(edges.filter(down).map(edge => edge.id));
   const linkMetrics = new Map(edges.map(edge => {
-    const [source, target] = endpoints(edge);
-    const sourcePort = livePort(source.node, source.name);
-    const targetPort = livePort(target.node, target.name);
-    const live = [sourcePort, targetPort].find(port => port && port.speed_mbps > 0);
-    if (live) return [edge.id, { speed: live.speed_mbps, util: Math.max(live.util_rx, live.util_tx) }];
+    const ends = endpoints(edge);
+    const [source] = ends;
+    const samples = ends.map(({ node, name }) => livePort(node, name));
+    const up = samples.find(port => port?.oper === 'up' && port.speed_mbps > 0);
+    const speedPort = up ?? samples.find(port => port && port.speed_mbps > 0);
+    if (speedPort) return [edge.id, {
+      speed: speedPort.speed_mbps,
+      util: up && !failedLinks.has(edge.id) ? Math.max(up.util_rx, up.util_tx) : undefined,
+    }];
+    const [sourcePort] = samples;
     const currentSource = !sourcePort && source.node?.switch_id && source.node.reachable !== false && currentIds.has(edge.id);
-    return [edge.id, currentSource ? { speed: edge.speed_mbps, util: edge.util_pct } : {}];
+    return [edge.id, currentSource ? { speed: edge.speed_mbps } : {}];
   }));
   const failedNodes = new Set(nodes.filter(node => node.reachable === false).map(node => node.id));
   const devices = new Map<string, InventoryRow[]>();
@@ -68,7 +74,42 @@ export function buildTopology(
     const node = switches.get(row.switch_id);
     if (node && failedNodes.has(node.id)) attach(id, row, node.id);
   }
-  const failedLinks = new Set(edges.filter(down).map(edge => edge.id));
+  if (failedNodes.size > 0) {
+    const uplinks = new Set([...current, ...retained].flatMap(edge =>
+      endpoints(edge).map(({ node, name }) => portKey(node?.switch_id, name))));
+    const inventoryByMac = new Map(asArray(inventory).map(row => [row.mac, row]));
+    for (const { switch_id, port } of asArray(ports)) {
+      const node = switches.get(switch_id);
+      if (!node || !failedNodes.has(node.id) || !port.name || uplinks.has(portKey(switch_id, port.name)) ||
+        port.av_role === 'uplink' || port.av_role === 'trunk' || port.type === 'lag') continue;
+      const portDevices = asArray(port.devices);
+      for (const device of portDevices) {
+        const id = `device:${device.mac}`;
+        if (!device.mac || parent.has(id)) continue;
+        const known = inventoryByMac.get(device.mac);
+        attach(id, {
+          ...known,
+          mac: device.mac,
+          label: known?.label || device.label || '',
+          note: known?.note ?? '',
+          ip: known?.ip || device.ip || '',
+          vendor: known?.vendor || device.vendor || '',
+          lldp_name: known?.lldp_name || device.lldp_name || '',
+          switch_id,
+          switch_name: node.label,
+          group_tag: known?.switch_id === switch_id ? known.group_tag : '',
+          port: port.name,
+          if_index: port.if_index,
+          vlan: device.vlan || port.pvid,
+          poe_w: portDevices.length === 1 ? port.poe?.power_w : undefined,
+          speed_mbps: port.speed_mbps,
+          seen: false,
+          source: device.source,
+          via_uplink: false,
+        }, node.id);
+      }
+    }
+  }
   const defaultCore = nodes.filter(node => node.kind === 'switch' && node.is_root);
   return { nodes, byId, edges, linkMetrics, devices, deviceRows, parent, failedNodes, failedLinks,
     defaultCore: defaultCore.length === 1 ? defaultCore[0].id : undefined };
@@ -210,7 +251,7 @@ export function topologyQueriers(multicast: Multicast | undefined, vlan: number)
 
 export function linkAppearance(metrics: { speed?: number; util?: number } | undefined, down: boolean) {
   const speed = metrics?.speed !== undefined && Number.isFinite(metrics.speed) && metrics.speed > 0 ? metrics.speed : undefined;
-  const util = speed !== undefined && metrics?.util !== undefined && Number.isFinite(metrics.util) && metrics.util >= 0
+  const util = !down && speed !== undefined && metrics?.util !== undefined && Number.isFinite(metrics.util) && metrics.util >= 0
     ? metrics.util : undefined;
   const width = speed === undefined ? 2 : speed < 1000 ? 3 : speed < 10000 ? 5 : 7;
   const color = down ? '#f87171' : util === undefined ? '#94a3b8' : util >= 90 ? '#fb923c' : util >= 70 ? '#fde047' : '#67e8f9';

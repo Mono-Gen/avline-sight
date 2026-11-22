@@ -110,6 +110,19 @@ test('日英のプレースホルダーと技術詳細は保存済みイベン�
   }
 });
 
+test('AlertEntry uses the API detail fields in the English clock skew title', context => {
+  context.after(() => setLang('ja'));
+  setLang('en');
+  const alert = fault(1, {
+    code: 'CLOCK_SKEW',
+    title: 'Stored title',
+    detail: { offset_seconds: -61 },
+  });
+  assert.match(render(AlertEntry, { alert, busy: false }), /Clock offset from monitoring PC: -61 s/);
+  assert.match(render(AlertEntry, { alert: { ...alert, detail: undefined }, busy: false }),
+    /Clock offset from monitoring PC detected/);
+});
+
 const groupedSwitches = [
   { id: 1, name: 'West', group_tag: 'west', reachable: true },
   { id: 2, name: 'East', group_tag: 'east', reachable: true },
@@ -1244,6 +1257,61 @@ test('Pre-show checklist is offered in setup and rehearsal, and hidden during sh
   for (const extra of [{ phase: 'show' }, { phase: 'setup', replay: true }, { phase: undefined }]) {
     assert.doesNotMatch(render(AppHeader, { ...props, ...extra }), /data-action="pre-show-checklist"/);
   }
+});
+
+test('Selecting show in setup opens the App confirmation gate', () => {
+  const { ShowChecklist } = require('../src/components/ShowChecklist.tsx');
+  const state = [];
+  let cursor;
+  let phase = 'setup';
+  let updateStatus;
+  let gateEffect;
+  const mockReact = {
+    useState: initial => {
+      const index = cursor++;
+      if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial;
+      return [state[index], value => { state[index] = value; }];
+    },
+    useCallback: callback => callback,
+    useEffect: (effect, deps) => {
+      if (deps?.[0] === 'show-gate') gateEffect = effect;
+    },
+    useRef: current => ({ current }),
+  };
+  const App = sourceWith('../src/App.tsx', {
+    react: mockReact,
+    './components/TerminalDrawer': { TerminalDrawer: () => null },
+    './i18n': { t, useLang: () => ['en'] },
+    './pcTime': { usePcTime: () => 0 },
+    './useDesktopNotifications': { useDesktopNotifications: noop },
+    './useLiveFeed': { useLiveFeed: () => ({}) },
+    './useOperations': { useOperations: ({ setStatus }) => {
+      updateStatus = setStatus;
+      return { phase, alerts: [], groups: [], setPhase: () => assert.fail('Show requires confirmation') };
+    } },
+  }).default;
+  const draw = () => { cursor = 0; return App(); };
+  const gate = tree => elements(tree, node => node.type === ShowChecklist)[0];
+  const header = sourceWith('../src/components/AppHeader.tsx', {
+    react: { useState: value => [value, noop] },
+  }).AppHeader;
+
+  draw();
+  updateStatus({ profile: { id: 1 }, locked: false });
+  const before = draw();
+  assert.equal(gate(before), undefined);
+  const [appHeader] = elements(before, node => node.type === AppHeader);
+  const [phaseControl] = elements(header(appHeader.props), node => node.type === PhaseControls);
+  const [selector] = elements(PhaseControls(phaseControl.props), node => node.props?.['data-action'] === 'phase');
+  selector.props.onChange({ target: { value: 'show' } });
+  assert.equal(gate(draw())?.props.gate, true);
+  gateEffect();
+  assert.equal(gate(draw())?.props.gate, true);
+  phase = 'show';
+  assert.equal(gate(draw()), undefined);
+  gateEffect();
+  phase = 'setup';
+  assert.equal(gate(draw()), undefined);
 });
 
 test('Setup and rehearsal to show open the gate and only explicit confirmation requests remainder logging', async () => {
