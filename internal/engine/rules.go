@@ -180,13 +180,9 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 		}
 	}
 	// 同じTierで今回成立しなかったキーのみ解除する（他Tierのアラートは維持）
-	e.mu.Lock()
-	for k := range e.active {
-		if strings.HasPrefix(k, sw+"|") && strings.HasSuffix(k, "|"+tier) && !seen[k] {
-			delete(e.active, k)
-		}
-	}
-	e.mu.Unlock()
+	e.clearKeys(func(k string, a *Alert) bool {
+		return strings.HasPrefix(k, sw+"|") && strings.HasSuffix(k, "|"+tier) && !seen[k]
+	})
 }
 
 func maxf(a, b float64) float64 {
@@ -538,9 +534,7 @@ func (e *Engine) evaluateCross(set Settings) {
 				Title: fmt.Sprintf("%dポートでマルチキャスト急増（フラッディングの疑い）", high), Hint: hintFlood})
 		} else {
 			seen[k] = false
-			e.mu.Lock()
-			delete(e.active, k)
-			e.mu.Unlock()
+			e.clearKeys(func(key string, a *Alert) bool { return key == k })
 		}
 	}
 	e.clearPrefix("0|", seen)

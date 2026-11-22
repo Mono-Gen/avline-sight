@@ -1,0 +1,270 @@
+package engine
+
+import (
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/Mono-Gen/avline-sight/internal/model"
+	"github.com/Mono-Gen/avline-sight/internal/store"
+)
+
+// Alert は発生条件と確認状態を保持する。イベント履歴そのものの編集は行わない。
+type Alert struct {
+	EventID      int64      `json:"event_id"`
+	SwitchID     int64      `json:"switch_id"`
+	SwitchName   string     `json:"switch_name"`
+	IfIndex      int        `json:"if_index"`
+	Severity     string     `json:"severity"`
+	Code         string     `json:"code"`
+	Title        string     `json:"title"`
+	TS           time.Time  `json:"ts"`
+	Active       bool       `json:"active"`
+	Acked        bool       `json:"acked"`
+	ClearedAt    *time.Time `json:"cleared_at"`
+	Port         string     `json:"port"`
+	MAC          string     `json:"mac,omitempty"`
+	DeviceName   string     `json:"device_name,omitempty"`
+	State        string     `json:"state"`
+	Suppressed   bool       `json:"suppressed"`
+	SuppressedBy string     `json:"suppressed_by"`
+}
+
+func eventKey(ev model.Event) string {
+	return fmt.Sprintf("%d|%s|%s|%d", ev.SwitchID, ev.Severity, ev.Code, ev.IfIndex)
+}
+
+func alertFromEvent(ev model.Event) *Alert {
+	a := &Alert{EventID: ev.ID, SwitchID: ev.SwitchID, SwitchName: ev.SwitchName, IfIndex: ev.IfIndex,
+		Severity: ev.Severity, Code: ev.Code, Title: ev.Title, TS: ev.TS, Acked: ev.Acked}
+	a.MAC, _ = ev.Detail["mac"].(string)
+	a.MAC = strings.ToUpper(a.MAC)
+	a.DeviceName, _ = ev.Detail["name"].(string)
+	a.Port, _ = ev.Detail["port"].(string)
+	return a
+}
+
+func sameAlert(a *Alert, ev model.Event) bool {
+	b := alertFromEvent(ev)
+	if a.Code != b.Code || a.Severity != b.Severity {
+		return false
+	}
+	if deviceAlertCode(a.Code) && a.MAC != "" {
+		return a.MAC == b.MAC
+	}
+	return a.SwitchID == b.SwitchID && a.IfIndex == b.IfIndex && a.MAC == b.MAC
+}
+
+func deviceAlertCode(code string) bool {
+	return code == "DEVICE_MISSING" || code == "PING_FAIL" || code == "IP_MISMATCH"
+}
+
+func (e *Engine) restoreAlerts() {
+	pid := e.ProfileID()
+	events, err := e.st.Events(store.EventFilter{RestoreProfileID: pid, From: time.Now().Add(-36 * time.Hour)})
+	if err != nil {
+		slog.Warn("未確認アラートの復元に失敗", "err", err)
+		return
+	}
+	last, err := e.st.LastSeenByMAC(pid, time.Now())
+	if err != nil {
+		slog.Warn("復元アラートの所在照合に失敗", "err", err)
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if pid != e.profileID {
+		return
+	}
+	seen := map[string]bool{}
+	for _, ev := range events {
+		a := alertFromEvent(ev)
+		// イベント履歴の発生場所を変更せず、移動後のグループで抑止を判定する。
+		if deviceAlertCode(a.Code) && a.MAC != "" {
+			if ls, ok := last[a.MAC]; ok {
+				if a.SwitchID != ls.SwitchID || a.IfIndex != ls.IfIndex {
+					a.Port = ""
+				}
+				a.SwitchID, a.IfIndex = ls.SwitchID, ls.IfIndex
+				if s := e.states[a.SwitchID]; s != nil {
+					a.SwitchName = s.Name
+				}
+			}
+		}
+		identity := fmt.Sprintf("%d|%s|%d|%s", a.SwitchID, a.Code, a.IfIndex, a.MAC)
+		if deviceAlertCode(a.Code) && a.MAC != "" {
+			identity = deviceKey(a.Code, a.MAC)
+		}
+		if seen[identity] {
+			continue
+		}
+		seen[identity] = true
+		if suppressed, _ := ev.Detail["_suppressed"].(bool); suppressed || e.suppressedByLocked(a, time.Now()) != "" {
+			continue
+		}
+		cleared := ev.TS
+		a.ClearedAt = &cleared
+		e.active[eventKey(ev)+"|"+a.MAC+"|restored"] = a
+	}
+}
+
+func (e *Engine) Alerts() []Alert {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	out := make([]Alert, 0, len(e.active))
+	for _, entry := range e.active {
+		a := *entry
+		a.State = "latched"
+		if a.Active {
+			a.State = "active"
+		}
+		a.SuppressedBy = e.suppressedByLocked(&a, time.Now())
+		a.Suppressed = a.SuppressedBy != ""
+		if s := e.states[a.SwitchID]; s != nil {
+			a.SwitchName = s.Name
+			for _, p := range s.Ports {
+				if p.IfIndex == a.IfIndex {
+					a.Port = p.Name
+					break
+				}
+			}
+		}
+		out = append(out, a)
+	}
+	rank := map[string]int{model.SevCritical: 0, model.SevWarning: 1, model.SevInfo: 2}
+	sort.Slice(out, func(i, j int) bool {
+		if rank[out[i].Severity] != rank[out[j].Severity] {
+			return rank[out[i].Severity] < rank[out[j].Severity]
+		}
+		if !out[i].TS.Equal(out[j].TS) {
+			return out[i].TS.After(out[j].TS)
+		}
+		return out[i].EventID > out[j].EventID
+	})
+	return out
+}
+
+func (e *Engine) broadcastAlerts() {
+	if e.hub != nil {
+		e.hub.Broadcast("alerts_changed", e.Alerts())
+	}
+}
+
+func (e *Engine) clearKeys(match func(string, *Alert) bool) {
+	changed := false
+	flags := map[string]bool{}
+	e.mu.Lock()
+	for k, a := range e.active {
+		if !match(k, a) {
+			continue
+		}
+		flags[strconv.FormatInt(a.EventID, 10)] = e.suppressedByLocked(a, time.Now()) != ""
+		if a.Acked || e.suppressedByLocked(a, time.Now()) != "" {
+			delete(e.active, k)
+			changed = true
+		} else if a.Active {
+			now := time.Now().UTC()
+			a.Active, a.ClearedAt = false, &now
+			changed = true
+		}
+	}
+	e.saveSuppressionLocked(flags)
+	e.mu.Unlock()
+	if changed {
+		e.broadcastAlerts()
+	}
+}
+
+// 抑止中に消えた条件を再起動で再ラッチしないよう、イベントにも抑止状態を残す。
+func (e *Engine) saveSuppressionLocked(flags map[string]bool) {
+	if len(flags) == 0 {
+		return
+	}
+	b, err := json.Marshal(flags)
+	if err == nil {
+		_, err = e.st.DB.Exec(`UPDATE events SET detail_json=json_set(detail_json,'$._suppressed',
+		json(CASE WHEN json_extract(?, '$."' || id || '"')=1 THEN 'true' ELSE 'false' END))
+		WHERE id IN (SELECT CAST(key AS INTEGER) FROM json_each(?))`, string(b), string(b))
+	}
+	if err != nil {
+		slog.Warn("アラート抑止状態の保存に失敗", "err", err)
+	}
+}
+
+func (e *Engine) clearMatching(match func(*Alert) bool) {
+	e.clearKeys(func(_ string, a *Alert) bool { return match(a) })
+}
+
+func (e *Engine) Ack(id int64, all bool) error {
+	e.mu.Lock()
+	var err error
+	if all {
+		err = e.st.AckAll()
+	} else {
+		err = e.st.Ack(id)
+	}
+	if err != nil {
+		e.mu.Unlock()
+		return err
+	}
+	for k, a := range e.active {
+		if all || a.EventID == id {
+			a.Acked = true
+			if !a.Active {
+				delete(e.active, k)
+			}
+		}
+	}
+	e.mu.Unlock()
+	e.broadcastAlerts()
+	return nil
+}
+
+func (e *Engine) reconcileStateAlerts(s *model.SwitchState) {
+	changed := false
+	e.mu.Lock()
+	for _, a := range e.active {
+		if a.SwitchID != s.ID || a.Active {
+			continue
+		}
+		on := a.Code == "SWITCH_UNREACHABLE" && !s.Reachable && !s.LastPoll.IsZero()
+		if a.Code == "LINK_DOWN" && s.Reachable {
+			for _, p := range s.Ports {
+				if p.IfIndex == a.IfIndex && p.Oper == "down" {
+					on = true
+				}
+			}
+		}
+		if on {
+			a.Active, a.ClearedAt = true, nil
+			changed = true
+		}
+	}
+	e.mu.Unlock()
+	if changed {
+		e.broadcastAlerts()
+	}
+	if !s.Reachable {
+		return
+	}
+	e.clearMatching(func(a *Alert) bool {
+		if a.SwitchID != s.ID {
+			return false
+		}
+		if a.Code == "SWITCH_UNREACHABLE" {
+			return true
+		}
+		if a.Code == "LINK_DOWN" {
+			for _, p := range s.Ports {
+				if p.IfIndex == a.IfIndex {
+					return p.Oper == "up"
+				}
+			}
+		}
+		return false
+	})
+}

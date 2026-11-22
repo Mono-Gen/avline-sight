@@ -153,7 +153,10 @@ func run() error {
 		Static: web.Dist(), WebAddr: addr, Ctx: ctx}
 	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	pm.Sync(ctx, sws)
-	go eng.Run(ctx, store.DefaultRetention)
+	engineDone := make(chan struct{})
+	go func() { defer close(engineDone); eng.Run(ctx, store.DefaultRetention) }()
+	// 定期Pingを含むエンジンの終了を待ってからDBを閉じる。
+	defer func() { stop(); <-engineDone }()
 	go srv.RunTicker(ctx)
 	go func() {
 		<-ctx.Done()

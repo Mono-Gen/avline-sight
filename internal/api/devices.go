@@ -131,7 +131,7 @@ func (s *Server) importAliases(w http.ResponseWriter, r *http.Request) {
 	rows, skipped, errs := engine.ParseAliasCSV(in.CSV)
 	list := make([]store.Alias, len(rows))
 	for i, x := range rows {
-		list[i] = store.Alias{MatchType: "mac", MatchKey: x.MAC, Label: x.Label, Note: x.Note}
+		list[i] = store.Alias{MatchType: "mac", MatchKey: x.MAC, Label: x.Label, Note: x.Note, PlannedIP: x.PlannedIP}
 	}
 	commit := in.Commit
 	if commit && len(errs) > 0 {
@@ -176,7 +176,7 @@ func (s *Server) importAliases(w http.ResponseWriter, r *http.Request) {
 		if old, ok := prev[x.MAC]; ok {
 			pr.OldLabel = old.Label
 			pr.Action = "update"
-			if old.Label == x.Label && old.Note == x.Note {
+			if old.Label == x.Label && old.Note == x.Note && old.PlannedIP == x.PlannedIP {
 				pr.Action = "same"
 			}
 		}

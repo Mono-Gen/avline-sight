@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS ports (
   PRIMARY KEY (switch_id, if_index));
 CREATE TABLE IF NOT EXISTS device_aliases (
   id INTEGER PRIMARY KEY, profile_id INTEGER NOT NULL, match_type TEXT NOT NULL, match_key TEXT NOT NULL,
-  label TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', UNIQUE(profile_id, match_type, match_key));
+  label TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', planned_ip TEXT NOT NULL DEFAULT '', UNIQUE(profile_id, match_type, match_key));
 CREATE TABLE IF NOT EXISTS port_metrics_raw (
   ts INTEGER NOT NULL, switch_id INTEGER NOT NULL, if_index INTEGER NOT NULL, oper_up INTEGER, speed_mbps INTEGER,
   rx_bps REAL, tx_bps REAL, rx_mc_pps REAL, tx_mc_pps REAL, rx_bc_pps REAL,
@@ -113,6 +113,17 @@ func Open(path string, readOnly bool) (*Store, error) {
 		if err := migrateBindingsProfile(db); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("DB移行に失敗: %w", err)
+		}
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('device_aliases') WHERE name='planned_ip'`).Scan(&n); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("予定IP列の確認に失敗: %w", err)
+		}
+		if n == 0 {
+			if _, err := db.Exec(`ALTER TABLE device_aliases ADD COLUMN planned_ip TEXT NOT NULL DEFAULT ''`); err != nil {
+				db.Close()
+				return nil, fmt.Errorf("予定IP列の移行に失敗: %w", err)
+			}
 		}
 	}
 	return s, nil
@@ -383,10 +394,21 @@ type Alias struct {
 	MatchKey  string `json:"match_key"`
 	Label     string `json:"label"`
 	Note      string `json:"note"`
+	PlannedIP string `json:"planned_ip"`
 }
 
 func (s *Store) Aliases(profileID int64) ([]Alias, error) {
-	rows, err := s.DB.Query(`SELECT id,match_type,match_key,label,note FROM device_aliases WHERE profile_id=?`, profileID)
+	planned := "planned_ip"
+	if s.readOnly {
+		var n int
+		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('device_aliases') WHERE name='planned_ip'`).Scan(&n); err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			planned = "''"
+		}
+	}
+	rows, err := s.DB.Query(`SELECT id,match_type,match_key,label,note,`+planned+` FROM device_aliases WHERE profile_id=?`, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +416,7 @@ func (s *Store) Aliases(profileID int64) ([]Alias, error) {
 	var out []Alias
 	for rows.Next() {
 		var a Alias
-		if err := rows.Scan(&a.ID, &a.MatchType, &a.MatchKey, &a.Label, &a.Note); err != nil {
+		if err := rows.Scan(&a.ID, &a.MatchType, &a.MatchKey, &a.Label, &a.Note, &a.PlannedIP); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -407,8 +429,8 @@ func (s *Store) SaveAlias(profileID int64, a Alias) error {
 		_, err := s.DB.Exec(`DELETE FROM device_aliases WHERE profile_id=? AND match_type=? AND match_key=?`, profileID, a.MatchType, a.MatchKey)
 		return err
 	}
-	_, err := s.DB.Exec(`INSERT INTO device_aliases(profile_id,match_type,match_key,label,note) VALUES(?,?,?,?,?)
-		ON CONFLICT(profile_id,match_type,match_key) DO UPDATE SET label=excluded.label, note=excluded.note`, profileID, a.MatchType, a.MatchKey, a.Label, a.Note)
+	_, err := s.DB.Exec(`INSERT INTO device_aliases(profile_id,match_type,match_key,label,note,planned_ip) VALUES(?,?,?,?,?,?)
+		ON CONFLICT(profile_id,match_type,match_key) DO UPDATE SET label=excluded.label, note=excluded.note, planned_ip=excluded.planned_ip`, profileID, a.MatchType, a.MatchKey, a.Label, a.Note, a.PlannedIP)
 	return err
 }
 
@@ -442,7 +464,7 @@ func (s *Store) ApplyMACAliases(profileID int64, rows []Alias, replace, commit b
 		switch {
 		case !ok:
 			res.Added++
-		case old.Label == r.Label && old.Note == r.Note:
+		case old.Label == r.Label && old.Note == r.Note && old.PlannedIP == r.PlannedIP:
 			res.Unchanged++
 		default:
 			res.Updated++
@@ -471,8 +493,8 @@ func (s *Store) ApplyMACAliases(profileID int64, rows []Alias, replace, commit b
 		}
 	}
 	for _, r := range rows {
-		if _, err := tx.Exec(`INSERT INTO device_aliases(profile_id,match_type,match_key,label,note) VALUES(?,'mac',?,?,?)
-			ON CONFLICT(profile_id,match_type,match_key) DO UPDATE SET label=excluded.label, note=excluded.note`, profileID, r.MatchKey, r.Label, r.Note); err != nil {
+		if _, err := tx.Exec(`INSERT INTO device_aliases(profile_id,match_type,match_key,label,note,planned_ip) VALUES(?,'mac',?,?,?,?)
+			ON CONFLICT(profile_id,match_type,match_key) DO UPDATE SET label=excluded.label, note=excluded.note, planned_ip=excluded.planned_ip`, profileID, r.MatchKey, r.Label, r.Note, r.PlannedIP); err != nil {
 			return res, err
 		}
 	}
@@ -481,8 +503,10 @@ func (s *Store) ApplyMACAliases(profileID int64, rows []Alias, replace, commit b
 
 // LastSeen は機器の最終観測（時刻と、そのとき使っていたIP）。
 type LastSeen struct {
-	TS time.Time
-	IP string
+	TS       time.Time
+	IP       string
+	SwitchID int64
+	IfIndex  int
 }
 
 // LastSeenByMAC はプロファイル内のスイッチで観測されたMACごとの最終観測（at 以前）。
@@ -490,10 +514,10 @@ type LastSeen struct {
 // 相関サブクエリを使わず1回の走査で集計する（履歴が多くても単一DB接続を長く占有しないため）。
 func (s *Store) LastSeenByMAC(profileID int64, at time.Time) (map[string]LastSeen, error) {
 	cut := ms(at)
-	rows, err := s.DB.Query(`SELECT mac, last_seen_ts, ip FROM device_bindings WHERE profile_id=? AND first_seen_ts<=?`, profileID, cut)
+	rows, err := s.DB.Query(`SELECT mac, last_seen_ts, ip, switch_id, if_index FROM device_bindings WHERE profile_id=? AND first_seen_ts<=? ORDER BY id`, profileID, cut)
 	if err != nil {
 		// 旧版で書き出した再生データ（profile_id 列なし、読み取り専用で移行不可）はスイッチ経由で絞る
-		rows, err = s.DB.Query(`SELECT b.mac, b.last_seen_ts, b.ip FROM device_bindings b JOIN switches w ON w.id=b.switch_id
+		rows, err = s.DB.Query(`SELECT b.mac, b.last_seen_ts, b.ip, b.switch_id, b.if_index FROM device_bindings b JOIN switches w ON w.id=b.switch_id
 			WHERE w.profile_id=? AND b.first_seen_ts<=?`, profileID, cut)
 		if err != nil {
 			return nil, err
@@ -505,7 +529,9 @@ func (s *Store) LastSeenByMAC(profileID int64, at time.Time) (map[string]LastSee
 		var mac string
 		var ts int64
 		var ip sql.NullString
-		if err := rows.Scan(&mac, &ts, &ip); err != nil {
+		var sw int64
+		var ix int
+		if err := rows.Scan(&mac, &ts, &ip, &sw, &ix); err != nil {
 			return nil, err
 		}
 		if ts > cut {
@@ -513,7 +539,7 @@ func (s *Store) LastSeenByMAC(profileID int64, at time.Time) (map[string]LastSee
 		}
 		mac = strings.ToUpper(mac)
 		if cur, ok := out[mac]; !ok || ms(cur.TS) < ts || (ms(cur.TS) == ts && cur.IP == "") {
-			out[mac] = LastSeen{TS: fromMS(ts), IP: ip.String}
+			out[mac] = LastSeen{TS: fromMS(ts), IP: ip.String, SwitchID: sw, IfIndex: ix}
 		}
 	}
 	return out, rows.Err()
@@ -757,11 +783,16 @@ type EventFilter struct {
 	SwitchID              int64
 	From, To              time.Time
 	Limit                 int
+	RestoreProfileID      int64
 }
 
 func (s *Store) Events(f EventFilter) ([]model.Event, error) {
 	var conds []string
 	var args []any
+	if f.RestoreProfileID != 0 {
+		conds = append(conds, `acked=0 AND severity IN ('CRITICAL','WARNING') AND (switch_id IN (SELECT id FROM switches WHERE profile_id=?) OR (switch_id=0 AND json_extract(detail_json,'$._profile_id')=?))`)
+		args = append(args, f.RestoreProfileID, f.RestoreProfileID)
+	}
 	if f.Category != "" {
 		conds, args = append(conds, "category=?"), append(args, f.Category)
 	}
@@ -787,7 +818,10 @@ func (s *Store) Events(f EventFilter) ([]model.Event, error) {
 	if f.Limit <= 0 || f.Limit > 10000 {
 		f.Limit = 500
 	}
-	q += fmt.Sprintf(" ORDER BY ts DESC, id DESC LIMIT %d", f.Limit)
+	q += " ORDER BY ts DESC, id DESC"
+	if f.RestoreProfileID == 0 {
+		q += fmt.Sprintf(" LIMIT %d", f.Limit)
+	}
 	rows, err := s.DB.Query(q, args...)
 	if err != nil {
 		return nil, err

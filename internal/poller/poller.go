@@ -80,12 +80,12 @@ func (m *Manager) Sync(ctx context.Context, sws []model.SwitchConfig) {
 }
 
 // ResetCounters はソフト・カウンタゼロリセット（実機カウンタは消さない）。ifIndex=0で全ポート。
-func (m *Manager) ResetCounters(switchID int64, ifIndex int) {
+func (m *Manager) ResetCounters(switchID int64, ifIndex int) bool {
 	m.mu.Lock()
 	w := m.workers[switchID]
 	m.mu.Unlock()
 	if w == nil {
-		return
+		return false
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -94,6 +94,7 @@ func (m *Manager) ResetCounters(switchID int64, ifIndex int) {
 			p.ErrSinceReset, p.DiscardSinceReset = 0, 0
 		}
 	}
+	return true
 }
 
 // Probe は全機能グループを再判定させる（次回Slowで再取得）。

@@ -618,7 +618,11 @@ func (w *worker) collectSlow() error {
 	}
 	ipByMAC := map[string]string{}
 	// FDB
+	fdbValid := false
+	w.st.FDBValid = &fdbValid
+	w.st.FDBMACs = nil
 	if rows, err := w.c.WalkColumns([]string{mib.Dot1qTpFdbPort, mib.Dot1qTpFdbStatus}); err == nil {
+		fdbValid = true
 		for _, r := range rows {
 			if len(r.Index) < 7 || sx.Int(r.Cols[mib.Dot1qTpFdbStatus]) != 3 { // learnedのみ
 				continue
@@ -628,6 +632,7 @@ func (w *worker) collectSlow() error {
 				continue
 			}
 			d := add(ix, sx.IndexMAC(r.Index[1:7]))
+			w.st.FDBMACs = append(w.st.FDBMACs, d.MAC)
 			d.VLAN = int(r.Index[0])
 		}
 	}

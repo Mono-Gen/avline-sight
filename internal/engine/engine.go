@@ -63,30 +63,47 @@ type Broadcaster interface {
 
 // Engine は監視中の全状態を保持する。
 type Engine struct {
-	mu          sync.RWMutex
-	st          *store.Store
-	profileID   int64
-	states      map[int64]*model.SwitchState
-	order       []int64
-	settings    Settings
-	portCfg     map[int64]map[int]store.PortSetting
-	aliases     map[string]string    // "mac|<MAC>" / "port|<swid>:<ifIndex>" → ラベル
-	pings       map[string]PingMark  // IP → 直近の一括Ping結果
-	active      map[string]time.Time // 発報中アラートキー → 最終発報
-	baseline    map[string]float64   // SFP Rx 基準（ベースライン比較用）
-	hub         Broadcaster
-	lastSnap    time.Time
-	snapDirty   bool
-	prevQuerier map[string]string
-	mediumFresh map[int64]bool // Medium更新後、まだFastで時系列へ書いていないか
+	mu           sync.RWMutex
+	stateMu      sync.Mutex
+	eventMu      sync.Mutex
+	st           *store.Store
+	profileID    int64
+	states       map[int64]*model.SwitchState
+	order        []int64
+	settings     Settings
+	portCfg      map[int64]map[int]store.PortSetting
+	aliases      map[string]string // "mac|<MAC>" / "port|<swid>:<ifIndex>" → ラベル
+	active       map[string]*Alert
+	phase        string
+	work         map[string]time.Time
+	operationMu  sync.Mutex
+	deviceMu     sync.Mutex
+	pingCancel   context.CancelFunc
+	phaseWake    chan struct{}
+	pinger       Pinger
+	pingResults  map[string]DevicePing
+	pingFails    map[string]int
+	missing      map[string]int
+	switchGroups map[int64]string
+	baseline     map[string]float64 // SFP Rx 基準（ベースライン比較用）
+	hub          Broadcaster
+	lastSnap     time.Time
+	snapDirty    bool
+	prevQuerier  map[string]string
+	mediumFresh  map[int64]bool // Medium更新後、まだFastで時系列へ書いていないか
 }
 
 // New を作る。
 func New(st *store.Store, profileID int64, hub Broadcaster) *Engine {
 	e := &Engine{st: st, profileID: profileID, hub: hub, states: map[int64]*model.SwitchState{},
-		portCfg: map[int64]map[int]store.PortSetting{}, aliases: map[string]string{}, active: map[string]time.Time{},
-		baseline: map[string]float64{}, prevQuerier: map[string]string{}, mediumFresh: map[int64]bool{}}
+		portCfg: map[int64]map[int]store.PortSetting{}, aliases: map[string]string{}, active: map[string]*Alert{},
+		phase: "show", work: map[string]time.Time{}, phaseWake: make(chan struct{}, 1), pinger: systemPinger{},
+		pingResults: map[string]DevicePing{}, pingFails: map[string]int{}, missing: map[string]int{},
+		switchGroups: map[int64]string{},
+		baseline:     map[string]float64{}, prevQuerier: map[string]string{}, mediumFresh: map[int64]bool{}}
 	e.Reload()
+	e.loadOperations()
+	e.restoreAlerts()
 	return e
 }
 
@@ -115,7 +132,9 @@ func (e *Engine) Reload() {
 	e.settings, e.portCfg, e.aliases = set, pc, al
 	keep := map[int64]bool{}
 	e.order = e.order[:0]
+	e.switchGroups = map[int64]string{}
 	for _, s := range sws {
+		e.switchGroups[s.ID] = s.GroupTag
 		if !s.Enabled {
 			continue // 無効化スイッチはポーリングされないため状態集合に含めない
 		}
@@ -124,7 +143,9 @@ func (e *Engine) Reload() {
 		if e.states[s.ID] == nil {
 			e.states[s.ID] = &model.SwitchState{ID: s.ID, Name: s.Name, IP: s.IP, GroupTag: s.GroupTag}
 		} else {
-			e.states[s.ID].Name, e.states[s.ID].GroupTag = s.Name, s.GroupTag
+			copyState := *e.states[s.ID]
+			copyState.Name, copyState.GroupTag = s.Name, s.GroupTag
+			e.states[s.ID] = &copyState
 		}
 	}
 	for id := range e.states {
@@ -132,17 +153,35 @@ func (e *Engine) Reload() {
 			delete(e.states, id)
 		}
 	}
+	e.dropSuppressedLatchesLocked()
 	e.mu.Unlock()
+	e.broadcastAlerts()
 }
 
 // SetProfile はアクティブプロファイルを切替える。
 func (e *Engine) SetProfile(id int64) {
+	e.stateMu.Lock()
+	defer e.stateMu.Unlock()
+	e.eventMu.Lock()
+	defer e.eventMu.Unlock()
+	e.deviceMu.Lock()
+	defer e.deviceMu.Unlock()
 	e.mu.Lock()
+	if e.pingCancel != nil {
+		e.pingCancel()
+	}
 	e.profileID = id
 	e.states = map[int64]*model.SwitchState{}
-	e.active = map[string]time.Time{}
+	e.active = map[string]*Alert{}
+	e.pingResults = map[string]DevicePing{}
+	e.pingFails = map[string]int{}
+	e.missing = map[string]int{}
+	e.mediumFresh = map[int64]bool{}
+	e.prevQuerier = map[string]string{}
 	e.mu.Unlock()
 	e.Reload()
+	e.restoreAlerts()
+	e.broadcastAlerts()
 }
 
 func (e *Engine) ProfileID() int64 {
@@ -205,8 +244,14 @@ func itoa(i int) string {
 
 // OnState はポーラーからの状態更新（poller.Sink）。
 func (e *Engine) OnState(st *model.SwitchState, tier string) {
+	e.stateMu.Lock()
+	defer e.stateMu.Unlock()
 	now := time.Now().UTC()
 	e.mu.Lock()
+	if e.states[st.ID] == nil {
+		e.mu.Unlock()
+		return
+	}
 	cfg := e.portCfg[st.ID]
 	prev := e.states[st.ID]
 	if prev != nil && st.GroupTag == "" {
@@ -248,6 +293,8 @@ func (e *Engine) OnState(st *model.SwitchState, tier string) {
 	if st.Reachable && tier != "error" {
 		e.evaluate(st, tier, set)
 	}
+	e.evaluateDevices(st, tier)
+	e.reconcileStateAlerts(st)
 	if tier == "slow" || tier == "medium" {
 		e.evaluateCross(set)
 	}
@@ -258,16 +305,42 @@ func (e *Engine) OnState(st *model.SwitchState, tier string) {
 
 // OnEvent はイベントを保存・配信する（poller.Sink / Trap受信 / マーカー）。
 func (e *Engine) OnEvent(ev model.Event) {
+	e.eventMu.Lock()
+	defer e.eventMu.Unlock()
+	if ev.SwitchID != 0 {
+		e.mu.RLock()
+		_, known := e.switchGroups[ev.SwitchID]
+		e.mu.RUnlock()
+		if !known {
+			return
+		}
+	}
+	if ev.Code == "LINK_DOWN" || ev.Code == "SWITCH_UNREACHABLE" {
+		e.raise(map[string]bool{}, eventKey(ev)+"|edge", ev)
+		return
+	}
+	if ev.Code == "LINK_UP" {
+		e.clearMatching(func(a *Alert) bool {
+			return a.SwitchID == ev.SwitchID && a.IfIndex == ev.IfIndex && a.Code == "LINK_DOWN"
+		})
+	}
+	if ev.Code == "SWITCH_RECOVERED" {
+		e.clearMatching(func(a *Alert) bool { return a.SwitchID == ev.SwitchID && a.Code == "SWITCH_UNREACHABLE" })
+	}
+	e.persistEvent(&ev)
+}
+
+func (e *Engine) persistEvent(ev *model.Event) bool {
 	if ev.TS.IsZero() {
 		ev.TS = time.Now().UTC()
 	}
-	ok, err := e.st.InsertEvent(&ev)
+	ok, err := e.st.InsertEvent(ev)
 	if err != nil {
 		slog.Warn("イベント保存に失敗", "err", err, "code", ev.Code)
-		return
+		return false
 	}
 	if !ok {
-		return // 重複（内部ログ再取得など）
+		return false // 重複（内部ログ再取得など）
 	}
 	if ev.Code == "DEVICE_GONE" {
 		if mac, _ := ev.Detail["mac"].(string); mac != "" {
@@ -280,33 +353,76 @@ func (e *Engine) OnEvent(ev model.Event) {
 		e.mu.Unlock()
 	}
 	if e.hub != nil {
-		e.hub.Broadcast("event_pushed", ev)
+		e.hub.Broadcast("event_pushed", *ev)
 	}
+	return true
 }
 
 // raise はアラート条件の立ち上がりで1回だけ発報する（同一キーは条件が消えるまで再発報しない）。
 func (e *Engine) raise(seen map[string]bool, key string, ev model.Event) {
 	seen[key] = true
 	e.mu.Lock()
-	_, on := e.active[key]
-	if !on {
-		e.active[key] = time.Now()
+	if ev.SwitchID != 0 {
+		if _, known := e.switchGroups[ev.SwitchID]; !known {
+			e.mu.Unlock()
+			return
+		}
 	}
+	// 再起動時はTierを復元できないため、最初の再評価で実行時キーへ移す。
+	if e.active[key] == nil {
+		for k, a := range e.active {
+			if strings.HasSuffix(k, "|restored") && sameAlert(a, ev) {
+				e.active[key] = a
+				delete(e.active, k)
+				break
+			}
+		}
+	}
+	if a := e.active[key]; a != nil {
+		changed := !a.Active || a.SwitchID != ev.SwitchID || a.IfIndex != ev.IfIndex
+		a.Active, a.ClearedAt = true, nil
+		a.SwitchID, a.SwitchName, a.IfIndex = ev.SwitchID, ev.SwitchName, ev.IfIndex
+		e.mu.Unlock()
+		if changed {
+			e.broadcastAlerts()
+		}
+		return
+	}
+	if ev.TS.IsZero() {
+		ev.TS = time.Now().UTC()
+	}
+	if ev.Detail == nil {
+		ev.Detail = map[string]any{}
+	}
+	ev.Detail["_profile_id"] = e.profileID
+	a := alertFromEvent(ev)
+	by := e.suppressedByLocked(a, time.Now())
+	ev.Detail["_suppressed"] = by != ""
+	// DBへの保存と確認を同じロックで直列化し、確認直後の未確認エントリ生成を防ぐ。
+	inserted, err := e.st.InsertEvent(&ev)
+	if err != nil {
+		e.mu.Unlock()
+		slog.Warn("アラート保存に失敗", "code", ev.Code, "err", err)
+		return
+	}
+	if !inserted {
+		e.mu.Unlock()
+		return
+	}
+	a = alertFromEvent(ev)
+	a.Active = true
+	e.active[key] = a
+	e.snapDirty = true
 	e.mu.Unlock()
-	if !on {
-		e.OnEvent(ev)
+	if e.hub != nil {
+		e.hub.Broadcast("event_pushed", ev)
 	}
+	e.broadcastAlerts()
 }
 
 // clearPrefix は今回成立しなかったアラートキーを解除する。
 func (e *Engine) clearPrefix(prefix string, seen map[string]bool) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	for k := range e.active {
-		if strings.HasPrefix(k, prefix) && !seen[k] {
-			delete(e.active, k)
-		}
-	}
+	e.clearKeys(func(k string, a *Alert) bool { return strings.HasPrefix(k, prefix) && !seen[k] })
 }
 
 // States は登録順の状態一覧（コピーではなく参照。呼び出し側で変更しないこと）。
@@ -330,6 +446,9 @@ func (e *Engine) State(id int64) *model.SwitchState {
 
 // Run は定期処理（ロールアップ・パージ・スナップショット）を回す。
 func (e *Engine) Run(ctx context.Context, ret store.Retention) {
+	pingDone := make(chan struct{})
+	go func() { defer close(pingDone); e.runPeriodicPing(ctx, periodicPingInterval) }()
+	defer func() { <-pingDone }()
 	snapT := time.NewTicker(5 * time.Second)
 	rollT := time.NewTicker(time.Minute)
 	purgeT := time.NewTicker(10 * time.Minute)
@@ -341,6 +460,9 @@ func (e *Engine) Run(ctx context.Context, ret store.Retention) {
 		case <-ctx.Done():
 			return
 		case <-snapT.C:
+			if err := e.ExpireWork(time.Now().UTC()); err != nil {
+				slog.Warn("作業期限の解除に失敗", "err", err)
+			}
 			e.mu.Lock()
 			due := time.Since(e.lastSnap) >= 30*time.Second || (e.snapDirty && time.Since(e.lastSnap) >= 5*time.Second)
 			trig := "periodic"
@@ -407,20 +529,15 @@ func (e *Engine) activeBySwitch() map[int64]map[string]int {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	out := map[int64]map[string]int{}
-	for k := range e.active {
-		// キー形式: "<swid>|<sev>|..."
-		parts := strings.SplitN(k, "|", 3)
-		if len(parts) < 3 {
+	for _, a := range e.active {
+		if e.suppressedByLocked(a, time.Now()) != "" || (!a.Active && a.Acked) {
 			continue
 		}
-		var id int64
-		for _, c := range parts[0] {
-			id = id*10 + int64(c-'0')
-		}
+		id := a.SwitchID
 		if out[id] == nil {
 			out[id] = map[string]int{}
 		}
-		out[id][parts[1]]++
+		out[id][a.Severity]++
 	}
 	return out
 }
@@ -429,6 +546,11 @@ func (e *Engine) activeBySwitch() map[int64]map[string]int {
 func (e *Engine) Overview(withEvents bool) Overview {
 	act := e.activeBySwitch()
 	ov := Overview{Alerts: map[string]int{model.SevCritical: 0, model.SevWarning: 0, model.SevInfo: 0}}
+	for _, counts := range act {
+		for sev, n := range counts {
+			ov.Alerts[sev] += n
+		}
+	}
 	for _, s := range e.States() {
 		sm := Summary{ID: s.ID, Name: s.Name, IP: s.IP, GroupTag: s.GroupTag, Reachable: s.Reachable, LastError: s.LastError, Model: s.Model, FW: s.FW,
 			UptimeSec: s.UptimeSec, CPU5s: s.Health.CPU5s, MemFreePct: s.Health.MemFreePct, MbufUsedPct: s.Health.MbufUsedPct,
@@ -457,19 +579,11 @@ func (e *Engine) Overview(withEvents bool) Overview {
 		}
 		for sev, n := range act[s.ID] {
 			sm.Alerts[sev] += n
-			ov.Alerts[sev] += n
-		}
-		if !s.Reachable && s.LastPoll.IsZero() == false {
-			sm.Alerts[model.SevCritical]++
-			ov.Alerts[model.SevCritical]++
 		}
 		ov.Switches = append(ov.Switches, sm)
 	}
 	if ov.Switches == nil {
 		ov.Switches = []Summary{}
-	}
-	for sev, n := range act[0] { // 横断アラート（スイッチID=0）
-		ov.Alerts[sev] += n
 	}
 	if withEvents {
 		evs, _ := e.st.Events(store.EventFilter{Limit: 30})

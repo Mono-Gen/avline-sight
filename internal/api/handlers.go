@@ -332,6 +332,10 @@ func (s *Server) saveAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.MatchKey = strings.ToUpper(a.MatchKey)
+	if !engine.ValidPlannedIP(a.PlannedIP) {
+		writeErr(w, 400, "ラベルを保存できません", "予定IPはIPv4アドレスか空欄にしてください", "")
+		return
+	}
 	if err := s.Store.SaveAlias(s.Engine.ProfileID(), a); err != nil {
 		writeErr(w, 500, "ラベルを保存できません", err.Error(), "")
 		return
@@ -502,7 +506,9 @@ func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	start := time.Now()
+	pid := s.Engine.ProfileID()
 	res := ping.One(r.Context(), in.IP, ping.DefaultTimeout)
+	s.Engine.RecordManualPing(pid, map[string]engine.PingMark{in.IP: {Status: string(res.Status), RTTms: res.RTTms, At: time.Now().UTC()}})
 	writeJSON(w, 200, map[string]any{"ok": res.Status == ping.StatusOK, "status": res.Status, "rtt_ms": res.RTTms,
 		"output": pingText(res), "elapsed_ms": time.Since(start).Milliseconds()})
 }
@@ -536,6 +542,9 @@ func (s *Server) pingAllowed() map[string]bool {
 	}
 	if rows, err := s.Engine.Inventory(engine.InventoryOptions{}); err == nil {
 		for _, r := range rows {
+			if r.PlannedIP != "" {
+				ok[r.PlannedIP] = true
+			}
 			if r.IP != "" {
 				ok[r.IP] = true
 			}
@@ -605,6 +614,7 @@ func (s *Server) pingBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	start := time.Now()
+	pid := s.Engine.ProfileID()
 	res := ping.Many(r.Context(), targets, ping.DefaultTimeout)
 	out := make([]map[string]any, len(res))
 	okN := 0
@@ -613,7 +623,7 @@ func (s *Server) pingBulk(w http.ResponseWriter, r *http.Request) {
 	for _, x := range res {
 		marks[x.IP] = engine.PingMark{Status: string(x.Status), RTTms: x.RTTms, At: now}
 	}
-	s.Engine.RecordPing(marks)
+	s.Engine.RecordManualPing(pid, marks)
 	for i, x := range res {
 		if x.Status == ping.StatusOK {
 			okN++
@@ -650,7 +660,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) ack(w http.ResponseWriter, r *http.Request) {
 	id, _ := pathID(r, "id")
-	if err := s.Store.Ack(id); err != nil {
+	if err := s.Engine.Ack(id, false); err != nil {
 		writeErr(w, 500, "確認済みにできません", err.Error(), "")
 		return
 	}
@@ -658,7 +668,7 @@ func (s *Server) ack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ackAll(w http.ResponseWriter, r *http.Request) {
-	if err := s.Store.AckAll(); err != nil {
+	if err := s.Engine.Ack(0, true); err != nil {
 		writeErr(w, 500, "確認済みにできません", err.Error(), "")
 		return
 	}

@@ -101,7 +101,7 @@ func TestInventoryCSVRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := buf.String()
-	if !strings.HasPrefix(out, "\uFEFFMAC,名称,メモ,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元,Ping\r\n") {
+	if !strings.HasPrefix(out, "\uFEFFMAC,名称,メモ,予定IP,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元,Ping\r\n") {
 		t.Fatalf("見出し/BOM/CRLF: %q", out[:80])
 	}
 	if !strings.Contains(out, "'=cmd|evil") {

@@ -60,13 +60,13 @@ func TestRulesFromSpec(t *testing.T) {
 	if c2 := codes(t, st); c2["PHY_ERRORS"] != 1 {
 		t.Errorf("再発報された: %d", c2["PHY_ERRORS"])
 	}
-	// 解消後に再度成立したら再発報
+	// 未確認ラッチの再発生は同じイベントを再利用する。
 	s.Ports[0].FCSDelta = 0
 	e.OnState(s, "medium")
 	s.Ports[0].FCSDelta = 2
 	e.OnState(s, "medium")
-	if c3 := codes(t, st); c3["PHY_ERRORS"] != 2 {
-		t.Errorf("解消後の再発報なし: %d", c3["PHY_ERRORS"])
+	if c3 := codes(t, st); c3["PHY_ERRORS"] != 1 {
+		t.Errorf("未確認ラッチの重複発報: %d", c3["PHY_ERRORS"])
 	}
 }
 

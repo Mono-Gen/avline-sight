@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,26 +22,31 @@ import (
 
 // InventoryRow は接続機器一覧の1行（MAC単位）。
 type InventoryRow struct {
-	MAC        string    `json:"mac"`
-	Label      string    `json:"label"`
-	Note       string    `json:"note"`
-	IP         string    `json:"ip"`
-	Vendor     string    `json:"vendor"`
-	LLDPName   string    `json:"lldp_name"`
-	SwitchID   int64     `json:"switch_id,omitempty"`
-	SwitchName string    `json:"switch_name"`
-	GroupTag   string    `json:"group_tag"`
-	Port       string    `json:"port"`
-	IfIndex    int       `json:"if_index,omitempty"`
-	VLAN       int       `json:"vlan"`
-	PoEW       *float64  `json:"poe_w,omitempty"`
-	SpeedMbps  int       `json:"speed_mbps"`
-	Seen       bool      `json:"seen"`                // 現在（または再生時刻に）見えているか
-	LastSeen   time.Time `json:"last_seen,omitempty"` // 見えていない登録済み機器の最終観測（不明ならゼロ）
-	IPStale    bool      `json:"ip_stale,omitempty"`  // IP は最終観測時のもの（現在も同じとは限らない）
-	Source     string    `json:"source"`
-	ViaUplink  bool      `json:"via_uplink"`     // スイッチ間リンクでしか見えていない（所在は経路上の推定）
-	Ping       *PingMark `json:"ping,omitempty"` // このIPへの直近の一括Ping結果（ライブのみ）
+	PlannedIP  string     `json:"planned_ip"`
+	IPMismatch bool       `json:"ip_mismatch"`
+	PingOK     *bool      `json:"ping_ok"`
+	PingRTTms  *float64   `json:"ping_rtt_ms"`
+	PingTS     *time.Time `json:"ping_ts"`
+	MAC        string     `json:"mac"`
+	Label      string     `json:"label"`
+	Note       string     `json:"note"`
+	IP         string     `json:"ip"`
+	Vendor     string     `json:"vendor"`
+	LLDPName   string     `json:"lldp_name"`
+	SwitchID   int64      `json:"switch_id,omitempty"`
+	SwitchName string     `json:"switch_name"`
+	GroupTag   string     `json:"group_tag"`
+	Port       string     `json:"port"`
+	IfIndex    int        `json:"if_index,omitempty"`
+	VLAN       int        `json:"vlan"`
+	PoEW       *float64   `json:"poe_w,omitempty"`
+	SpeedMbps  int        `json:"speed_mbps"`
+	Seen       bool       `json:"seen"`                // 現在（または再生時刻に）見えているか
+	LastSeen   time.Time  `json:"last_seen,omitempty"` // 見えていない登録済み機器の最終観測（不明ならゼロ）
+	IPStale    bool       `json:"ip_stale,omitempty"`  // IP は最終観測時のもの（現在も同じとは限らない）
+	Source     string     `json:"source"`
+	ViaUplink  bool       `json:"via_uplink"`     // スイッチ間リンクでしか見えていない（所在は経路上の推定）
+	Ping       *PingMark  `json:"ping,omitempty"` // このIPへの直近の一括Ping結果（ライブのみ）
 }
 
 // PingMark はIPごとの直近Ping結果（一覧とCSVに載せるため engine が保持する。再起動で消える）。
@@ -142,6 +149,10 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 	rows := make([]InventoryRow, 0, len(best)+len(aliases))
 	for mac, c := range best {
 		r := c.row
+		if r.IP == "" && anyIP[mac].ip == "" && lastSeen[mac].IP != "" {
+			r.IP = lastSeen[mac].IP
+			r.IPStale = true
+		}
 		if r.IP == "" || !c.live {
 			if ip := anyIP[mac].ip; ip != "" {
 				r.IP = ip
@@ -172,6 +183,8 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 		a, ok := byMAC[rows[i].MAC]
 		if ok {
 			rows[i].Note = a.Note
+			rows[i].PlannedIP = a.PlannedIP
+			rows[i].IPMismatch = a.PlannedIP != "" && rows[i].IP != "" && a.PlannedIP != rows[i].IP
 		}
 		// 再生ではスナップショット記録時点の名称を、空も含めてそのまま保つ（後日の登録名で過去を書き換えない）
 		if opt.SnapshotLabels {
@@ -192,7 +205,20 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 			continue
 		}
 		ls := lastSeen[mac]
-		rows = append(rows, InventoryRow{MAC: mac, Label: a.Label, Note: a.Note, LastSeen: ls.TS, IP: ls.IP, IPStale: ls.IP != ""})
+		r := InventoryRow{MAC: mac, Label: a.Label, Note: a.Note, LastSeen: ls.TS, IP: ls.IP, IPStale: ls.IP != "", PlannedIP: a.PlannedIP,
+			IPMismatch: a.PlannedIP != "" && ls.IP != "" && a.PlannedIP != ls.IP, SwitchID: ls.SwitchID, IfIndex: ls.IfIndex}
+		for _, s := range states {
+			if s.ID == ls.SwitchID {
+				r.SwitchName, r.GroupTag = s.Name, s.GroupTag
+				for _, p := range s.Ports {
+					if p.IfIndex == ls.IfIndex {
+						r.Port = p.Name
+					}
+				}
+				break
+			}
+		}
+		rows = append(rows, r)
 	}
 	out := rows[:0]
 	q := strings.ToLower(strings.TrimSpace(opt.Query))
@@ -201,7 +227,7 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 			continue
 		}
 		// 担当パートで絞るとき、所在不明（未検出）の登録機器はどのパートか判断できないので除く
-		if opt.Group != "" && r.GroupTag != opt.Group {
+		if opt.Group != "" && opt.Group != "*" && r.GroupTag != opt.Group {
 			continue
 		}
 		if len(opt.VLANs) > 0 && !containsInt(opt.VLANs, r.VLAN) {
@@ -228,8 +254,8 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 	return out
 }
 
-// InventoryCSVHeader は書出・読込共通の列。読込は先頭3列（MAC・名称・メモ）だけを使う。
-var InventoryCSVHeader = []string{"MAC", "名称", "メモ", "IP", "メーカー", "LLDP名", "スイッチ", "ポート", "VLAN", "PoE(W)", "リンク速度", "最終確認", "検出元", "Ping"}
+// InventoryCSVHeader は書出・読込共通の列。先頭4列は機器名CSVとして再読込できる。
+var InventoryCSVHeader = []string{"MAC", "名称", "メモ", "予定IP", "IP", "メーカー", "LLDP名", "スイッチ", "ポート", "VLAN", "PoE(W)", "リンク速度", "最終確認", "検出元", "Ping"}
 
 // WriteInventoryCSV はExcelでそのまま開けるよう BOM付きUTF-8・CRLF で書く。loc は時刻表示のタイムゾーン。
 func WriteInventoryCSV(w io.Writer, rows []InventoryRow, loc *time.Location) error {
@@ -261,7 +287,7 @@ func WriteInventoryCSV(w io.Writer, rows []InventoryRow, loc *time.Location) err
 		if r.ViaUplink {
 			src += "(経路上)"
 		}
-		rec := []string{r.MAC, r.Label, r.Note, r.IP, r.Vendor, r.LLDPName, r.SwitchName, r.Port, vlan, poe, speed, last, src, pingCell(r.Ping, loc)}
+		rec := []string{r.MAC, r.Label, r.Note, r.PlannedIP, r.IP, r.Vendor, r.LLDPName, r.SwitchName, r.Port, vlan, poe, speed, last, src, pingCell(r.Ping, loc)}
 		for i := range rec {
 			rec[i] = csvSafe(rec[i])
 		}
@@ -317,10 +343,11 @@ const MaxAliasCSVRows = 5000
 
 // AliasCSVRow は読込CSVの1データ行。
 type AliasCSVRow struct {
-	Line  int    `json:"line"`
-	MAC   string `json:"mac"`
-	Label string `json:"label"`
-	Note  string `json:"note"`
+	PlannedIP string `json:"planned_ip"`
+	Line      int    `json:"line"`
+	MAC       string `json:"mac"`
+	Label     string `json:"label"`
+	Note      string `json:"note"`
 }
 
 // AliasCSVError は解釈できなかった行。
@@ -330,13 +357,13 @@ type AliasCSVError struct {
 }
 
 // ParseAliasCSV は機器名CSVを解釈する。名称が空の行は skipped に数えて無視する（雛形の未記入行）。
-// 見出し行があれば列名で MAC / 名称 / メモ の位置を決め、なければ先頭3列とみなす。
+// 見出し行があれば列名で判定し、なければ先頭4列とみなす（予定IPの欠落は空欄）。
 func ParseAliasCSV(text string) (rows []AliasCSVRow, skipped int, errs []AliasCSVError) {
 	text = strings.TrimPrefix(text, "\uFEFF")
 	cr := csv.NewReader(strings.NewReader(text))
 	cr.FieldsPerRecord = -1 // 列数の揃わない行（末尾の空列省略など）も受け付ける
 	// 引用符は厳密に扱う。閉じ忘れを許すと後続行がメモに吸収され、置換モードで登録名を消してしまう
-	colMAC, colLabel, colNote := 0, 1, 2
+	colMAC, colLabel, colNote, colPlanned := 0, 1, 2, 3
 	seen := map[string]int{}
 	first := true
 	for {
@@ -360,6 +387,13 @@ func ParseAliasCSV(text string) (rows []AliasCSVRow, skipped int, errs []AliasCS
 			if _, ok := NormalizeMAC(cell(rec, 0)); !ok {
 				if m, l, n, ok := headerColumns(rec); ok {
 					colMAC, colLabel, colNote = m, l, n
+					colPlanned = -1
+					for i, h := range rec {
+						if strings.TrimSpace(h) == "予定IP" || strings.EqualFold(strings.TrimSpace(h), "planned_ip") {
+							colPlanned = i
+							break
+						}
+					}
 					continue
 				}
 			}
@@ -378,6 +412,11 @@ func ParseAliasCSV(text string) (rows []AliasCSVRow, skipped int, errs []AliasCS
 		}
 		label := unCSVSafe(strings.TrimSpace(cell(rec, colLabel)))
 		note := unCSVSafe(strings.TrimSpace(cell(rec, colNote)))
+		planned := strings.TrimSpace(cell(rec, colPlanned))
+		if !ValidPlannedIP(planned) {
+			errs = append(errs, AliasCSVError{Line: line, Reason: "予定IPはIPv4アドレスか空欄にしてください"})
+			continue
+		}
 		if label == "" {
 			skipped++
 			continue
@@ -391,9 +430,17 @@ func ParseAliasCSV(text string) (rows []AliasCSVRow, skipped int, errs []AliasCS
 			continue
 		}
 		seen[mac] = line
-		rows = append(rows, AliasCSVRow{Line: line, MAC: mac, Label: label, Note: note})
+		rows = append(rows, AliasCSVRow{Line: line, MAC: mac, Label: label, Note: note, PlannedIP: planned})
 	}
 	return rows, skipped, errs
+}
+
+func ValidPlannedIP(ip string) bool {
+	if ip == "" {
+		return true
+	}
+	addr, err := netip.ParseAddr(ip)
+	return err == nil && addr.Is4()
 }
 
 // headerColumns は見出し行から列位置を探す。MAC列と名称列が両方見つかったときだけ見出しとみなす。
@@ -486,9 +533,10 @@ func (e *Engine) Inventory(opt InventoryOptions) ([]InventoryRow, error) {
 	rows := BuildInventory(e.States(), al, last, opt, time.Now())
 	e.mu.RLock()
 	for i := range rows {
-		if m, ok := e.pings[rows[i].IP]; ok && rows[i].IP != "" {
-			m := m
-			rows[i].Ping = &m
+		if p, ok := e.pingResults[rows[i].MAC]; ok {
+			p := p
+			rows[i].PingOK, rows[i].PingRTTms, rows[i].PingTS = &p.OK, &p.RTTms, &p.TS
+			rows[i].Ping = &PingMark{Status: p.Status, RTTms: p.RTTms, At: p.TS}
 		}
 	}
 	e.mu.RUnlock()
@@ -497,12 +545,27 @@ func (e *Engine) Inventory(opt InventoryOptions) ([]InventoryRow, error) {
 
 // RecordPing は一括Pingの結果を保持する（IPごとに最新のみ）。
 func (e *Engine) RecordPing(results map[string]PingMark) {
+	rows, err := e.Inventory(InventoryOptions{})
+	if err != nil {
+		slog.Warn("Ping結果の機器照合に失敗", "err", err)
+		return
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.pings == nil {
-		e.pings = map[string]PingMark{}
+	known := map[string]bool{}
+	for _, r := range rows {
+		known[r.MAC] = true
+	}
+	for mac := range e.pingResults {
+		if !known[mac] {
+			delete(e.pingResults, mac)
+		}
 	}
 	for ip, m := range results {
-		e.pings[ip] = m
+		for _, r := range rows {
+			if r.IP == ip || r.PlannedIP == ip {
+				e.pingResults[r.MAC] = DevicePing{OK: m.Status == "ok", RTTms: m.RTTms, TS: m.At, Source: "manual", Status: m.Status}
+			}
+		}
 	}
 }

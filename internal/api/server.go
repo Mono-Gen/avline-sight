@@ -93,6 +93,14 @@ func (s *Server) Handler() http.Handler {
 	h := func(pattern string, f http.HandlerFunc) { m.HandleFunc(pattern, f) }
 
 	h("GET /api/status", s.status)
+	h("GET /api/alerts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Engine.Alerts()) })
+	h("GET /api/phase", s.getPhase)
+	h("PUT /api/phase", s.putPhase)
+	h("GET /api/groups", s.groups)
+	h("POST /api/work", s.startWork)
+	h("DELETE /api/work/{group}", s.endWork)
+	h("DELETE /api/work/{$}", s.endWork)
+	h("POST /api/counters/reset", s.resetGroupCounters)
 	h("POST /api/mode/lock", s.lock)
 	h("GET /api/system/nics", s.nics)
 	h("PUT /api/system/network-bind", s.networkBind)
@@ -187,6 +195,7 @@ func (s *Server) Handler() http.Handler {
 // lockExempt は閲覧専用ロック中も許可する変更系パス。
 func lockExempt(path string) bool {
 	return path == "/api/mode/lock" || path == "/api/markers" || strings.HasPrefix(path, "/api/replay/") ||
+		path == "/api/events/ack-all" ||
 		path == "/api/export/pack" || strings.HasPrefix(path, "/api/events/") && strings.HasSuffix(path, "/ack")
 }
 
@@ -237,7 +246,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{"version": s.Version, "mode": "live", "lab": s.Lab != nil, "locked": locked, "pin_set": pinSet,
-		"profile": map[string]any{"id": pid, "name": name}, "trap": s.Trap.Status(), "web_addr": s.WebAddr})
+		"profile": map[string]any{"id": pid, "name": name}, "trap": s.Trap.Status(), "web_addr": s.WebAddr, "phase": s.Engine.Phase()})
 }
 
 func hashPIN(p string) string {
@@ -275,6 +284,9 @@ func (s *Server) lock(w http.ResponseWriter, r *http.Request) {
 		s.locked, s.pinHash = false, ""
 	}
 	writeJSON(w, 200, map[string]bool{"locked": s.locked})
+	if s.Hub != nil {
+		s.Hub.Broadcast("lock_changed", map[string]bool{"locked": s.locked, "pin_set": s.pinHash != ""})
+	}
 }
 
 func (s *Server) nics(w http.ResponseWriter, r *http.Request) {

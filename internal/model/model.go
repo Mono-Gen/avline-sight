@@ -42,6 +42,8 @@ type SwitchState struct {
 	UptimeSec   int64             `json:"uptime_sec"`
 	BaseMAC     string            `json:"base_mac"`
 	Ports       []*Port           `json:"ports"`
+	FDBMACs     []string          `json:"fdb_macs,omitempty"`
+	FDBValid    *bool             `json:"fdb_valid,omitempty"`
 	Health      Health            `json:"health"`
 	IGMP        IGMP              `json:"igmp"`
 	DHCP        DHCP              `json:"dhcp"`
