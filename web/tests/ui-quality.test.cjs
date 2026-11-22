@@ -541,18 +541,146 @@ test('External topology nodes use all linked switch ports and select the highest
   }
 });
 
-test('ログはPC受信時刻だけを時刻列にし、展開時にSyslog原文を表示する', () => {
+test('Syslog retains the received time and shows the raw line only in expert display', () => {
   const raw = '<13> Nov  7 15:16:44 SwitchWest LLDP: neighbor keepalive';
   assert.equal(syslogMessage(raw), 'LLDP: neighbor keepalive');
   assert.equal(syslogMessage('<34>1 2026-11-07T15:16:44Z SwitchWest service 123 ID - data'), 'service 123 ID - data');
   assert.equal(syslogMessage('LLDP: neighbor keepalive'), 'LLDP: neighbor keepalive');
   const event = { id: 9, ts: '2026-11-07T15:16:45Z', title: raw, code: 'SWITCH_LOG', category: 'SYSLOG', severity: 'INFO' };
-  const html = render(LogEventRow, { event, ackable: new Set([9]) });
+  const normal = render(LogEventRow, { event, ackable: new Set([9]) });
+  assert.match(normal, /<td>LLDP: neighbor keepalive<\/td>/);
+  assert.doesNotMatch(normal, /<details|<pre|SwitchWest/);
+  const html = render(LogEventRow, { event, ackable: new Set([9]), expert: true });
   assert.equal((html.match(/<time /g) || []).length, 1);
   assert.match(html, /2026-11-08 00:16:45 JST/);
   assert.match(html, /<summary>LLDP: neighbor keepalive<\/summary>/);
   assert.match(html, /<pre>&lt;13&gt; Nov  7 15:16:44 SwitchWest LLDP: neighbor keepalive<\/pre>/);
   assert.doesNotMatch(html, /data-action="ack"/);
+});
+
+test('Expert display defaults off, persists locally, and leaves expert pages when turned off', async () => {
+  setLang('ja');
+  const storage = new Map();
+  const states = [];
+  let cursor;
+  let updateStatus;
+  let loadSettings;
+  const Drawer = () => null;
+  const App = sourceWith('../src/App.tsx', {
+    react: {
+      useState: initial => {
+        const index = cursor++;
+        if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial;
+        return [states[index], next => { states[index] = typeof next === 'function' ? next(states[index]) : next; }];
+      },
+      useCallback: fn => fn,
+      useRef: current => ({ current }),
+      useEffect: effect => { if (effect.toString().includes('/api/settings')) loadSettings = effect; },
+    },
+    './api': { api: async url => url === '/api/settings' ? { views: [] } : [] },
+    './components/TerminalDrawer': { TerminalDrawer: Drawer },
+    './useLiveFeed': { useLiveFeed: () => ({}) },
+    './useOperations': { useOperations: props => { updateStatus = props.setStatus; return { alerts: [], groups: [] }; } },
+    './useDesktopNotifications': { useDesktopNotifications: noop },
+    './pcTime': { usePcTime: () => 0 },
+    './i18n': { t, useLang: () => ['ja'] },
+  }, { AbortController, localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) } }).default;
+  const draw = () => { cursor = 0; return App(); };
+  const header = tree => elements(tree, node => node.type === AppHeader)[0].props;
+  const menu = tree => elements(tree, node => node.type === 'nav')[0].props.children;
+  const tools = tree => elements(tree, node => node.props?.tools?.type === SettingsTools)[0].props.tools.props;
+  const openSettings = async locked => {
+    draw();
+    updateStatus({ profile: { id: 1 }, locked });
+    header(draw()).setDialog('settings');
+    const cancel = loadSettings();
+    await new Promise(setImmediate);
+    cancel();
+    return draw();
+  };
+  const normal = [t('rack.nav.monitor'), t('rack.nav.devices'), t('rack.nav.logs')];
+  let tree = await openSettings(false);
+  assert.equal(tools(tree).expert, false);
+  assert.deepEqual(Array.from(menu(tree), item => item.props.children), normal);
+  assert.ok(!render(AppHeader, header(tree)).includes('>エキスパート<'));
+  const { PortMonitor } = require('../src/views/PortMonitor.tsx');
+  const monitor = tree => elements(tree, node => node.type === PortMonitor)[0].props;
+  assert.equal(monitor(tree).openTerminal, undefined);
+
+  tools(tree).setExpert(true);
+  tree = draw();
+  assert.equal(storage.get('expert-display'), 'true');
+  assert.deepEqual(Array.from(menu(tree), item => item.props.children), [...normal, t('cleanup.details'), t('rack.nav.topology')]);
+  assert.ok(render(AppHeader, header(tree)).includes('>エキスパート<'));
+  monitor(tree).openTerminal(1);
+  assert.equal(elements(draw(), node => node.type === Drawer).length, 1);
+  updateStatus({ profile: { id: 1 }, locked: true });
+  assert.equal(elements(draw(), node => node.type === Drawer).length, 0);
+  assert.equal(monitor(draw()).openTerminal, undefined);
+  updateStatus({ profile: { id: 1 }, locked: false });
+
+  for (const page of [t('cleanup.details'), t('rack.nav.topology')]) {
+    tree = draw();
+    menu(tree).find(item => item.props.children === page).props.onClick();
+    assert.equal(menu(draw()).find(item => item.props.children === page).props['aria-current'], 'page');
+    tools(draw()).setExpert(false);
+    tree = draw();
+    assert.equal(menu(tree)[0].props['aria-current'], 'page');
+    assert.equal(elements(tree, node => node.type === Drawer).length, 0);
+    assert.deepEqual(Array.from(menu(tree), item => item.props.children), normal);
+    tools(tree).setExpert(true);
+  }
+  states.length = 0;
+  assert.equal(tools(await openSettings(true)).expert, true);
+  assert.equal(monitor(draw()).openTerminal, undefined);
+});
+
+test('Expert settings, terminal entries and alert details respect the display preference', () => {
+  setLang('ja');
+  const { SettingsTools: Tools } = sourceWith('../src/components/SettingsTools.tsx', {
+    react: { useState: initial => [initial, noop] },
+    '../i18n': { t, useLang: () => ['ja', noop] },
+  });
+  const changes = [];
+  const input = elements(Tools({ locked: true, setExpert: value => changes.push(value) }),
+    node => node.type === 'input' && node.props.type === 'checkbox')[0];
+  assert.equal(input.props.checked, false);
+  input.props.onChange({ target: { checked: true } });
+  assert.deepEqual(changes, [true]);
+
+  const { RackRow } = require('../src/components/RackRow.tsx');
+  const { SwitchPorts } = require('../src/views/SwitchPorts.tsx');
+  const props = { overview: { switches: groupedSwitches }, selected: 1, openTerminal: noop, replay: null };
+  const rack = { summary: groupedSwitches[0], ports: [], devices: [], alerts: [], definitions: {}, uplinks: new Set(), samples: {} };
+  for (const expert of [undefined, false, true]) {
+    for (const locked of [false, true]) {
+      const actions = { ...props, expert, locked };
+      assert.equal(render(RackRow, { ...rack, actions }).includes(`>${t('rack.terminal')}</button>`), !!expert && !locked);
+      const ports = render(SwitchPorts, actions);
+      const terminal = [...ports.matchAll(/<button[^>]*>[^<]*<\/button>/g)].find(([button]) => button.endsWith(`>${t('ui.m279')}</button>`));
+      assert.equal(!!terminal, !!expert);
+      if (terminal) assert.equal(terminal[0].includes('disabled=""'), locked);
+    }
+  }
+  const alert = fault(1, { raw_counters: { dot3StatsFCSErrors: '18446744073709551615' } });
+  const normal = render(AlertEntry, { alert, busy: false });
+  assert.match(normal, /Fault/);
+  assert.doesNotMatch(normal, /dot3StatsFCSErrors|18446744073709551615/);
+  const expert = render(AlertEntry, { alert, busy: false, expert: true });
+  assert.match(expert, /dot3StatsFCSErrors/);
+  assert.match(expert, /18446744073709551615/);
+});
+
+test('Expert recommendations show current and recommended values and available sources', () => {
+  setLang('ja');
+  const { RecommendationTable } = require('../src/views/Recommendations.tsx');
+  const rows = [
+    { switch_id: 1, port: '1/0/1', code: 'NDI4_NEEDS_FLOWCTRL', current: 'disabled', recommended: 'enable', source: 'NETGEAR ProAV Guide' },
+    { switch_id: 1, port: '1/0/2', code: 'QSYS_MTU', current: '9216', recommended: '1522' },
+  ];
+  const html = render(RecommendationTable, { rows, names: new Map([[1, 'A']]) });
+  assert.match(html, /1\/0\/1[^]*disabled[^]*enable[^]*NETGEAR ProAV Guide/);
+  assert.match(html, /1\/0\/2[^]*9216 B[^]*MTU 1500[^]*1522 B[^]*出典未登録/);
 });
 
 test('Log search, live rows and export use JST datetime boundaries in a non-JST timezone', async () => {
@@ -801,13 +929,13 @@ test('総合状態は抑止とINFOを数えず、復旧未確認・発生中確�
   setLang('ja');
 });
 
-test('起動時は統合ポートモニターで、専門画面は詳細の下へまとめる', () => {
+test('The default port monitor shows the unified layout and the three normal menu entries', () => {
   const App = sourceWith('../src/App.tsx', { './components/TerminalDrawer': { TerminalDrawer: () => null } }).default;
   const html = render(App);
   assert.match(html, /aria-current="page"[^]*?ポートモニター/);
   const nav = html.match(/<nav[^]*?<\/nav>/)[0];
-  assert.match(nav, /詳細/);
-  assert.doesNotMatch(nav, /俯瞰|ポート一覧|DHCP|マルチキャスト|ヘルス/);
+  assert.match(nav, /接続機器.*ログ/);
+  assert.doesNotMatch(nav, /詳細|トポロジー|俯瞰|ポート一覧|DHCP|マルチキャスト|ヘルス/);
   assert.match(html, /aria-label="表示方法"/);
   assert.match(html, />図<|>一覧</);
 });

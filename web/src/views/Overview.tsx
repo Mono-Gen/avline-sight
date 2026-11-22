@@ -185,7 +185,7 @@ export function OverviewView(props: OverviewProps) {
     {wallFilter && <div className="wall-filter-note">{t('wall.filter', { name: wallFilter.name })} <button onClick={() => setWallSwitch(undefined)}>{t('wall.clearFilter')}</button></div>}
     {outsideNote}
     {(live || props.replayAlerts !== undefined) && <AlertBand alerts={wallFilter ? alerts.filter(alert => alert.switch_id === wallFilter.id) : alerts}
-      wall pending={live && !operations?.ready} busy={busy} locked={locked} ackMany={live ? operations?.ackMany : undefined}
+      wall expert={props.expert} pending={live && !operations?.ready} busy={busy} locked={locked} ackMany={live ? operations?.ackMany : undefined}
       undoCount={live ? operations?.undoCount : undefined} undo={live ? operations?.undoAck : undefined} />}
     <h2 className="wall-switches-heading">{t('wall.current')}</h2>
     <div className="wall-switches" style={{ '--switch-count': visible.length } as React.CSSProperties}>
@@ -196,7 +196,7 @@ export function OverviewView(props: OverviewProps) {
   </div>;
   return <div className="rack-overview">
     {outsideNote}
-    {(live || props.replayAlerts !== undefined) && <AlertBand alerts={alerts} wall={wall} busy={busy} locked={locked} ack={live ? operations?.ack : undefined}
+    {(live || props.replayAlerts !== undefined) && <AlertBand alerts={alerts} wall={wall} expert={props.expert} busy={busy} locked={locked} ack={live ? operations?.ack : undefined}
       ackMany={live && groupFiltered ? operations?.ackMany : undefined} undoCount={live ? operations?.undoCount : undefined}
       undo={live ? operations?.undoAck : undefined} pending={live && !operations?.ready && !operations?.alerts.length} />}
     {!wall && operations?.toast && <div className="rack-toast" role="status">✓ {operations.toast}</div>}
@@ -249,7 +249,7 @@ export function OverviewView(props: OverviewProps) {
       })}
     </div></>}
     {!wall && selected && selectedSwitch && selectedPort && <PortDetail key={`${selected.switchId}/${selectedPort.if_index}`}
-      switchId={selected.switchId} switchName={selectedSwitch.name} port={selectedPort}
+      switchId={selected.switchId} switchName={selectedSwitch.name} port={selectedPort} expert={props.expert}
       devices={(bySwitch.get(selected.switchId) || []).filter(device => device.if_index === selectedPort.if_index)}
       alerts={matchingPortAlerts(byAlert.get(selected.switchId) || [], selected.switchId, selectedPort.if_index)}
       close={() => { setSelected(undefined); props.onClosePortDetail?.(); }} replay={replay !== null} />}

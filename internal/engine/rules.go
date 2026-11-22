@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Mono-Gen/avline-sight/internal/model"
@@ -15,8 +16,6 @@ const (
 	hintMTU     = "接続機器または対向スイッチとのMTU（ジャンボフレーム / Q-SYS MTU 1500等）不一致の疑い"
 	hintSpeed   = "LANケーブル芯線断線（4芯落ち）・コネクタ圧着不良・オートネゴ不整合の疑い"
 	hintCos     = "特定ポートの帯域飽和・マイクロバースト・QoS優先度設定の要確認"
-	hintPause   = "Flow Control作動によるストリーム遅延の恐れ。AV用途では無効化推奨（NDI4除く）"
-	hintEEE     = "省電力イーサネット(802.3az)が有効。Dante/PTP同期不安定・音切れの原因"
 	hintSFP     = "光ファイバ端面汚れ・曲げ損失・断線・モジュール不良（SFP清掃・再挿抜推奨）"
 	hintUDLD    = "光ファイバ片芯断線・Tx/Rx異常"
 	hintDuplex  = "Duplex不整合（片側固定・片側オート）の疑い"
@@ -34,15 +33,33 @@ const (
 // floodPps は未登録ポートへのマルチキャスト送出がフラッディングと見なされる目安（1Gbps級映像1本≒数万pps）。
 const floodPps = 20000
 
-// ndi4系はFlow Control必要（公式ガイド）。PAUSE警告を出し分ける
-func pauseAllowed(role string) bool { return role == "ndi4" }
-
 func isAVRole(r string) bool {
 	switch r {
 	case "dante", "aes67", "ndi", "ndi4", "sdvoe", "st2110", "qsys", "avb", "lighting":
 		return true
 	}
 	return false
+}
+
+func counterDetails(p *model.Port, detail map[string]any, names ...string) map[string]any {
+	raw := map[string]string{}
+	for _, name := range names {
+		if value, ok := p.RawCounters[name]; ok {
+			raw[name] = value
+		}
+	}
+	if len(raw) == 0 {
+		return detail
+	}
+	if detail == nil {
+		detail = map[string]any{}
+	}
+	detail["raw_counters"] = raw
+	return detail
+}
+
+func rawCounter(name string, value uint64) map[string]any {
+	return map[string]any{"raw_counters": map[string]string{name: strconv.FormatUint(value, 10)}}
 }
 
 // evaluate はスイッチ単体のアラート判定（立ち上がりで1回発報、解消で解除）。
@@ -68,13 +85,15 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 					e.raise(seen, key(model.SevWarning, "HIGH_UTIL", p.IfIndex), ev(model.SevWarning, "HIGH_UTIL", fmt.Sprintf("%s 帯域使用率 %.0f%%", nm, maxf(p.UtilRx, p.UtilTx)), hintDiscard, p.IfIndex, nil))
 				}
 				if p.DiscardDelta > 0 {
-					e.raise(seen, key(model.SevWarning, "DISCARDS", p.IfIndex), ev(model.SevWarning, "DISCARDS", fmt.Sprintf("%s パケットドロップ +%d", nm, p.DiscardDelta), hintDiscard, p.IfIndex, map[string]any{"delta": p.DiscardDelta}))
+					e.raise(seen, key(model.SevWarning, "DISCARDS", p.IfIndex), ev(model.SevWarning, "DISCARDS", fmt.Sprintf("%s パケットドロップ +%d", nm, p.DiscardDelta), hintDiscard, p.IfIndex,
+						counterDetails(p, map[string]any{"delta": p.DiscardDelta}, "ifInDiscards", "ifOutDiscards")))
 				}
 				if p.ExpectedSpeed > 0 && p.SpeedMbps > 0 && p.SpeedMbps < p.ExpectedSpeed {
 					e.raise(seen, key(model.SevCritical, "SPEED_BELOW_EXPECTED", p.IfIndex), ev(model.SevCritical, "SPEED_BELOW_EXPECTED", fmt.Sprintf("%s 期待速度未満 %dM < %dM", nm, p.SpeedMbps, p.ExpectedSpeed), hintSpeed, p.IfIndex, nil))
 				}
 				if p.PoE != nil && p.PoE.Fault != "" && p.PoE.Fault != "none" {
-					e.raise(seen, key(model.SevCritical, "POE_PORT_FAULT", p.IfIndex), ev(model.SevCritical, "POE_PORT_FAULT", fmt.Sprintf("%s PoE障害 %s", nm, p.PoE.Fault), hintPoE, p.IfIndex, nil))
+					e.raise(seen, key(model.SevCritical, "POE_PORT_FAULT", p.IfIndex), ev(model.SevCritical, "POE_PORT_FAULT", fmt.Sprintf("%s PoE障害 %s", nm, p.PoE.Fault), hintPoE, p.IfIndex,
+						counterDetails(p, nil, "pethPsePortOverLoadCounter", "pethPsePortPowerDeniedCounter", "pethPsePortShortCounter")))
 				}
 				continue
 			}
@@ -82,23 +101,20 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 			phy := p.FCSDelta + p.SymbolDelta + p.AlignDelta
 			if th.ErrDelta > 0 && phy >= th.ErrDelta {
 				e.raise(seen, key(model.SevCritical, "PHY_ERRORS", p.IfIndex), ev(model.SevCritical, "PHY_ERRORS", fmt.Sprintf("%s 物理エラー増加 FCS+%d Symbol+%d Align+%d", nm, p.FCSDelta, p.SymbolDelta, p.AlignDelta), hintPhy, p.IfIndex,
-					map[string]any{"fcs": p.FCSDelta, "symbol": p.SymbolDelta, "align": p.AlignDelta}))
+					counterDetails(p, map[string]any{"fcs": p.FCSDelta, "symbol": p.SymbolDelta, "align": p.AlignDelta},
+						"dot3StatsFCSErrors", "dot3StatsSymbolErrors", "dot3StatsAlignmentErrors")))
 			}
 			if p.TooLongDelta > 0 {
-				e.raise(seen, key(model.SevWarning, "MTU_MISMATCH", p.IfIndex), ev(model.SevWarning, "MTU_MISMATCH", fmt.Sprintf("%s FrameTooLongs +%d", nm, p.TooLongDelta), hintMTU, p.IfIndex, nil))
+				e.raise(seen, key(model.SevWarning, "MTU_MISMATCH", p.IfIndex), ev(model.SevWarning, "MTU_MISMATCH", fmt.Sprintf("%s FrameTooLongs +%d", nm, p.TooLongDelta), hintMTU, p.IfIndex,
+					counterDetails(p, nil, "dot3StatsFrameTooLongs")))
 			}
-			if p.LateColDelta > 0 || p.Duplex == "halfDuplex" {
-				e.raise(seen, key(model.SevWarning, "DUPLEX", p.IfIndex), ev(model.SevWarning, "DUPLEX", fmt.Sprintf("%s Half-Duplex/Late Collision", nm), hintDuplex, p.IfIndex, nil))
+			if p.LateColDelta > 0 {
+				e.raise(seen, key(model.SevWarning, "DUPLEX", p.IfIndex), ev(model.SevWarning, "DUPLEX", fmt.Sprintf("%s Half-Duplex/Late Collision", nm), hintDuplex, p.IfIndex,
+					counterDetails(p, nil, "dot3StatsLateCollisions")))
 			}
 			if p.CosDropDelta > 0 {
-				e.raise(seen, key(model.SevCritical, "COS_DROP", p.IfIndex), ev(model.SevCritical, "COS_DROP", fmt.Sprintf("%s CoSキュー ドロップ +%d", nm, p.CosDropDelta), hintCos, p.IfIndex, nil))
-			}
-			if p.PauseDelta > 0 && !pauseAllowed(p.AVRole) {
-				e.raise(seen, key(model.SevWarning, "PAUSE_FRAMES", p.IfIndex), ev(model.SevWarning, "PAUSE_FRAMES", fmt.Sprintf("%s PAUSEフレーム +%d", nm, p.PauseDelta), hintPause, p.IfIndex, nil))
-			}
-			avPort := isAVRole(p.AVRole) || (p.AVRole == "" && len(p.Devices) > 0)
-			if avPort && (p.EEE == "enable" || p.LPIDelta > 0) {
-				e.raise(seen, key(model.SevWarning, "EEE_ON_AV_PORT", p.IfIndex), ev(model.SevWarning, "EEE_ON_AV_PORT", fmt.Sprintf("%s EEE有効/LPI遷移（+%d）", nm, p.LPIDelta), hintEEE, p.IfIndex, nil))
+				e.raise(seen, key(model.SevCritical, "COS_DROP", p.IfIndex), ev(model.SevCritical, "COS_DROP", fmt.Sprintf("%s CoSキュー ドロップ +%d", nm, p.CosDropDelta), hintCos, p.IfIndex,
+					counterDetails(p, nil, "agentCosQueueIntfCounterHCTotalDropPackets")))
 			}
 			if s := p.SFP; s != nil {
 				bkey := sw + ":" + itoa(p.IfIndex)
@@ -123,7 +139,7 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 			}
 			if st.IGMP.MVRRxFailDelta > 0 {
 				e.raise(seen, key(model.SevWarning, "MVR_RX_FAIL", 0), ev(model.SevWarning, "MVR_RX_FAIL", fmt.Sprintf("MVR IGMPパケット受信失敗 +%d", st.IGMP.MVRRxFailDelta),
-					"MVR設定（ソース/レシーバーポート、MVR VLAN）の不整合を確認してください", 0, nil))
+					"MVR設定（ソース/レシーバーポート、MVR VLAN）の不整合を確認してください", 0, rawCounter("mvrIGMPPacketReceiveFailures", st.IGMP.MVRRxFailures)))
 			}
 			h := st.Health
 			if th.CPUPct > 0 && h.CPU5s >= th.CPUPct {
@@ -150,7 +166,8 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 				}
 			}
 			if h.MbufFailDelta > 0 {
-				e.raise(seen, key(model.SevCritical, "MBUF_ALLOC_FAIL", 0), ev(model.SevCritical, "MBUF_ALLOC_FAIL", fmt.Sprintf("Mbuf確保失敗 +%d", h.MbufFailDelta), hintCos, 0, nil))
+				e.raise(seen, key(model.SevCritical, "MBUF_ALLOC_FAIL", 0), ev(model.SevCritical, "MBUF_ALLOC_FAIL", fmt.Sprintf("Mbuf確保失敗 +%d", h.MbufFailDelta), hintCos, 0,
+					map[string]any{"raw_counters": st.MbufFailCounters}))
 			}
 			if th.PoEPct > 0 && h.PoEBudgetW > 0 && h.PoEUsedW/h.PoEBudgetW*100 >= th.PoEPct {
 				e.raise(seen, key(model.SevWarning, "POE_BUDGET", 0), ev(model.SevWarning, "POE_BUDGET", fmt.Sprintf("PoEバジェット使用率 %.0f%%", h.PoEUsedW/h.PoEBudgetW*100), hintPoE, 0, nil))
@@ -169,11 +186,9 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 				e.raise(seen, key(model.SevWarning, "STP_BLOCKING", p.IfIndex), ev(model.SevWarning, "STP_BLOCKING", fmt.Sprintf("%s STP Blocking", p.Name), hintStp, p.IfIndex, nil))
 			}
 		}
-		if st.Config.StpVersion == "mstp" {
-			e.raise(seen, key(model.SevWarning, "STP_MSTP", 0), ev(model.SevWarning, "STP_MSTP", "MSTPが稼働中（ProAVではRSTP推奨）", hintStp, 0, nil))
-		}
 		if st.DHCP.InvalidDelta > 0 {
-			e.raise(seen, key(model.SevCritical, "DHCP_ROGUE", 0), ev(model.SevCritical, "DHCP_ROGUE", fmt.Sprintf("不正DHCPサーバーメッセージ +%d", st.DHCP.InvalidDelta), hintDHCP, 0, nil))
+			e.raise(seen, key(model.SevCritical, "DHCP_ROGUE", 0), ev(model.SevCritical, "DHCP_ROGUE", fmt.Sprintf("不正DHCPサーバーメッセージ +%d", st.DHCP.InvalidDelta), hintDHCP, 0,
+				map[string]any{"raw_counters": st.DHCPInvalidServerCounters}))
 		}
 		if len(st.DHCP.Conflicts) > 0 {
 			e.raise(seen, key(model.SevCritical, "IP_CONFLICT", 0), ev(model.SevCritical, "IP_CONFLICT", "IPアドレス衝突: "+strings.Join(st.DHCP.Conflicts, ", "), hintDHCP, 0, nil))
@@ -224,6 +239,9 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 			Hint: "Slow周期（既定45秒）が一巡すると表示されます"}}, fw
 	}
 	add := func(sev, code, title, hint string, s *model.SwitchState, port string) {
+		if recommendationOnly(code) {
+			sev = model.SevInfo
+		}
 		f := Finding{Severity: sev, Code: code, Title: title, Hint: hint, Port: port}
 		if s != nil {
 			f.SwitchID, f.SwitchName = s.ID, s.Name
@@ -334,50 +352,6 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 			add(model.SevCritical, "IGMP_VERSION_MIX", fmt.Sprintf("VLAN%d IGMPバージョン混在", v), hintQuerier, nil, "")
 		}
 	}
-	// ポート単位のAV地雷・リンク両端MTU
-	for _, s := range live {
-		for _, p := range s.Ports {
-			if p.Excluded || p.Oper != "up" {
-				continue
-			}
-			av := isAVRole(p.AVRole) || (p.AVRole == "" && len(p.Devices) > 0 && !isUplink(s, p))
-			if av && p.EEE == "enable" {
-				add(model.SevWarning, "EEE_ON_AV_PORT", "AVポートでEEE有効", hintEEE, s, p.Name)
-			}
-			if av && p.Pause != "" && p.Pause != "disabled" && !pauseAllowed(p.AVRole) {
-				add(model.SevWarning, "FLOWCTRL_ON_AV_PORT", "AVポートでFlow Control(PAUSE)有効", hintPause, s, p.Name)
-			}
-			if p.AVRole == "ndi4" && (p.Pause == "" || p.Pause == "disabled") {
-				add(model.SevWarning, "NDI4_NEEDS_FLOWCTRL", "NDI4ポートでFlow Control無効（公式ガイド上NDI4は有効化が必要）", "NDI4はFlow Controlを有効にしてください", s, p.Name)
-			}
-			if av && p.Trust != "" && p.Trust != "trustIpDscp" {
-				add(model.SevInfo, "DSCP_TRUST", "AVポートのQoS TrustがDSCPではない（"+p.Trust+"）", "Dante/AES67/PTPのDSCP優先制御にはTrust DSCPを推奨", s, p.Name)
-			}
-			if (p.McastCtl || p.BcastCtl) && isUplink(s, p) {
-				add(model.SevWarning, "STORM_CTRL_UPLINK", "アップリンクでStorm Control有効", "高帯域マルチキャストや gigaACE/CobraNet のアップリンクで不要なドロップ原因になり得ます（公式ガイドp.14, p.71）", s, p.Name)
-			}
-			if p.AVRole == "qsys" && p.MaxFrame > 1522 {
-				add(model.SevWarning, "QSYS_MTU", "Q-SYSポートでMTU≠1500（最大フレーム "+itoa(p.MaxFrame)+"）", hintMTU, s, p.Name)
-			}
-		}
-	}
-	// LLDPで繋がるNETGEAR同士の両端MaxFrame比較
-	byName := map[string]*model.SwitchState{}
-	for _, s := range live {
-		byName[s.SysName] = s
-	}
-	for _, s := range live {
-		for _, n := range s.Neighbors {
-			peer := byName[n.SysName]
-			if peer == nil || peer.ID < s.ID {
-				continue
-			}
-			lp, rp := findPort(s, n.LocalPort), findPort(peer, n.PortID)
-			if lp != nil && rp != nil && lp.MaxFrame > 0 && rp.MaxFrame > 0 && lp.MaxFrame != rp.MaxFrame {
-				add(model.SevWarning, "UPLINK_MTU_MISMATCH", fmt.Sprintf("アップリンク両端のMTU不一致 %s:%s=%d / %s:%s=%d", s.Name, lp.Name, lp.MaxFrame, peer.Name, rp.Name, rp.MaxFrame), hintMTU, s, lp.Name)
-			}
-		}
-	}
 	// トポロジー構造（デイジーチェーン検出: 3台以上で中継スイッチの連鎖）
 	if depth := chainDepth(live); depth >= 3 {
 		add(model.SevInfo, "DAISY_CHAIN", fmt.Sprintf("多段デイジーチェーン構成（最大%d段）", depth), "SMPTE / AES67 / PTPv2 はスター型必須。コアから各エッジへ直結する構成を推奨", nil, "")
@@ -440,7 +414,7 @@ func countUplinks(s *model.SwitchState) int {
 
 func findPort(s *model.SwitchState, name string) *model.Port {
 	for _, p := range s.Ports {
-		if p.Name == name {
+		if p != nil && p.Name == name {
 			return p
 		}
 	}
@@ -489,8 +463,7 @@ func (e *Engine) evaluateCross(set Settings) {
 	fs, _ := e.Audit()
 	seen := map[string]bool{}
 	for _, f := range fs {
-		// スイッチ単体ルールで既に発報するものは重複させない
-		if f.Severity == model.SevInfo || f.Code == "STP_MSTP" || f.Code == "EEE_ON_AV_PORT" {
+		if f.Severity == model.SevInfo {
 			continue
 		}
 		k := "0|" + f.Severity + "|AUDIT|" + f.Code + "|" + f.SwitchName + "|" + f.Port + "|" + f.Title

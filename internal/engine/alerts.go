@@ -16,23 +16,24 @@ import (
 
 // Alert は発生条件と確認状態を保持する。イベント履歴そのものの編集は行わない。
 type Alert struct {
-	EventID         int64      `json:"event_id"`
-	SwitchID        int64      `json:"switch_id"`
-	SwitchName      string     `json:"switch_name"`
-	IfIndex         int        `json:"if_index"`
-	Severity        string     `json:"severity"`
-	Code            string     `json:"code"`
-	Title           string     `json:"title"`
-	TS              time.Time  `json:"ts"`
-	Active          bool       `json:"active"`
-	Acked           bool       `json:"acked"`
-	ClearedAt       *time.Time `json:"cleared_at"`
-	Port            string     `json:"port"`
-	MAC             string     `json:"mac,omitempty"`
-	DeviceName      string     `json:"device_name,omitempty"`
-	State           string     `json:"state"`
-	Suppressed      bool       `json:"suppressed"`
-	SuppressedBy    string     `json:"suppressed_by"`
+	EventID         int64             `json:"event_id"`
+	SwitchID        int64             `json:"switch_id"`
+	SwitchName      string            `json:"switch_name"`
+	IfIndex         int               `json:"if_index"`
+	Severity        string            `json:"severity"`
+	Code            string            `json:"code"`
+	Title           string            `json:"title"`
+	TS              time.Time         `json:"ts"`
+	Active          bool              `json:"active"`
+	Acked           bool              `json:"acked"`
+	ClearedAt       *time.Time        `json:"cleared_at"`
+	Port            string            `json:"port"`
+	MAC             string            `json:"mac,omitempty"`
+	DeviceName      string            `json:"device_name,omitempty"`
+	State           string            `json:"state"`
+	Suppressed      bool              `json:"suppressed"`
+	SuppressedBy    string            `json:"suppressed_by"`
+	RawCounters     map[string]string `json:"raw_counters,omitempty"`
 	eventSuppressed bool
 	priorClearedAt  *time.Time
 }
@@ -89,6 +90,17 @@ func alertFromEvent(ev model.Event) *Alert {
 	a.DeviceName, _ = ev.Detail["name"].(string)
 	a.Port, _ = ev.Detail["port"].(string)
 	a.eventSuppressed, _ = ev.Detail["_suppressed"].(bool)
+	switch raw := ev.Detail["raw_counters"].(type) {
+	case map[string]string:
+		a.RawCounters = raw
+	case map[string]any:
+		a.RawCounters = make(map[string]string, len(raw))
+		for name, value := range raw {
+			if text, ok := value.(string); ok {
+				a.RawCounters[name] = text
+			}
+		}
+	}
 	return a
 }
 
@@ -126,6 +138,9 @@ func (e *Engine) restoreAlerts() {
 	}
 	seen := map[string]bool{}
 	for _, ev := range events {
+		if recommendationOnly(ev.Code) {
+			continue
+		}
 		a := alertFromEvent(ev)
 		// イベント履歴の発生場所を変更せず、移動後のグループで抑止を判定する。
 		if deviceAlertCode(a.Code) && a.MAC != "" {

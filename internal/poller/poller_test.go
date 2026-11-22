@@ -6,9 +6,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gosnmp/gosnmp"
+
+	"github.com/Mono-Gen/avline-sight/internal/mib"
 	"github.com/Mono-Gen/avline-sight/internal/model"
 	"github.com/Mono-Gen/avline-sight/internal/sim"
 )
+
+func TestSnapshotPreservesRawCounterWithoutSharingWorkerMap(t *testing.T) {
+	p := &model.Port{IfIndex: 1}
+	cols := map[string]gosnmp.SnmpPDU{
+		mib.CosQueueIntfHCTotalDrop: {Type: gosnmp.Counter64, Value: ^uint64(0)},
+	}
+	p.RawCounters = captureCounters(nil, cols, cosCounters)
+	w := worker{st: &model.SwitchState{Ports: []*model.Port{p}}}
+	snapshot := w.snapshot()
+	p.RawCounters = captureCounters(p.RawCounters, nil, cosCounters)
+	const name = "agentCosQueueIntfCounterHCTotalDropPackets"
+	if got := snapshot.Ports[0].RawCounters[name]; got != "18446744073709551615" {
+		t.Fatalf("snapshot raw counter: %q", got)
+	}
+	if _, ok := p.RawCounters[name]; ok {
+		t.Fatal("missing data left a stale raw counter")
+	}
+}
 
 type capSink struct {
 	mu     sync.Mutex

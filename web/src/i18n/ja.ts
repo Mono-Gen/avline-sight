@@ -2,6 +2,20 @@ import { operationsJa } from './operations';
 import { eventJa } from './eventJa';
 import { rackJa } from './rack';
 export const ja = {
+  expert: {
+    setting: 'エキスパート表示', badge: 'エキスパート', recommendations: '推奨と違う設定',
+    noRecommendations: '表示対象のポートに推奨との差はありません。',
+    technical: '技術詳細', mibName: 'MIB名', rawCounter: 'カウンタ生値',
+    port: 'ポート', field: '設定項目', current: '現在値', recommended: '推奨値', reference: '出典',
+    source: '参考: {name}（版未登録）', noSource: '出典未登録',
+    qsysMtu: 'MTU 1500（最大フレーム {frame} B）', peerMtu: '対向ポートと揃える（対向 {frame} B）',
+    rules: {
+      EEE_ON_AV_PORT: 'EEE', FLOWCTRL_ON_AV_PORT: 'フロー制御（動作状態）', NDI4_NEEDS_FLOWCTRL: 'フロー制御（NDI4の動作状態）',
+      DSCP_TRUST: 'DSCP Trust', BCAST_STORM_CTRL_UPLINK: 'ブロードキャストストーム制御',
+      MCAST_STORM_CTRL_UPLINK: 'マルチキャストストーム制御', QSYS_MTU: '最大フレーム（Q-SYS）',
+      UPLINK_MTU_MISMATCH: '最大フレーム（アップリンク）', DUPLEX: 'デュプレックス',
+    },
+  },
   configChanges: {
     title: '設定変更', latestBaseline: '最新ベースラインとの差分',
     comparing: '「{name}」（{time}）と比較しています。',

@@ -31,6 +31,55 @@ func (c *counters) delta(key string, cur uint64, is32 bool) (uint64, bool) {
 	return sx.CounterDelta(prev, cur, is32)
 }
 
+var (
+	discardCounters   = map[string]string{"ifInDiscards": mib.IfInDiscards, "ifOutDiscards": mib.IfOutDiscards}
+	etherlikeCounters = map[string]string{
+		"dot3StatsFCSErrors": mib.Dot3FCSErrors, "dot3StatsAlignmentErrors": mib.Dot3AlignmentErrors,
+		"dot3StatsSymbolErrors": mib.Dot3SymbolErrors, "dot3StatsFrameTooLongs": mib.Dot3FrameTooLongs,
+		"dot3StatsLateCollisions": mib.Dot3LateCollisions,
+	}
+	cosCounters = map[string]string{"agentCosQueueIntfCounterHCTotalDropPackets": mib.CosQueueIntfHCTotalDrop}
+	poeCounters = map[string]string{
+		"pethPsePortOverLoadCounter": mib.PethPortOverLoadCnt, "pethPsePortPowerDeniedCounter": mib.PethPortPowerDeniedCnt,
+		"pethPsePortShortCounter": mib.PethPortShortCnt,
+	}
+)
+
+func captureCounters(raw map[string]string, cols map[string]gosnmp.SnmpPDU, objects map[string]string) map[string]string {
+	for name, oid := range objects {
+		v := cols[oid]
+		if !isRawCounter(v) {
+			delete(raw, name)
+			continue
+		}
+		if raw == nil {
+			raw = make(map[string]string)
+		}
+		raw[name] = strconv.FormatUint(sx.U64(v), 10)
+	}
+	return raw
+}
+
+func isRawCounter(v gosnmp.SnmpPDU) bool {
+	return v.Value != nil && (v.Type == gosnmp.Counter32 || v.Type == gosnmp.Counter64)
+}
+
+func indexedRawCounters(rows []sx.Row, oid, name string) map[string]string {
+	raw := make(map[string]string)
+	for _, row := range rows {
+		v := row.Cols[oid]
+		if !isRawCounter(v) {
+			continue
+		}
+		instance := name
+		for _, index := range row.Index {
+			instance += "." + strconv.FormatUint(uint64(index), 10)
+		}
+		raw[instance] = strconv.FormatUint(sx.U64(v), 10)
+	}
+	return raw
+}
+
 func ifIdx(r sx.Row) int {
 	if len(r.Index) == 0 {
 		return 0
@@ -147,6 +196,7 @@ func (w *worker) collectFast() error {
 		_, id := rate(mib.IfInDiscards, true)
 		_, od := rate(mib.IfOutDiscards, true)
 		p.ErrDelta, p.DiscardDelta = ie+oe, id+od
+		p.RawCounters = captureCounters(p.RawCounters, r.Cols, discardCounters)
 		p.ErrSinceReset += p.ErrDelta
 		p.DiscardSinceReset += p.DiscardDelta
 		if spd > 0 {
@@ -188,8 +238,9 @@ func (w *worker) collectFast() error {
 				OverloadCnt: sx.U64(r.Cols[mib.PethPortOverLoadCnt]),
 				ShortCnt:    sx.U64(r.Cols[mib.PethPortShortCnt]),
 			}
+			p.RawCounters = captureCounters(p.RawCounters, r.Cols, poeCounters)
 			if prev != nil {
-				w.onPoEChange(p, prev, poe)
+				w.onPoEChange(p, prev, poe, r.Cols)
 			}
 			p.PoE = poe
 		}
@@ -239,6 +290,7 @@ func (w *worker) collectMedium() error {
 			p.SymbolDelta = d(mib.Dot3SymbolErrors, true)
 			p.TooLongDelta = d(mib.Dot3FrameTooLongs, true)
 			p.LateColDelta = d(mib.Dot3LateCollisions, true)
+			p.RawCounters = captureCounters(p.RawCounters, r.Cols, etherlikeCounters)
 			p.LPIDelta = d(mib.Dot3TxLPITransitions, true) + d(mib.Dot3RxLPITransitions, true)
 			p.PauseDelta = d(mib.Dot3HCInPauseFrames, false) + d(mib.Dot3HCOutPauseFrames, false)
 			p.Duplex = mib.DuplexEnum.Name(int(sx.Int(r.Cols[mib.Dot3DuplexStatus])))
@@ -253,6 +305,7 @@ func (w *worker) collectMedium() error {
 		for _, r := range rows {
 			if p := pm[ifIdx(r)]; p != nil {
 				p.CosDropDelta, _ = w.cnt.delta("cos|"+strconv.Itoa(p.IfIndex), sx.U64(r.Cols[mib.CosQueueIntfHCTotalDrop]), false)
+				p.RawCounters = captureCounters(p.RawCounters, r.Cols, cosCounters)
 			}
 		}
 	}
@@ -309,6 +362,7 @@ func (w *worker) collectHealth() error {
 		}
 		h.MbufFailDelta, _ = w.cnt.delta("mbuffail", sum, false)
 		h.MbufAllocFails = sum
+		w.st.MbufFailCounters = indexedRawCounters(rows, mib.MbufAllocFails, "agentSwitchMbufAllocFails")
 	}
 	if w.supported("box") {
 		rows, err := w.c.WalkColumns([]string{mib.TempSensorTemp})
@@ -780,6 +834,7 @@ func (w *worker) collectDHCP(pm map[int]*model.Port, _ map[string]string) {
 		}
 		d.InvalidDelta, _ = w.cnt.delta("dhcpinv", sum, true)
 		d.InvalidServerMsgs = sum
+		w.st.DHCPInvalidServerCounters = indexedRawCounters(rows, mib.DhcpSnoopInvalidServer, "agentDhcpSnoopingInvalidServerMessages")
 	}
 }
 

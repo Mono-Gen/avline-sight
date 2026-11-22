@@ -37,16 +37,16 @@ func codes(t *testing.T, st *store.Store) map[string]int {
 func TestRulesFromSpec(t *testing.T) {
 	e, st := newTestEngine(t)
 	s := &model.SwitchState{ID: 1, Name: "SW", Reachable: true, Ports: []*model.Port{
-		{IfIndex: 1, Name: "1/0/1", Oper: "up", SpeedMbps: 1000, FCSDelta: 1},                                   // 物理エラー+1 → CRITICAL
-		{IfIndex: 2, Name: "1/0/2", Oper: "up", SpeedMbps: 1000, PauseDelta: 5, AVRole: "ndi4"},                 // NDI4はPAUSE許容
-		{IfIndex: 3, Name: "1/0/3", Oper: "up", SpeedMbps: 1000, PauseDelta: 5, AVRole: "dante", EEE: "enable"}, // PAUSE+EEE警告
-		{IfIndex: 4, Name: "1/0/4", Oper: "up", SpeedMbps: 10000, SFP: &model.SFP{RxDBm: -10.5}},                // -10dBm未満
-		{IfIndex: 5, Name: "1/0/5", Oper: "up", SpeedMbps: 1000, FCSDelta: 9, Excluded: true},                   // 監視除外
-		{IfIndex: 6, Name: "1/0/6", Oper: "up", SpeedMbps: 10000, SFP: &model.SFP{RxDBm: -9.9}},                 // 基準内
+		{IfIndex: 1, Name: "1/0/1", Oper: "up", SpeedMbps: 1000, FCSDelta: 1}, // 物理エラー+1 → CRITICAL
+		{IfIndex: 2, Name: "1/0/2", Oper: "up", SpeedMbps: 1000, PauseDelta: 5, AVRole: "ndi4"},
+		{IfIndex: 3, Name: "1/0/3", Oper: "up", SpeedMbps: 1000, PauseDelta: 5, AVRole: "dante", EEE: "enable"},
+		{IfIndex: 4, Name: "1/0/4", Oper: "up", SpeedMbps: 10000, SFP: &model.SFP{RxDBm: -10.5}}, // -10dBm未満
+		{IfIndex: 5, Name: "1/0/5", Oper: "up", SpeedMbps: 1000, FCSDelta: 9, Excluded: true},    // 監視除外
+		{IfIndex: 6, Name: "1/0/6", Oper: "up", SpeedMbps: 10000, SFP: &model.SFP{RxDBm: -9.9}},  // 基準内
 	}, Health: model.Health{CPU5s: 80, MemFreePct: 15, TempMaxC: 40}}
 	e.OnState(s, "medium")
 	c := codes(t, st)
-	want := map[string]int{"PHY_ERRORS": 1, "PAUSE_FRAMES": 1, "EEE_ON_AV_PORT": 1, "SFP_LOW_RX": 1, "CPU_HIGH": 1, "MEM_LOW": 1}
+	want := map[string]int{"PHY_ERRORS": 1, "PAUSE_FRAMES": 0, "EEE_ON_AV_PORT": 0, "SFP_LOW_RX": 1, "CPU_HIGH": 1, "MEM_LOW": 1}
 	for k, v := range want {
 		if c[k] != v {
 			t.Errorf("%s = %d want %d (all=%v)", k, c[k], v, c)
@@ -103,5 +103,110 @@ func TestAuditCrossSwitch(t *testing.T) {
 	fs, _ = e.Audit()
 	if len(fs) != 1 || fs[0].Code != "AUDIT_PENDING" {
 		t.Errorf("初回取得前に横断監査が実行された: %+v", fs)
+	}
+}
+
+func TestRecommendationsDoNotRaiseAlerts(t *testing.T) {
+	e, st := newTestEngine(t)
+	a := &model.SwitchState{ID: 1, Name: "A", SysName: "A", Reachable: true, FW: "1", LastPoll: time.Now(),
+		Config: model.SwitchConf{StpVersion: "mstp", StpPriority: 32768, IsRoot: true},
+		IGMP:   model.IGMP{Vlans: []model.VlanIGMP{{VLAN: 10, Snooping: true, LastVersion: 2, LastQuerier: "192.0.2.1"}}},
+		Ports: []*model.Port{
+			{IfIndex: 1, Name: "1/0/1", Oper: "up", AVRole: "dante", EEE: "enable", LPIDelta: 2, Pause: "enabledXmit", PauseDelta: 4, Trust: "trustDot1p", Duplex: "halfDuplex"},
+			{IfIndex: 2, Name: "1/0/2", Oper: "up", AVRole: "ndi4", Pause: "disabled"},
+			{IfIndex: 3, Name: "1/0/3", Oper: "up", AVRole: "qsys", MaxFrame: 9216},
+			{IfIndex: 4, Name: "1/0/4", Oper: "up", AVRole: "uplink", MaxFrame: 9216, McastCtl: true, BcastCtl: true},
+			{IfIndex: 5, Name: "1/0/5", Oper: "up", AVRole: "ndi4"},
+			{IfIndex: 6, Name: "1/0/6", Oper: "up", AVRole: "dante", EEE: "enable", Excluded: true},
+			{IfIndex: 7, Name: "1/0/7", Oper: "up", TooLongDelta: 1, FCSDelta: 1, SpeedMbps: 100, ExpectedSpeed: 1000, PoE: &model.PoE{Fault: "overload"},
+				RawCounters: map[string]string{"dot3StatsFCSErrors": "112", "dot3StatsFrameTooLongs": "8"}},
+		},
+		Neighbors: []model.Neighbor{{SysName: "B", LocalPort: "1/0/4", PortID: "1/0/1", IsNetgear: true}},
+	}
+	b := &model.SwitchState{ID: 2, Name: "B", SysName: "B", Reachable: true, FW: "2", LastPoll: time.Now(),
+		Config:    model.SwitchConf{StpVersion: "rstp", StpPriority: 32768},
+		IGMP:      model.IGMP{Vlans: []model.VlanIGMP{{VLAN: 10, QuerierOper: "querier", LastVersion: 3, LastQuerier: "192.0.2.1"}}},
+		Ports:     []*model.Port{{IfIndex: 1, Name: "1/0/1", Oper: "up", MaxFrame: 1522}},
+		Neighbors: []model.Neighbor{{SysName: "A", LocalPort: "1/0/1", PortID: "1/0/4", IsNetgear: true}},
+	}
+	e.states, e.order = map[int64]*model.SwitchState{1: a, 2: b}, []int64{1, 2}
+	for _, tier := range []string{"fast", "medium", "slow"} {
+		e.evaluate(a, tier, DefaultSettings())
+	}
+	e.evaluateCross(DefaultSettings())
+	got := codes(t, st)
+	for _, code := range []string{"PHY_ERRORS", "MTU_MISMATCH", "SPEED_BELOW_EXPECTED", "POE_PORT_FAULT"} {
+		if got[code] != 1 {
+			t.Errorf("%s: %v", code, got)
+		}
+	}
+	if len(got) != 4 {
+		t.Errorf("unexpected events: %v", got)
+	}
+	var phy *Alert
+	for _, alert := range e.Alerts() {
+		if alert.Code == "PHY_ERRORS" {
+			phy = &alert
+		}
+	}
+	if phy == nil || phy.RawCounters["dot3StatsFCSErrors"] != "112" {
+		t.Fatalf("raw counter missing: %+v", phy)
+	}
+	want := map[string][2]string{
+		"EEE_ON_AV_PORT": {"enable", "disable"}, "FLOWCTRL_ON_AV_PORT": {"enabledXmit", "disable"},
+		"DSCP_TRUST": {"trustDot1p", "trustIpDscp"}, "DUPLEX": {"halfDuplex", "fullDuplex"},
+		"NDI4_NEEDS_FLOWCTRL": {"disabled", "enable"}, "QSYS_MTU": {"9216", "1522"},
+		"BCAST_STORM_CTRL_UPLINK": {"enable", "disable"}, "MCAST_STORM_CTRL_UPLINK": {"enable", "disable"},
+		"UPLINK_MTU_MISMATCH": {"9216", "1522"},
+	}
+	peerRows := 0
+	for _, row := range PortRecommendations(e.States()) {
+		if row.SwitchID == 2 && row.Port == "1/0/1" && row.Code == "UPLINK_MTU_MISMATCH" && row.Current == "1522" && row.Recommended == "9216" {
+			peerRows++
+			continue
+		}
+		values := [2]string{row.Current, row.Recommended}
+		if row.SwitchID != 1 || row.Port == "1/0/5" || row.Port == "1/0/6" || values != want[row.Code] {
+			t.Errorf("unexpected recommendation: %+v", row)
+		}
+		if (row.Code == "NDI4_NEEDS_FLOWCTRL" || row.Code == "UPLINK_MTU_MISMATCH") && row.Source != "NETGEAR ProAV Guide" {
+			t.Errorf("source missing: %+v", row)
+		}
+		delete(want, row.Code)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing recommendations: %v", want)
+	}
+	if peerRows != 1 {
+		t.Errorf("peer recommendations: %d", peerRows)
+	}
+}
+
+func TestRestoreSkipsPastRecommendations(t *testing.T) {
+	e, st := newTestEngine(t)
+	for _, code := range []string{"EEE_ON_AV_PORT", "PHY_ERRORS"} {
+		ev := model.Event{TS: time.Now(), Category: "ANOMALY", Severity: model.SevWarning, Code: code,
+			SwitchID: 1, IfIndex: 1, Detail: map[string]any{"_profile_id": e.ProfileID()}}
+		if inserted, err := st.InsertEvent(&ev); err != nil || !inserted {
+			t.Fatalf("insert %s: %v (%v)", code, err, inserted)
+		}
+	}
+	e.restoreAlerts()
+	alerts := e.Alerts()
+	if len(alerts) != 1 || alerts[0].Code != "PHY_ERRORS" {
+		t.Fatalf("restored alerts: %+v", alerts)
+	}
+	if saved := codes(t, st); saved["EEE_ON_AV_PORT"] != 1 {
+		t.Fatalf("past events were changed: %v", saved)
+	}
+}
+
+func TestPortRecommendationsSkipMissingAndUnreachableData(t *testing.T) {
+	states := []*model.SwitchState{nil,
+		{ID: 1, Reachable: true, Ports: []*model.Port{nil}},
+		{ID: 2, Reachable: false, Ports: []*model.Port{{AVRole: "dante", EEE: "enable"}}},
+	}
+	if rows := PortRecommendations(states); len(rows) != 0 {
+		t.Fatalf("recommendations from unavailable data: %+v", rows)
 	}
 }

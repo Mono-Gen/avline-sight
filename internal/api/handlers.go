@@ -498,7 +498,7 @@ func (s *Server) putWatchlist(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) audit(w http.ResponseWriter, r *http.Request) {
 	fs, fw := s.Engine.Audit()
-	writeJSON(w, 200, map[string]any{"findings": fs, "fw_versions": fw})
+	writeJSON(w, 200, map[string]any{"findings": fs, "fw_versions": fw, "port_recommendations": engine.PortRecommendations(s.Engine.States())})
 }
 
 func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
@@ -1032,7 +1032,7 @@ func (s *Server) replaySnapshot(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 404, "スナップショットがありません", err.Error(), "")
 		return
 	}
-	result := map[string]any{"ts": at, "switches": snapshot.States}
+	result := map[string]any{"ts": at, "switches": snapshot.States, "port_recommendations": engine.PortRecommendations(snapshot.States)}
 	if snapshot.Alerts != nil {
 		result["alerts"] = snapshot.Alerts
 	}

@@ -9,8 +9,8 @@ import { Chart } from './Chart';
 import { AlertEntry } from './AlertBand';
 import { PortHardware } from './PortHardware';
 
-export function PortDetail({ switchId, switchName, port, devices, alerts, close, replay }: {
-  switchId: number; switchName: string; port: Port; devices: InventoryRow[]; alerts: Alert[]; close: () => void; replay: boolean;
+export function PortDetail({ switchId, switchName, port, devices, alerts, close, replay, expert }: {
+  switchId: number; switchName: string; port: Port; devices: InventoryRow[]; alerts: Alert[]; close: () => void; replay: boolean; expert?: boolean;
 }) {
   const metrics = usePolling(signal => {
     const to = new Date();
@@ -36,7 +36,7 @@ export function PortDetail({ switchId, switchName, port, devices, alerts, close,
     </section>)}
     <PortHardware port={port} />
     {alerts.map(alert => <section key={alert.event_id} className="border-b border-slate-600 py-3">
-      <AlertEntry alert={alert} busy={false} />
+      <AlertEntry alert={alert} busy={false} expert={expert} />
       <p>{t('rack.acked')}: {alert.acked_at ? <time dateTime={alert.acked_at}>{pcTimestamp(alert.acked_at)}</time> : '—'}</p>
     </section>)}
     <h3 className="mt-4 font-bold">{t('rack.bandwidth')}</h3>

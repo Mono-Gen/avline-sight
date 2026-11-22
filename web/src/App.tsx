@@ -17,6 +17,7 @@ import { monitoringStopped } from './monitorHealth';
 import { usePcTime } from './pcTime';
 import { useDesktopNotifications } from './useDesktopNotifications';
 import { PortMonitor } from './views/PortMonitor';
+import { Recommendations } from './views/Recommendations';
 import { Topology } from './views/Topology';
 import { useLiveFeed } from './useLiveFeed';
 import { t, useLang } from './i18n';
@@ -24,9 +25,10 @@ import { useOperations } from './useOperations';
 import { replayIssueCount, summarizeAlerts } from './wallAlerts';
 import type { PortMonitorTarget } from './views/props';
 import { groupSwitches, hasGroupFilter } from './views/props';
-const pages = ['monitor', 'topology', 'devices', 'details', 'logs'] as const;
-type Page = typeof pages[number] | 'switch';
-const replayPages: readonly string[] = ['monitor', 'switch', 'devices', 'details'];
+const normalPages = ['monitor', 'devices', 'logs'] as const;
+const expertPages = ['details', 'topology'] as const;
+type Page = typeof normalPages[number] | typeof expertPages[number] | 'switch';
+const replayPages: readonly Page[] = ['monitor', 'switch', 'devices', 'details'];
 const emptyReplay: SwitchState[] = [];
 const empty: Overview = {
   switches: [],
@@ -56,9 +58,11 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = language; }, [language]);
   const [page, setPage] = useState<Page>('monitor');
   const [monitorTarget, setMonitorTarget] = useState<PortMonitorTarget>();
-  const [detailTab, setDetailTab] = useState<'multicast' | 'dhcp' | 'health' | 'config'>('multicast');
+  const [detailTab, setDetailTab] = useState<'multicast' | 'dhcp' | 'health' | 'config' | 'recommendations'>('multicast');
   const [theme, setTheme] = useState(() => get('theme', 'dark'));
   const [notifications, setNotifications] = useState(() => get('desktop-notifications', 'false') === 'true');
+  const [expert, setExpert] = useState(() => get('expert-display', 'false') === 'true');
+  const pages = expert ? [...normalPages, ...expertPages] : normalPages;
   const [overview, setOverview] = useState(empty);
   const [status, setStatus] = useState<Status>();
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -86,6 +90,14 @@ export default function App() {
     return () => document.documentElement.classList.remove('wall-active');
   }, [wall]);
   const [terminal, setTerminal] = useState(0);
+  const changeExpert = (enabled: boolean) => {
+    setExpert(enabled);
+    put('expert-display', String(enabled));
+    if (!enabled) {
+      setTerminal(0);
+      if (page === 'details' || page === 'topology') setPage('monitor');
+    }
+  };
   const [dialog, setDialog] = useState('');
   const trapHelpShown = useRef(false);
   const [replay, setReplay] = useState<ReplaySession | null>(null);
@@ -188,7 +200,7 @@ export default function App() {
     const url = `/api/replay/${encodeURIComponent(replayId)}/snapshot?ts=${encodeURIComponent(replayStart)}`;
     void api<ReplaySnapshot>(url, { signal: controller.signal }).then(result => {
       if (controller.signal.aborted) return;      setReplay(old => old?.id === replayId && !old.ts
-        ? { ...old, ts: result.ts, requestedTs: replayStart, states: asArray(result.switches), alerts: result.alerts }
+        ? { ...old, ts: result.ts, requestedTs: replayStart, states: asArray(result.switches), alerts: result.alerts, portRecommendations: result.port_recommendations }
         : old);
     }).catch(reason => {
       if (!controller.signal.aborted) setError(message(reason));
@@ -198,7 +210,7 @@ export default function App() {
   const snapshot = (id: string, ts: string) => run(async () => {
     const result = await api<ReplaySnapshot>(`/api/replay/${encodeURIComponent(id)}/snapshot?ts=${encodeURIComponent(ts)}`);
     setReplay(old => old?.id === id
-      ? { ...old, ts: result.ts, requestedTs: ts, states: asArray(result.switches), alerts: result.alerts }
+      ? { ...old, ts: result.ts, requestedTs: ts, states: asArray(result.switches), alerts: result.alerts, portRecommendations: result.port_recommendations }
       : old);
   });
   const select = (id: number) => {
@@ -234,6 +246,7 @@ export default function App() {
     ...viewScope,
     operations,
     wall,
+    expert,
     onTrapHelp: () => setDialog('trap'),
     status,
     selected,
@@ -251,13 +264,13 @@ export default function App() {
     run,
     busy,
     locked,
-    openTerminal: setTerminal,
+    openTerminal: expert && !locked ? setTerminal : undefined,
     watch,
     setWatch
   };
   return <div className={wall ? 'wall-shell' : 'min-h-screen'}>
     <AppHeader {...{ online, phase: operations.phase || status?.phase, onPhase: operations.setPhase, onTrapHelp: props.onTrapHelp,
-      wall, setWall, status, busy, locked, profiles, settings, groupSelection, groupNames, replay, markerInput, run, refresh, setDialog, summary,
+      wall, setWall, expert, status, busy, locked, profiles, settings, groupSelection, groupNames, replay, markerInput, run, refresh, setDialog, summary,
       updatedAt: replay ? replay.ts : live.updatedAt }}
       setGroupSelection={value => {
         if (value === groupSelection) return;
@@ -287,7 +300,7 @@ export default function App() {
     </div>}
     <div className={wall ? 'wall-content' : 'flex flex-col md:flex-row'}>
       {!wall && <nav className="app-nav">
-        {asArray(pages).map(v => <button
+        {pages.map(v => <button
           key={v}
           disabled={!!replay && !replayPages.includes(v)}
           aria-current={page === v || page === 'switch' && v === 'monitor' ? 'page' : undefined}
@@ -302,18 +315,18 @@ export default function App() {
           {(wall || page === 'monitor') && <PortMonitor key={status?.profile.id || 0} {...props} target={wall ? undefined : monitorTarget}
             onClosePortDetail={() => setMonitorTarget(undefined)} />}
 
-          {!wall && page === 'topology' && <Topology {...props} />}
+          {!wall && expert && page === 'topology' && <Topology {...props} />}
 
           {!wall && page === 'switch' && <SwitchPorts {...props} />}
 
 
           {!wall && page === 'devices' && <Devices {...props} />}
 
-          {!wall && page === 'details' && <>
+          {!wall && expert && page === 'details' && <>
             <div role="tablist" aria-label={t('cleanup.details')} className="detail-tabs">
-              {(['multicast', 'dhcp', 'health', 'config'] as const).map(tab => <button key={tab} role="tab" id={`tab-${tab}`}
+              {(['multicast', 'dhcp', 'health', 'config', 'recommendations'] as const).map(tab => <button key={tab} role="tab" id={`tab-${tab}`}
                 aria-controls="detail-panel" aria-selected={activeDetailTab === tab} disabled={!!replay && (tab === 'dhcp' || tab === 'config')} onClick={() => setDetailTab(tab)}>
-                {tab === 'config' ? t('configChanges.title') : t(`rack.nav.${tab}`)}
+                {tab === 'config' ? t('configChanges.title') : tab === 'recommendations' ? t('expert.recommendations') : t(`rack.nav.${tab}`)}
               </button>)}
             </div>
             <div role="tabpanel" id="detail-panel" aria-labelledby={`tab-${activeDetailTab}`}>
@@ -321,6 +334,7 @@ export default function App() {
               {activeDetailTab === 'dhcp' && <DhcpView {...props} />}
               {activeDetailTab === 'health' && <HealthAudit {...props} select={setSelected} />}
               {activeDetailTab === 'config' && <ConfigChanges key={status?.profile.id} {...props} />}
+              {activeDetailTab === 'recommendations' && <Recommendations {...props} replayRows={replay?.portRecommendations} />}
             </div>
           </>}
 
@@ -328,7 +342,7 @@ export default function App() {
         </ErrorBoundary>
       </main>
     </div>
-    {!wall && terminal > 0 && !locked && <TerminalDrawer id={terminal} close={() => setTerminal(0)} />}
+    {!wall && expert && terminal > 0 && !locked && <TerminalDrawer id={terminal} close={() => setTerminal(0)} />}
 
     {!wall && !locked && dialog === 'export' && <ExportDialog close={() => setDialog('')} busy={busy} run={run} />}
 
@@ -336,7 +350,8 @@ export default function App() {
     {!wall && dialog === 'settings' && settings && <SettingsDialog
       key={profileId}
       locked={locked}
-      tools={<SettingsTools {...{ theme, setTheme, notifications, setNotifications, busy, locked, groups: operations.groups, profileId, run, setDialog }}
+      tools={<SettingsTools {...{ theme, setTheme, notifications, setNotifications, expert, busy, locked, groups: operations.groups, profileId, run, setDialog }}
+        setExpert={changeExpert}
         replay={!!replay} refresh={operations.refresh} setReplay={next => { setPage('monitor'); setReplay(next); }} />}
       value={settings}
       webAddr={status?.web_addr}

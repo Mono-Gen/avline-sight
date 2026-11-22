@@ -25,9 +25,9 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
             {row.slots.map((port, position) => {
               if (!port) return <span key={`gap-${position}`} className="w-20 shrink-0" aria-hidden="true" />;
               const state = lampState(port, matchingPortAlerts(alerts, switchId, port.if_index), reachable);
-              const fault = state.issues.find(alert =>
-                (state.tone === 'critical' ? alert.active : !alert.active) &&
-                (alert.code === 'POE_PORT_FAULT' || alert.code === 'POE_FAULT'));
+              // 他のアラートが発生中でも、未確認のPoE障害は隠さない（発生中を優先）
+              const isPoeFault = (alert: Alert) => alert.code === 'POE_PORT_FAULT' || alert.code === 'POE_FAULT';
+              const fault = state.issues.find(alert => alert.active && isPoeFault(alert)) ?? state.issues.find(isPoeFault);
               return (
                 <button
                   key={port.if_index}

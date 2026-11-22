@@ -5,8 +5,9 @@ import { sortedAlerts } from '../rackModel';
 import type { Alert } from '../types';
 import { alertTone, groupWallAlerts, summarizeAlerts } from '../wallAlerts';
 import { ErrorSymbol } from './ErrorSymbol';
+import { AlertTechnicalDetails } from './AlertTechnicalDetails';
 
-export function AlertEntry({ alert, busy, ack }: { alert: Alert; busy: boolean; ack?: (id: number) => void }) {
+export function AlertEntry({ alert, busy, ack, expert }: { alert: Alert; busy: boolean; ack?: (id: number) => void; expert?: boolean }) {
   const hint = eventHint(alert);
   const tone = alertTone(summarizeAlerts([alert]), false);
   const recoveredAt = !alert.active && alert.cleared_at;
@@ -21,13 +22,14 @@ export function AlertEntry({ alert, busy, ack }: { alert: Alert; busy: boolean; 
       </div>
       <p>{eventTitle(alert)}</p>
       {hint && <p className="alert-hint">{hint}</p>}
+      {expert && <AlertTechnicalDetails counters={alert.raw_counters ?? alert.detail?.raw_counters} />}
     </div>
     {ack && canAcknowledgeAlert(alert) && <button className="button-primary" data-action="ack" disabled={busy} onClick={() => ack(alert.event_id)}>{t('rack.ack')}</button>}
   </article>;
 }
-export function AlertBand({ alerts, wall = false, busy = false, ack, ackMany, pending = false, locked = false, undoCount = 0, undo }: {
+export function AlertBand({ alerts, wall = false, busy = false, ack, ackMany, pending = false, locked = false, undoCount = 0, undo, expert }: {
   alerts: Alert[]; wall?: boolean; busy?: boolean; ack?: (id?: number) => void; ackMany?: (ids: number[]) => void;
-  pending?: boolean; locked?: boolean; undoCount?: number; undo?: () => void;
+  pending?: boolean; locked?: boolean; undoCount?: number; undo?: () => void; expert?: boolean;
 }) {
   const counts = summarizeAlerts(alerts);
   const rows = wall ? counts.items.filter(alert => !alert.acked) : sortedAlerts([
@@ -50,11 +52,11 @@ export function AlertBand({ alerts, wall = false, busy = false, ack, ackMany, pe
     {!locked && undoCount > 0 && undo && <div className="ack-undo" role="status">{t('wall.acknowledged', { count: undoCount })} <button data-action="undo" disabled={busy} onClick={undo}>{t('wall.undo')}</button></div>}
     <div className="alert-list" role="log" aria-live="polite">
       {rows.length ? wall ? groups.map(group => <div key={group.key} className={`wall-alert-group ${group.members.some(alert => alert.active) ? 'alert-active' : 'alert-recovered'}`}>
-        <AlertEntry alert={group.alert} busy={busy} ack={canAck ? () => ackMany ? ackMany(group.members.map(alert => alert.event_id)) : ack?.(group.alert.event_id) : undefined} />
+        <AlertEntry alert={group.alert} busy={busy} expert={expert} ack={canAck ? () => ackMany ? ackMany(group.members.map(alert => alert.event_id)) : ack?.(group.alert.event_id) : undefined} />
         {group.members.length > 1 && <details><summary>{eventTitle(group.alert)}{t('wall.related', { count: group.members.length })}</summary>
-          {group.members.map(alert => <AlertEntry key={alert.event_id} alert={alert} busy={busy} />)}
+          {group.members.map(alert => <AlertEntry key={alert.event_id} alert={alert} busy={busy} expert={expert} />)}
         </details>}
-      </div>) : rows.map(alert => <AlertEntry key={alert.event_id} alert={alert} busy={busy} ack={canAck ? ack : undefined} />)
+      </div>) : rows.map(alert => <AlertEntry key={alert.event_id} alert={alert} busy={busy} expert={expert} ack={canAck ? ack : undefined} />)
         : pending ? <p>{t('rack.loading')}</p> : <p className="alert-clear">{t('rack.clear')}</p>}
     </div>
   </section>;

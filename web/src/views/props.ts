@@ -25,7 +25,8 @@ export interface ViewProps {
   run: (f: () => Promise<void>) => void;
   busy: boolean;
   locked: boolean;
-  openTerminal: (id: number) => void;
+  expert?: boolean;
+  openTerminal?: (id: number) => void;
   watch: WatchItem[];
   setWatch: (w: WatchItem[]) => void;
 }

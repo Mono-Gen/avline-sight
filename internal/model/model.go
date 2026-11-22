@@ -54,6 +54,9 @@ type SwitchState struct {
 	Neighbors   []Neighbor        `json:"neighbors"`
 	Caps        map[string]string `json:"caps"` // 機能グループ→SUPPORTED/UNSUPPORTED/FALLBACK_USED
 	AlertCounts map[string]int    `json:"alert_counts"`
+
+	MbufFailCounters          map[string]string `json:"-"`
+	DHCPInvalidServerCounters map[string]string `json:"-"`
 }
 
 // Port はポート1つの状態と直近レート。
@@ -86,6 +89,8 @@ type Port struct {
 	PauseDelta   uint64 `json:"pause_delta"`
 	LPIDelta     uint64 `json:"lpi_delta"`
 	CosDropDelta uint64 `json:"cos_drop_delta"`
+
+	RawCounters map[string]string `json:"-"`
 
 	// ソフト・カウンタゼロリセット基準からの累積（UI観測モード用）
 	ErrSinceReset     uint64 `json:"err_since_reset"`

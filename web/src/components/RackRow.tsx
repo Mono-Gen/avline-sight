@@ -84,7 +84,8 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, wall
             window.open(url.href, '_blank', 'noopener,noreferrer');
           })}>WebUI</button>}
           {!actions.locked && <>
-            <button disabled={actions.busy} onClick={() => actions.openTerminal(sw.id)}>{t('rack.terminal')}</button>
+            {actions.expert && actions.openTerminal && <button disabled={actions.busy}
+              onClick={() => actions.openTerminal?.(sw.id)}>{t('rack.terminal')}</button>}
             <button disabled={actions.busy} onClick={() => actions.run(async () => {
               const configs = await api<SwitchConfig[]>('/api/switches');
               const config = asArray(configs).find(item => item.id === sw.id);

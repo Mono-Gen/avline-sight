@@ -20,6 +20,7 @@ export interface Alert {
   suppressed_by: 'phase' | '';
   hint?: string;
   detail?: Record<string, unknown>;
+  raw_counters?: Record<string, string>;
 }
 export interface SwitchGroup {
   name: string;

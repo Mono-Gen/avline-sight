@@ -1,5 +1,5 @@
 export const rackJa = {
-  nav: { overview: '俯瞰', topology: 'トポロジー', monitor: 'ポートモニター', ports: 'ポート一覧', devices: '接続機器', multicast: 'マルチキャスト・AV', dhcp: 'DHCP', health: 'ヘルス・監査', logs: 'ログ・イベント' },
+  nav: { overview: '俯瞰', topology: 'トポロジー', monitor: 'ポートモニター', ports: 'ポート一覧', devices: '接続機器', multicast: 'マルチキャスト・AV', dhcp: 'DHCP', health: 'ヘルス・監査', logs: 'ログ' },
   wall: '壁表示', exitWall: '壁表示を終了', language: '表示言語', all: 'すべて', ungrouped: '未所属',
   phase: '運用フェーズ', setup: '設営', rehearsal: 'リハ', show: '本番',
   phaseConfirm: '「{phase}」へ変更しますか？\n{effect}',
@@ -22,7 +22,7 @@ export const rackJa = {
   profile: 'プロファイル', part: '担当パート', replay: '⏪ オフライン再生', connecting: '⚠ 接続待機', light: '☀ ライト', dark: '☾ ダーク', pin: 'PINを入力してください', locked: '🔒 ロック中', lock: '🔓 編集可（ロックする）', export: '書出', settings: '設定', marker: 'マーカーのメモを入力してください', busy: '処理中…', error: '操作に失敗しました（{reason}）。接続や入力を確認して再試行してください。', unknown: '原因不明', invalidURL: 'URLが不正です。アクセス設定を確認してください。',
 };
 export const rackEn: typeof rackJa = {
-  nav: { overview: 'Overview', topology: 'Topology', monitor: 'Port monitor', ports: 'Ports', devices: 'Devices', multicast: 'Multicast / AV', dhcp: 'DHCP', health: 'Health / Audit', logs: 'Logs / Events' },
+  nav: { overview: 'Overview', topology: 'Topology', monitor: 'Port monitor', ports: 'Ports', devices: 'Devices', multicast: 'Multicast / AV', dhcp: 'DHCP', health: 'Health / Audit', logs: 'Logs' },
   wall: 'Wall display', exitWall: 'Exit wall display', language: 'Language', all: 'All', ungrouped: 'Ungrouped',
   phase: 'Operating phase', setup: 'Setup', rehearsal: 'Rehearsal', show: 'Show',
   phaseConfirm: 'Change to {phase}?\n{effect}',

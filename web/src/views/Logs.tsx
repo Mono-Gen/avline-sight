@@ -4,6 +4,7 @@ import { api } from '../api';
 import { acknowledgeEvents } from '../acknowledge';
 import { confirmAck } from '../useOperations';
 import { Badge } from '../components/Badge';
+import { AlertTechnicalDetails } from '../components/AlertTechnicalDetails';
 import { PollingStatus } from '../components/PollingStatus';
 import type { EventFilters } from '../events';
 import { acknowledgeableEventIds, canAcknowledgeEvent, logRows, SEARCH_EVENT_LIMIT, syslogMessage } from '../events';
@@ -19,18 +20,19 @@ const categories = ['ANOMALY', 'CONNECT', 'TRAP', 'SYSLOG', 'BASELINE', 'CONFIG'
 const categoryLabel = (category: string) => category === 'CONFIG' ? t('configChanges.title') : category;
 const severities = { CRITICAL: 'ui.m005', WARNING: 'ui.m006', INFO: 'ui.m007' } as const;
 
-export function LogEventRow({ event, ackable, disabled, onAcknowledge }: {
-  event: Event; ackable: ReadonlySet<number>; disabled: boolean; onAcknowledge: (id: number) => void;
+export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert }: {
+  event: Event; ackable: ReadonlySet<number>; disabled: boolean; onAcknowledge: (id: number) => void; expert?: boolean;
 }) {
-  const syslog = event.category === 'SYSLOG';
+  const syslog = event.category === 'SYSLOG' ? syslogMessage(event.title) : undefined;
   return <tr>
     <td className="whitespace-nowrap"><time dateTime={event.ts}>{pcTimestamp(event.ts, true)}</time></td>
     <td><Badge text={event.severity} /></td><td>{categoryLabel(event.category)}</td>
     <td>{event.switch_name}</td>
-    <td>{syslog ? <details className="log-message">
-      <summary>{syslogMessage(event.title)}</summary>
+    <td>{syslog !== undefined ? (expert ? <details className="log-message">
+      <summary>{syslog}</summary>
       <pre>{event.title}</pre>
-    </details> : <>{eventTitle(event)} {eventHint(event)}</>}</td>
+    </details> : syslog) : <>{eventTitle(event)} {eventHint(event)}
+      {expert && <AlertTechnicalDetails counters={event.detail?.raw_counters} />}</>}</td>
     <td className="whitespace-nowrap">{event.acked && event.severity !== 'INFO' ? t('ui.m269') : canAcknowledgeEvent(event, ackable) ? <button
       className="button-primary" data-action="ack" disabled={disabled} onClick={() => onAcknowledge(event.id)}
     >{t('ui.m268')}</button> : '—'}</td>
@@ -145,7 +147,7 @@ export function Logs(props: ViewProps) {
           <thead><tr><th className="whitespace-nowrap">{t('logs.receivedAt')}</th><th>{t('ui.m026')}</th><th>{t('ui.m083')}</th><th>{t('ui.m018')}</th><th>{t('ui.m028')}</th><th className="whitespace-nowrap">{t('ui.m268')}</th></tr></thead>
           <tbody>
             {rows.map(event => (
-              <LogEventRow key={event.id} event={event} ackable={ackable} disabled={disabled}
+              <LogEventRow key={event.id} event={event} ackable={ackable} disabled={disabled} expert={props.expert}
                 onAcknowledge={id => props.run(() => acknowledge([id]))} />
             ))}
           </tbody>

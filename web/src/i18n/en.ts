@@ -3,6 +3,20 @@ import { eventEn } from './eventEn';
 import type { Dictionary } from './index';
 import { rackEn } from './rack';
 export const en: Dictionary = {
+  expert: {
+    setting: 'Expert display', badge: 'Expert', recommendations: 'Settings that differ from recommendations',
+    noRecommendations: 'No differences from recommendations on the ports shown.',
+    technical: 'Technical details', mibName: 'MIB name', rawCounter: 'Raw counter value',
+    port: 'Port', field: 'Setting', current: 'Current value', recommended: 'Recommended value', reference: 'Source',
+    source: 'Reference: {name} (edition not recorded)', noSource: 'Source not recorded',
+    qsysMtu: 'MTU 1500 (maximum frame {frame} B)', peerMtu: 'Match peer port (peer: {frame} B)',
+    rules: {
+      EEE_ON_AV_PORT: 'EEE', FLOWCTRL_ON_AV_PORT: 'Flow control (operating mode)', NDI4_NEEDS_FLOWCTRL: 'Flow control (NDI4 operating mode)',
+      DSCP_TRUST: 'DSCP Trust', BCAST_STORM_CTRL_UPLINK: 'Broadcast storm control',
+      MCAST_STORM_CTRL_UPLINK: 'Multicast storm control', QSYS_MTU: 'Maximum frame (Q-SYS)',
+      UPLINK_MTU_MISMATCH: 'Maximum frame (uplink)', DUPLEX: 'Duplex',
+    },
+  },
   configChanges: {
     title: 'Configuration changes', latestBaseline: 'Changes from the latest baseline',
     comparing: 'Comparing with “{name}” ({time}).',

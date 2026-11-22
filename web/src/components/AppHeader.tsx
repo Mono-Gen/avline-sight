@@ -6,18 +6,20 @@ import type { Phase, Profile, Settings, Status } from '../types';
 import { t } from '../i18n';
 import { PcClock, PhaseControls } from './PhaseControls';
 import { jstTime } from '../pcTime';
+import { Badge } from './Badge';
 interface HeaderProps {
   online: boolean; phase?: Phase; onPhase: (phase: Phase) => void; onTrapHelp: () => void;
-  wall: boolean; setWall: (value: boolean) => void; status?: Status; busy: boolean; locked: boolean;
+  wall: boolean; setWall: (value: boolean) => void; expert?: boolean; status?: Status; busy: boolean; locked: boolean;
   profiles: Profile[]; settings?: Settings; groupSelection: string; setGroupSelection: (value: string) => void; groupNames?: string[];
   replay: unknown; markerInput: RefObject<HTMLInputElement>; summary?: ReactNode;
   updatedAt?: number | string;
   run: (action: () => Promise<void>) => void; refresh: () => Promise<void>; setDialog: (value: string) => void;
 }
-export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, status, busy, locked,
+export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, expert, status, busy, locked,
   profiles, settings, groupSelection, setGroupSelection, groupNames = [], replay, markerInput, run, refresh, setDialog, summary, updatedAt }: HeaderProps) {
   const [note, setNote] = useState('');
   const phaseControl = <PhaseControls {...{ phase, locked, busy, wall, run, onPhase }} />;
+  const expertBadge = expert && <Badge text={t('expert.badge')} />;
   const clock = <div className="header-time"><PcClock /><small>{t('rack.lastUpdated', { at: jstTime(updatedAt ?? NaN) })}</small></div>;
   const groupFilter = <label>{t('pages.groupLabel')} <select aria-label={t('pages.group')} value={groupSelection}
     onChange={event => setGroupSelection(event.target.value)}>
@@ -28,12 +30,13 @@ export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, s
     </optgroup>}
   </select></label>;
   if (wall) return <header className="wall-header">
-    {summary}{phaseControl}{groupFilter}{clock}
+    {summary}{phaseControl}{groupFilter}{clock}{expertBadge}
     <button className="wall-exit" onClick={() => setWall(false)}>{t('wall.exit')}</button>
   </header>;
   return <header className="app-header">
     <div className="header-controls">
       <strong className="text-xl">AVLine-Sight</strong>
+      {expertBadge}
       <span>{replay ? t('rack.replay') : online ? '● LIVE' : t('rack.connecting')}</span>
       {phaseControl}
       {status?.trap && <button onClick={onTrapHelp} title={[status.trap.addr, status.trap.error].filter(Boolean).join(' · ')}

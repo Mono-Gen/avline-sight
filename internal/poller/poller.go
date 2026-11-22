@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gosnmp/gosnmp"
 
 	"github.com/Mono-Gen/avline-sight/internal/model"
 	sx "github.com/Mono-Gen/avline-sight/internal/snmpx"
@@ -212,6 +215,10 @@ func (w *worker) snapshot() *model.SwitchState {
 	}
 	// FDBの内部観測は配信・再生に含めない。次の取得ではマップごと差し替える。
 	cp.FDBLastOK, cp.FDBPorts = w.st.FDBLastOK, w.st.FDBPorts
+	for i, port := range cp.Ports {
+		port.RawCounters = maps.Clone(w.st.Ports[i].RawCounters)
+	}
+	cp.MbufFailCounters, cp.DHCPInvalidServerCounters = w.st.MbufFailCounters, w.st.DHCPInvalidServerCounters
 	return &cp
 }
 
@@ -438,7 +445,7 @@ func (w *worker) onLinkChange(p *model.Port, oper string, spd int) {
 	}
 }
 
-func (w *worker) onPoEChange(p *model.Port, prev, cur *model.PoE) {
+func (w *worker) onPoEChange(p *model.Port, prev, cur *model.PoE, cols map[string]gosnmp.SnmpPDU) {
 	if prev.Detect != cur.Detect {
 		sev := model.SevInfo
 		if cur.Detect == "fault" || cur.Detect == "otherFault" {
@@ -450,7 +457,8 @@ func (w *worker) onPoEChange(p *model.Port, prev, cur *model.PoE) {
 	if cur.OverloadCnt > prev.OverloadCnt || cur.DeniedCnt > prev.DeniedCnt || cur.ShortCnt > prev.ShortCnt {
 		w.emit(model.Event{Category: "ANOMALY", Severity: model.SevCritical, Code: "POE_FAULT", IfIndex: p.IfIndex,
 			Title: fmt.Sprintf("%s PoE障害（Overload/Denied/Short）", p.Name), Hint: "PoE電力不足または受電機器側の異常・短絡の疑い",
-			Detail: map[string]any{"overload": cur.OverloadCnt, "denied": cur.DeniedCnt, "short": cur.ShortCnt}})
+			Detail: map[string]any{"overload": cur.OverloadCnt, "denied": cur.DeniedCnt, "short": cur.ShortCnt,
+				"raw_counters": captureCounters(nil, cols, poeCounters)}})
 	}
 }
 

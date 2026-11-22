@@ -88,7 +88,8 @@ export function SwitchPorts(p: ViewProps) {
           {x.name}
         </option>)}
       </select>
-      <button disabled={!selected || selected !== p.selected || p.locked} onClick={() => p.openTerminal(selected)}>{t('ui.m279')}</button>
+      {p.expert && <button disabled={!selected || selected !== p.selected || p.locked || !p.openTerminal}
+        onClick={() => p.openTerminal?.(selected)}>{t('ui.m279')}</button>}
       <button
         disabled={!selected || selected !== p.selected || !!p.replay}
         onClick={() => p.run(async () => {
@@ -247,7 +248,7 @@ export function SwitchPorts(p: ViewProps) {
           />
           <h3>{t('ui.m301')}</h3>
           <PollingStatus {...metrics} />
-          <Table rows={metrics.data?.history || []} />
+          <Table rows={metrics.data?.history || []} hide={p.expert ? [] : ['detail']} />
         </>}
       </section>}
     </>}

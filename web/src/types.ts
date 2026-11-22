@@ -158,6 +158,17 @@ export interface DhcpData {
 export interface Audit {
   findings: Finding[];
   fw_versions: Record<string, string[]>;
+  port_recommendations?: PortRecommendation[];
+}
+export interface PortRecommendation {
+  switch_id: number;
+  port: string;
+  code: 'EEE_ON_AV_PORT' | 'FLOWCTRL_ON_AV_PORT' | 'NDI4_NEEDS_FLOWCTRL' | 'DSCP_TRUST' |
+    'BCAST_STORM_CTRL_UPLINK' | 'MCAST_STORM_CTRL_UPLINK' | 'QSYS_MTU' | 'UPLINK_MTU_MISMATCH' | 'DUPLEX';
+  current: string;
+  recommended: string;
+  source?: string;
+  reference?: string;
 }
 export interface MetricResult {
   resolution: string;
@@ -203,6 +214,7 @@ export interface ReplaySession {
   id: string;
   timeline: Timeline;
   states: SwitchState[];
+  portRecommendations?: PortRecommendation[];
   alerts?: import('./operationTypes').Alert[];
   ts?: string;
   requestedTs?: string;
@@ -211,6 +223,7 @@ export interface ReplaySession {
 export interface ReplaySnapshot {
   ts: string;
   switches: SwitchState[];
+  port_recommendations?: PortRecommendation[];
   alerts?: import('./operationTypes').Alert[];
 }
 
