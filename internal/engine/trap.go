@@ -17,8 +17,8 @@ func linkFlapKey(ev model.Event) string {
 	return eventKey(ev) + "|flap|" + strconv.FormatInt(ev.ID, 10)
 }
 
-func isLinkMonitoringEvent(code string) bool {
-	return code == "LINK_DOWN" || code == "LINK_FLAP" || code == "linkDown"
+func isPortMonitoringEvent(code string, ifIndex int) bool {
+	return ifIndex > 0 && !deviceAlertCode(code)
 }
 
 func (e *Engine) SetFDBRequester(fn func(int64, time.Time)) {
@@ -44,7 +44,7 @@ func (e *Engine) requestFDBForLinkDown(id int64, ifIndex int) {
 		return
 	}
 	access := accessPorts(e.States())
-	last, err := e.st.LastSeenByMACPreferringPorts(pid, time.Now(), access.contains)
+	last, err := e.st.LastSeenByMACPreferringPorts(pid, time.Now(), access.rank)
 	if err != nil {
 		slog.Warn("リンク断時の機器の最終所在を取得できません", "err", err)
 		return

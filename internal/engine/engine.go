@@ -184,11 +184,11 @@ func (e *Engine) reload() {
 	}
 	e.clearKeysLocked(func(_ string, a *Alert) bool {
 		return a.SwitchID != 0 && !keep[a.SwitchID] ||
-			isLinkMonitoringEvent(a.Code) && e.portCfg[a.SwitchID][a.IfIndex].Excluded
+			isPortMonitoringEvent(a.Code, a.IfIndex) && e.portCfg[a.SwitchID][a.IfIndex].Excluded
 	}, func(a *Alert, now time.Time) bool {
 		_, registered := e.switchGroups[a.SwitchID]
 		return a.SwitchID != 0 && !registered ||
-			isLinkMonitoringEvent(a.Code) && e.portCfg[a.SwitchID][a.IfIndex].Excluded ||
+			isPortMonitoringEvent(a.Code, a.IfIndex) && e.portCfg[a.SwitchID][a.IfIndex].Excluded ||
 			a.Active && a.eventSuppressed && e.suppressedByLocked(a, now) != ""
 	})
 	e.exposeActiveAlertsLocked()
@@ -362,7 +362,7 @@ func (e *Engine) OnEvent(ev model.Event) {
 		e.persistEvent(&ev)
 		return
 	}
-	if isLinkMonitoringEvent(ev.Code) {
+	if isPortMonitoringEvent(ev.Code, ev.IfIndex) {
 		e.mu.RLock()
 		excluded := e.portCfg[ev.SwitchID][ev.IfIndex].Excluded
 		e.mu.RUnlock()
@@ -407,7 +407,7 @@ func (e *Engine) persistEvent(ev *model.Event) bool {
 		}
 		e.mu.RLock()
 		ev.Detail["_suppressed"] = e.suppressedByLocked(alertFromEvent(*ev), time.Now()) != "" ||
-			(isLinkMonitoringEvent(ev.Code) && e.portCfg[ev.SwitchID][ev.IfIndex].Excluded)
+			(isPortMonitoringEvent(ev.Code, ev.IfIndex) && e.portCfg[ev.SwitchID][ev.IfIndex].Excluded)
 		e.mu.RUnlock()
 	}
 	ok, err := e.st.InsertEvent(ev)

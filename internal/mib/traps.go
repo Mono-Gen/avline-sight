@@ -68,7 +68,10 @@ func TrapNeedsMedium(code string) bool {
 	switch code {
 	case "boxsFanStateChange", "boxsPowSupplyStateChange", "boxsTemperatureChange",
 		"boxsThermalShutdown", "boxsTemperatureStateChange", "boxsDyingGaspEventChange",
-		"fanFailureTrap", "powerSupplyStatusChangeTrap":
+		"fanFailureTrap", "powerSupplyStatusChangeTrap",
+		"pethMainPowerUsageOnNotification", "pethMainPowerUsageOffNotification",
+		"agentSwitchCpuRisingThresholdTrap", "agentSwitchCpuFallingThresholdTrap", "agentSwitchCpuFreeMemBelowThresholdTrap",
+		"agentSwitchMbufRisingThresholdTrap", "agentSwitchMbufFallingThresholdTrap":
 		return true
 	}
 	return false

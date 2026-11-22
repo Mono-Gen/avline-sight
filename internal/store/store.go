@@ -541,7 +541,7 @@ func (s *Store) LastSeenByMAC(profileID int64, at time.Time) (map[string]LastSee
 }
 
 // LastSeenByMACPreferringPorts はライブ監視で信頼できるポートを観測時刻より優先する。
-func (s *Store) LastSeenByMACPreferringPorts(profileID int64, at time.Time, preferred func(int64, int) bool) (map[string]LastSeen, error) {
+func (s *Store) LastSeenByMACPreferringPorts(profileID int64, at time.Time, preferred func(int64, int) int) (map[string]LastSeen, error) {
 	cut := ms(at)
 	rows, err := s.DB.Query(`SELECT mac, last_seen_ts, ip, switch_id, if_index FROM device_bindings WHERE profile_id=? AND first_seen_ts<=? ORDER BY id`, profileID, cut)
 	if err != nil {
@@ -569,11 +569,11 @@ func (s *Store) LastSeenByMACPreferringPorts(profileID int64, at time.Time, pref
 		mac = strings.ToUpper(mac)
 		cur, ok := out[mac]
 		if ok && preferred != nil {
-			wasPreferred, isPreferred := preferred(cur.SwitchID, cur.IfIndex), preferred(sw, ix)
-			if wasPreferred && !isPreferred {
+			oldRank, newRank := preferred(cur.SwitchID, cur.IfIndex), preferred(sw, ix)
+			if oldRank > newRank {
 				continue
 			}
-			if isPreferred && !wasPreferred {
+			if newRank > oldRank {
 				ok = false
 			}
 		}

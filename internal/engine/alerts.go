@@ -155,7 +155,7 @@ func (e *Engine) restoreAlerts() {
 		}
 		seen[identity] = true
 		if a.eventSuppressed || (a.ClearedAt == nil && e.suppressedByLocked(a, time.Now()) != "") ||
-			(isLinkMonitoringEvent(a.Code) && e.portCfg[a.SwitchID][a.IfIndex].Excluded) {
+			(isPortMonitoringEvent(a.Code, a.IfIndex) && e.portCfg[a.SwitchID][a.IfIndex].Excluded) {
 			continue
 		}
 		e.active[key] = a
@@ -340,7 +340,7 @@ func (e *Engine) reconcileStateAlerts(s *model.SwitchState) {
 		if a.SwitchID != s.ID || a.Active {
 			continue
 		}
-		if isLinkMonitoringEvent(a.Code) && e.portCfg[a.SwitchID][a.IfIndex].Excluded {
+		if isPortMonitoringEvent(a.Code, a.IfIndex) && e.portCfg[a.SwitchID][a.IfIndex].Excluded {
 			continue
 		}
 		on := a.Code == "SWITCH_UNREACHABLE" && !s.Reachable && !s.LastPoll.IsZero()

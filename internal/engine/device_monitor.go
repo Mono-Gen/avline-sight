@@ -34,6 +34,8 @@ func accessPorts(states []*model.SwitchState) accessPortSet {
 		for _, p := range s.Ports {
 			if !isUplink(s, p) {
 				ports[p.IfIndex] = true
+			} else {
+				ports[p.IfIndex] = false
 			}
 		}
 		out[s.ID] = ports
@@ -42,6 +44,17 @@ func accessPorts(states []*model.SwitchState) accessPortSet {
 }
 
 func (ports accessPortSet) contains(id int64, ix int) bool { return ports[id][ix] }
+
+func (ports accessPortSet) rank(id int64, ix int) int {
+	access, known := ports[id][ix]
+	if !known {
+		return 1
+	}
+	if access {
+		return 2
+	}
+	return 0
+}
 
 type Pinger interface {
 	One(context.Context, string, time.Duration) ping.Result
@@ -87,18 +100,22 @@ func (e *Engine) evaluateDevices(st *model.SwitchState, tier string) {
 	now := time.Now()
 	states := e.States()
 	checkMissing := tier == "slow" || tier == "fdb" || !st.Reachable
-	var preferred func(int64, int) bool
-	var access accessPortSet
-	if checkMissing {
-		access = accessPorts(states)
-		preferred = access.contains
-	}
-	last, err := e.st.LastSeenByMACPreferringPorts(pid, now, preferred)
+	last, err := e.st.LastSeenByMAC(pid, now)
 	if err != nil {
 		slog.Warn("機器の最終観測の読込に失敗", "err", err)
 		return
 	}
 	rows := BuildInventory(states, al, last, InventoryOptions{}, now)
+	var access accessPortSet
+	var locations map[string]store.LastSeen
+	if checkMissing {
+		access = accessPorts(states)
+		locations, err = e.st.LastSeenByMACPreferringPorts(pid, now, access.rank)
+		if err != nil {
+			slog.Warn("機器の最終所在の読込に失敗", "err", err)
+			return
+		}
+	}
 	registered := map[string]bool{}
 	for _, a := range al {
 		if a.MatchType == "mac" {
@@ -118,7 +135,7 @@ func (e *Engine) evaluateDevices(st *model.SwitchState, tier string) {
 	}
 	e.mu.Unlock()
 	if checkMissing {
-		e.evaluateMissingDevices(st, states, access, last, rows, registered, now)
+		e.evaluateMissingDevices(st, states, access, locations, rows, registered, now)
 	}
 	phase := e.Phase()
 	for _, r := range rows {
@@ -205,6 +222,12 @@ func (e *Engine) evaluateMissingDevices(st *model.SwitchState, states []*model.S
 			check.location = ls
 		}
 		id := check.location.SwitchID
+		if id != 0 && access.rank(id, check.location.IfIndex) == 0 {
+			delete(e.missing, mac)
+			e.mu.Unlock()
+			e.clearDeviceMissing(mac, false)
+			continue
+		}
 		var moved store.LastSeen
 		if !check.started.IsZero() {
 			for other, seen := range observed[mac] {
