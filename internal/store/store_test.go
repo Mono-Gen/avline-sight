@@ -218,3 +218,58 @@ func TestLastSeenByMACScoped(t *testing.T) {
 		t.Fatalf("接続中の時点の最終確認はその時刻: %+v", ls[mac])
 	}
 }
+
+// 監査2周目#4: スイッチを削除しても、その現場の接続履歴から最終観測を引ける
+func TestLastSeenSurvivesSwitchDelete(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "a.db"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	pid, _ := s.EnsureDefaultProfile()
+	sw := model.SwitchConfig{ProfileID: pid, Name: "A", IP: "10.0.0.1", Enabled: true}
+	s.SaveSwitch(&sw)
+	t0 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	s.UpsertBinding(sw.ID, 1, model.Device{MAC: "AA:00:00:00:00:01", IP: "10.1.1.1"}, t0)
+	if err := s.DeleteSwitch(sw.ID); err != nil {
+		t.Fatal(err)
+	}
+	ls, err := s.LastSeenByMAC(pid, t0.Add(time.Hour))
+	if err != nil || ls["AA:00:00:00:00:01"].IP != "10.1.1.1" {
+		t.Fatalf("削除後に履歴を失った: %+v %v", ls, err)
+	}
+}
+
+// 旧版DB（device_bindings に profile_id 列なし）を開くと列が追加され、既存行に現場IDが入る
+func TestMigrateBindingsProfile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	s, err := Open(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, _ := s.EnsureDefaultProfile()
+	sw := model.SwitchConfig{ProfileID: pid, Name: "A", IP: "10.0.0.1", Enabled: true}
+	s.SaveSwitch(&sw)
+	// 旧スキーマを再現（列を落として作り直す）
+	for _, q := range []string{
+		`CREATE TABLE db_old (id INTEGER PRIMARY KEY, switch_id INTEGER NOT NULL, if_index INTEGER NOT NULL, mac TEXT NOT NULL,
+		  oui_vendor TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '', vlan_id INTEGER NOT NULL DEFAULT 0,
+		  lldp_sys_name TEXT NOT NULL DEFAULT '', first_seen_ts INTEGER NOT NULL, last_seen_ts INTEGER NOT NULL, is_active INTEGER NOT NULL DEFAULT 1)`,
+		`DROP TABLE device_bindings`, `ALTER TABLE db_old RENAME TO device_bindings`,
+	} {
+		if _, err := s.DB.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.DB.Exec(`INSERT INTO device_bindings(switch_id,if_index,mac,ip,first_seen_ts,last_seen_ts) VALUES(?,1,'AA:00:00:00:00:01','10.1.1.1',1000,2000)`, sw.ID)
+	s.Close()
+	s, err = Open(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ls, err := s.LastSeenByMAC(pid, time.UnixMilli(5000))
+	if err != nil || ls["AA:00:00:00:00:01"].IP != "10.1.1.1" {
+		t.Fatalf("移行後に現場IDで引けない: %+v %v", ls, err)
+	}
+}

@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS device_bindings (
   id INTEGER PRIMARY KEY, switch_id INTEGER NOT NULL, if_index INTEGER NOT NULL, mac TEXT NOT NULL,
   oui_vendor TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '', vlan_id INTEGER NOT NULL DEFAULT 0,
   lldp_sys_name TEXT NOT NULL DEFAULT '', first_seen_ts INTEGER NOT NULL, last_seen_ts INTEGER NOT NULL,
-  is_active INTEGER NOT NULL DEFAULT 1);
+  is_active INTEGER NOT NULL DEFAULT 1, profile_id INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS ix_db ON device_bindings(switch_id, if_index, mac, is_active);
 CREATE TABLE IF NOT EXISTS baselines (
   id INTEGER PRIMARY KEY, profile_id INTEGER NOT NULL, name TEXT NOT NULL, captured_ts INTEGER NOT NULL, snapshot_gz BLOB NOT NULL);
@@ -110,8 +110,28 @@ func Open(path string, readOnly bool) (*Store, error) {
 			db.Close()
 			return nil, fmt.Errorf("DB移行に失敗: %w", err)
 		}
+		if err := migrateBindingsProfile(db); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("DB移行に失敗: %w", err)
+		}
 	}
 	return s, nil
+}
+
+// migrateBindingsProfile は接続履歴に現場（プロファイル）IDを持たせる。スイッチを削除しても、
+// その現場の登録機器の最終確認・最終IPを引けるようにするため（スイッチとの結合に頼らない）。
+func migrateBindingsProfile(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('device_bindings') WHERE name='profile_id'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE device_bindings ADD COLUMN profile_id INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(`UPDATE device_bindings SET profile_id=COALESCE((SELECT profile_id FROM switches WHERE id=device_bindings.switch_id),0) WHERE profile_id=0`)
+	return err
 }
 
 // migrateSwitchesAutoinc は旧版DBの switches を AUTOINCREMENT 付きへ作り直す。
@@ -470,10 +490,14 @@ type LastSeen struct {
 // 相関サブクエリを使わず1回の走査で集計する（履歴が多くても単一DB接続を長く占有しないため）。
 func (s *Store) LastSeenByMAC(profileID int64, at time.Time) (map[string]LastSeen, error) {
 	cut := ms(at)
-	rows, err := s.DB.Query(`SELECT b.mac, b.last_seen_ts, b.ip FROM device_bindings b JOIN switches w ON w.id=b.switch_id
-		WHERE w.profile_id=? AND b.first_seen_ts<=?`, profileID, cut)
+	rows, err := s.DB.Query(`SELECT mac, last_seen_ts, ip FROM device_bindings WHERE profile_id=? AND first_seen_ts<=?`, profileID, cut)
 	if err != nil {
-		return nil, err
+		// 旧版で書き出した再生データ（profile_id 列なし、読み取り専用で移行不可）はスイッチ経由で絞る
+		rows, err = s.DB.Query(`SELECT b.mac, b.last_seen_ts, b.ip FROM device_bindings b JOIN switches w ON w.id=b.switch_id
+			WHERE w.profile_id=? AND b.first_seen_ts<=?`, profileID, cut)
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer rows.Close()
 	out := map[string]LastSeen{}
@@ -914,8 +938,9 @@ func (s *Store) UpsertBinding(switchID int64, ifIndex int, d model.Device, now t
 		return
 	}
 	if n, _ := r.RowsAffected(); n == 0 {
-		s.DB.Exec(`INSERT INTO device_bindings(switch_id,if_index,mac,oui_vendor,ip,vlan_id,lldp_sys_name,first_seen_ts,last_seen_ts,is_active) VALUES(?,?,?,?,?,?,?,?,?,1)`,
-			switchID, ifIndex, d.MAC, d.Vendor, d.IP, d.VLAN, d.LLDPName, ms(now), ms(now))
+		s.DB.Exec(`INSERT INTO device_bindings(switch_id,if_index,mac,oui_vendor,ip,vlan_id,lldp_sys_name,first_seen_ts,last_seen_ts,is_active,profile_id)
+			VALUES(?,?,?,?,?,?,?,?,?,1,COALESCE((SELECT profile_id FROM switches WHERE id=?),0))`,
+			switchID, ifIndex, d.MAC, d.Vendor, d.IP, d.VLAN, d.LLDPName, ms(now), ms(now), switchID)
 	}
 }
 

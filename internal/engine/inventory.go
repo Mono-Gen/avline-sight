@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -70,7 +71,13 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 	}
 	best := map[string]cand{}
 	// 所在とは別に、MAC単位で判明している属性を集める（所在に選ばれた観測でIPが不明でも、他の観測のIPを使う）
-	anyIP, anyVendor, anyLLDP := map[string]string{}, map[string]string{}, map[string]string{}
+	// IPは「稼働中スイッチの観測」→「アクセスポートの観測」の順に信頼する（到達不能スイッチに残る古いIPより新しいIPを使う）
+	type ipCand struct {
+		ip   string
+		rank int
+	}
+	anyIP := map[string]ipCand{}
+	anyVendor, anyLLDP := map[string]string{}, map[string]string{}
 	better := func(a, b cand) bool { // a が b より所在として確からしいか
 		if a.live != b.live {
 			return a.live
@@ -96,8 +103,17 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 		for _, p := range s.Ports {
 			up := isUplink(s, p)
 			for _, d := range p.Devices {
-				if d.IP != "" && (anyIP[d.MAC] == "" || !up) {
-					anyIP[d.MAC] = d.IP
+				if d.IP != "" {
+					rank := 0
+					if live {
+						rank += 2
+					}
+					if !up {
+						rank++
+					}
+					if cur, ok := anyIP[d.MAC]; !ok || rank > cur.rank {
+						anyIP[d.MAC] = ipCand{d.IP, rank}
+					}
 				}
 				if d.Vendor != "" {
 					anyVendor[d.MAC] = d.Vendor
@@ -126,8 +142,10 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 	rows := make([]InventoryRow, 0, len(best)+len(aliases))
 	for mac, c := range best {
 		r := c.row
-		if r.IP == "" {
-			r.IP = anyIP[mac]
+		if r.IP == "" || !c.live {
+			if ip := anyIP[mac].ip; ip != "" {
+				r.IP = ip
+			}
 		}
 		if r.Vendor == "" {
 			r.Vendor = anyVendor[mac]
@@ -144,13 +162,29 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 			byMAC[strings.ToUpper(a.MatchKey)] = a
 		}
 	}
+	portLabel := map[string]string{}
+	for _, a := range aliases {
+		if a.MatchType == "port" {
+			portLabel[a.MatchKey] = a.Label
+		}
+	}
 	for i := range rows {
-		if a, ok := byMAC[rows[i].MAC]; ok {
-			// 再生ではスナップショット記録時点の名称を保つ（書出後に変えた登録名で過去を上書きしない）
-			if !opt.SnapshotLabels || rows[i].Label == "" {
-				rows[i].Label = a.Label
-			}
+		a, ok := byMAC[rows[i].MAC]
+		if ok {
 			rows[i].Note = a.Note
+		}
+		// 再生ではスナップショット記録時点の名称を、空も含めてそのまま保つ（後日の登録名で過去を書き換えない）
+		if opt.SnapshotLabels {
+			continue
+		}
+		// ライブは現在の登録から毎回引き直す（状態に残った古い名称は、削除後も残り続けるため使わない）
+		switch {
+		case ok:
+			rows[i].Label = a.Label
+		case rows[i].SwitchID != 0:
+			rows[i].Label = portLabel[portKey(rows[i].SwitchID, rows[i].IfIndex)]
+		default:
+			rows[i].Label = ""
 		}
 	}
 	for mac, a := range byMAC {
@@ -310,11 +344,17 @@ func ParseAliasCSV(text string) (rows []AliasCSVRow, skipped int, errs []AliasCS
 		if err == io.EOF {
 			break
 		}
-		line, _ := cr.FieldPos(0)
 		if err != nil {
+			// 構文エラーの行では FieldPos が使えない（フィールドが無いと panic する）ため ParseError から行を取る
+			line := 0
+			var pe *csv.ParseError
+			if errors.As(err, &pe) {
+				line = pe.StartLine
+			}
 			errs = append(errs, AliasCSVError{Line: line, Reason: "CSVとして読めません: " + err.Error()})
 			break
 		}
+		line, _ := cr.FieldPos(0)
 		if first {
 			first = false
 			if _, ok := NormalizeMAC(cell(rec, 0)); !ok {

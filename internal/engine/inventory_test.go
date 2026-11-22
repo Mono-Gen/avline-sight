@@ -237,3 +237,34 @@ func TestAliasCSVEdgeCases(t *testing.T) {
 		t.Fatalf("引用符の閉じ忘れを検出していない: %+v", rows)
 	}
 }
+
+// 監査2周目: IPは稼働中スイッチの観測を優先／削除済みの登録名を残さない／再生は空の名称も保つ／MAC列の引用符不正でpanicしない
+func TestInventoryAuditRound2(t *testing.T) {
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	down := &model.SwitchState{ID: 1, Name: "DOWN", Reachable: false, Ports: []*model.Port{
+		{IfIndex: 1, Name: "1/0/1", Devices: []model.Device{{MAC: "EE:00:00:00:00:01", IP: "10.0.0.1", Label: "削除済みの名前", Source: "arp"}}}}}
+	up := &model.SwitchState{ID: 2, Name: "UP", Reachable: true, Ports: []*model.Port{
+		{IfIndex: 2, Name: "1/0/2", Devices: []model.Device{{MAC: "EE:00:00:00:00:02", Source: "fdb"}}},
+		{IfIndex: 25, Name: "1/0/25", AVRole: "uplink", Devices: []model.Device{{MAC: "EE:00:00:00:00:02", IP: "10.0.0.22", Source: "arp"}}}}}
+	down.Ports[0].Devices = append(down.Ports[0].Devices, model.Device{MAC: "EE:00:00:00:00:02", IP: "10.0.0.99", Source: "arp"})
+	rows := BuildInventory([]*model.SwitchState{down, up}, nil, nil, InventoryOptions{}, now)
+	by := map[string]InventoryRow{}
+	for _, r := range rows {
+		by[r.MAC] = r
+	}
+	if r := by["EE:00:00:00:00:02"]; r.IP != "10.0.0.22" {
+		t.Fatalf("到達不能スイッチの古いIPを優先: %+v", r)
+	}
+	if r := by["EE:00:00:00:00:01"]; r.Label != "" {
+		t.Fatalf("登録から消えた名称が残っている: %+v", r)
+	}
+	snap := BuildInventory([]*model.SwitchState{up}, []store.Alias{{MatchType: "mac", MatchKey: "EE:00:00:00:00:02", Label: "後日の名前"}}, nil, InventoryOptions{SnapshotLabels: true}, now)
+	for _, r := range snap {
+		if r.MAC == "EE:00:00:00:00:02" && r.Label != "" {
+			t.Fatalf("記録時に名前なしだった機器へ後日の名前を適用: %+v", r)
+		}
+	}
+	if _, _, errs := ParseAliasCSV("\"00:11:22:33:44:55,x\n"); len(errs) != 1 {
+		t.Fatalf("MAC列の引用符不正: %+v", errs)
+	}
+}
