@@ -544,6 +544,57 @@ test('External topology nodes use all linked switch ports and select the highest
   }
 });
 
+test('Tapping a switch count opens its connected devices and links to the Devices view', context => {
+  const graph = require('cytoscape')({ headless: true });
+  const state = [];
+  const refs = [];
+  const effects = [];
+  let stateIndex = 0;
+  let refIndex = 0;
+  const topology = {
+    nodes: [
+      { id: 'sw1', switch_id: 1, kind: 'switch', label: 'West', reachable: true },
+      { id: 'sw2', switch_id: 2, kind: 'switch', label: 'East', reachable: true },
+    ],
+    edges: [],
+  };
+  const inventory = topology.nodes.map(node => ({
+    switch_id: node.switch_id, label: node.label, mac: `MAC-${node.id}`, port: '1', seen: true,
+  }));
+  const { Topology } = sourceWith('../src/views/Topology.tsx', {
+    cytoscape: { default: () => graph },
+    react: {
+      useState(initial) {
+        const index = stateIndex++;
+        if (!(index in state)) state[index] = initial;
+        return [state[index], value => { state[index] = value; }];
+      },
+      useRef(initial) {
+        const index = refIndex++;
+        return refs[index] ?? (refs[index] = { current: initial === null ? {} : initial });
+      },
+      useEffect: effect => effects.push(effect),
+      useMemo: compute => compute(),
+    },
+    '../i18n': { t, useLang: () => ['en'] },
+    '../usePolling': { usePolling: () => ({ data: { topology, inventory, ports: [], multicast: {} } }) },
+  });
+  let openedDevices = 0;
+  const props = { openDevices: () => openedDevices++ };
+  Topology(props);
+  const cleanups = effects.map(effect => effect());
+  context.after(() => cleanups.forEach(cleanup => cleanup?.()));
+  graph.getElementById('count:sw2').emit('tap');
+  stateIndex = refIndex = 0;
+  const tree = Topology(props);
+  const tables = elements(tree, node => node.type === DeviceInventoryTable);
+  assert.equal(tables.length, 1);
+  assert.deepEqual([...tables[0].props.rows], [inventory[1]]);
+  const [button] = elements(tree, node => node.type === 'button' && node.props.children === t('rack.nav.devices'));
+  button.props.onClick();
+  assert.equal(openedDevices, 1);
+});
+
 test('Syslog retains the received time and shows the raw line only in expert display', () => {
   const raw = '<13> Nov  7 15:16:44 SwitchWest LLDP: neighbor keepalive';
   assert.equal(syslogMessage(raw), 'LLDP: neighbor keepalive');
