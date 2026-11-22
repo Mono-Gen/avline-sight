@@ -4,7 +4,7 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 
 const { asArray, decimal, formatBps, formatUptime, resolveSwitchId, labSwitchIndex, alertCount } = require('../src/format.ts');
-const { FrontPanel, portHasAlert, poeHasFault } = require('../src/components/FrontPanel.tsx');
+const { FrontPanel } = require('../src/components/FrontPanel.tsx');
 const { Table } = require('../src/components/Table.tsx');
 const { SettingsDialog } = require('../src/components/SettingsDialog.tsx');
 const { PortHardware } = require('../src/components/PortHardware.tsx');
@@ -126,22 +126,22 @@ test('ラボの番号はDBのIDや並び順に依存しない', () => {
   assert.equal(labSwitchIndex('未命名'), null);
 });
 
-test('PoEは実際の給電だけを表示し障害を区別する', () => {
-  const panel = value => render(FrontPanel, { ports: [port(value)], selected: 1, onSelect() {} });
+test('Front panel badges follow the lamp and shared alerts', () => {
+  const panel = (value, alerts = []) => render(FrontPanel, { ports: [port(value)], alerts, switchId: 5, selected: 1, onSelect() {} });
+  const alert = { switch_id: 5, if_index: 1, severity: 'CRITICAL', active: true, code: 'POE_PORT_FAULT' };
+  const counters = { err_delta: 1, poe: { power_w: 0, fault: 'overload' } };
   assert.doesNotMatch(panel({ poe: { power_w: 0, fault: 'none' } }), /⚡|⛔/);
   assert.match(panel({ poe: { power_w: 1.5, fault: 'none' } }), /⚡/);
-  assert.match(panel({ poe: { power_w: 0, fault: 'overload' } }), /⛔ PoE障害/);
-  assert.equal(poeHasFault(port({ poe: { fault: ' NONE ' } })), false);
-  assert.equal(poeHasFault(port({ poe: { fault: '' } })), false);
-});
-
-test('全指定カウンターの増加を異常マーカーにする', () => {
-  assert.equal(portHasAlert(port()), false);
-  for (const key of ['err_delta', 'discard_delta', 'fcs_delta', 'cos_drop_delta', 'err_since_reset']) {
-    const value = port({ [key]: 1 });
-    assert.equal(portHasAlert(value), true);
-    assert.match(render(FrontPanel, { ports: [value], selected: 1, onSelect() {} }), /⚠ 異常/);
+  for (const alerts of [[], [{ ...alert, suppressed: true }], [{ ...alert, severity: 'INFO' }],
+    [{ ...alert, active: false, acked: true }], [{ ...alert, switch_id: 6 }]]) {
+    const html = panel(counters, alerts);
+    assert.match(html, /lamp-healthy/);
+    assert.doesNotMatch(html, /⚠|⛔/);
   }
+  assert.match(panel({}, [{ ...alert, code: 'PHY_ERRORS' }]), /lamp-critical[^]*⚠/);
+  assert.match(panel({}, [alert]), /lamp-critical[^]*⚠[^]*⛔/);
+  assert.match(panel({}, [{ ...alert, active: false }]), /lamp-warning[^]*⚠[^]*⛔/);
+  assert.doesNotMatch(panel({ ...counters, excluded: true }, [{ ...alert, suppressed: true }]), /⚠|⛔/);
 });
 
 test('ポート詳細は日本語の項目と指定の単位桁数で表示する', () => {

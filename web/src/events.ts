@@ -1,6 +1,7 @@
 import { asArray } from './format';
 import type { Alert, Event, Overview } from './types';
-import { summarizeAlerts } from './wallAlerts';
+import { isIssueAlert } from './monitorHealth';
+import { parseJstDateTime } from './pcTime';
 
 export const LIVE_EVENT_LIMIT = 2000;
 export const SEARCH_EVENT_LIMIT = 2000;
@@ -40,8 +41,8 @@ export function matchesEvent(event: Event, filter: EventFilters): boolean {
     (!filter.issuesOnly || isIssueEvent(event)) &&
     (!filter.switch_id || String(event.switch_id) === filter.switch_id) &&
     (!filter.q || JSON.stringify(event).toLowerCase().includes(filter.q.toLowerCase())) &&
-    (!filter.from || Date.parse(event.ts) >= new Date(filter.from).getTime()) &&
-    (!filter.to || Date.parse(event.ts) <= new Date(filter.to).getTime());
+    (!filter.from || Date.parse(event.ts) >= parseJstDateTime(filter.from).getTime()) &&
+    (!filter.to || Date.parse(event.ts) <= parseJstDateTime(filter.to).getTime());
 }
 
 export function logRows(searchResults: Event[], liveEvents: Event[], filter: EventFilters, ackable = new Set<number>()): Event[] {
@@ -49,7 +50,7 @@ export function logRows(searchResults: Event[], liveEvents: Event[], filter: Eve
   const live = asArray(liveEvents).slice(0, LIVE_EVENT_LIMIT).filter(event => matchesEvent(event, filter));
   const merged = new Map(live.map(event => [event.id, event]));
   for (const event of search) {
-    merged.set(event.id, { ...event, acked: event.acked || merged.get(event.id)?.acked === true });
+    merged.set(event.id, event);
   }
   return Array.from(merged.values())
     .filter(event => !filter.unackedOnly || canAcknowledgeEvent(event, ackable))
@@ -61,7 +62,11 @@ function isIssueEvent(event: Event) {
 }
 
 export function acknowledgeableEventIds(alerts: Alert[]) {
-  return new Set(summarizeAlerts(alerts).items.filter(alert => !alert.acked).map(alert => alert.event_id));
+  return new Set(alerts.filter(canAcknowledgeAlert).map(alert => alert.event_id));
+}
+
+export function canAcknowledgeAlert(alert: Alert) {
+  return !alert.acked && isIssueAlert(alert);
 }
 
 export function canAcknowledgeEvent(event: Event, ids: ReadonlySet<number>) {

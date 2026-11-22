@@ -4,10 +4,11 @@ import { alertStates, alertTone, isPortAlert, summarizeAlerts } from './wallAler
 
 export function lampState(port: Port, alerts: Alert[], reachable: boolean) {
   const relevant = alerts.filter(alert => isPortAlert(alert) && alert.if_index === port.if_index);
-  const tone = alertTone(summarizeAlerts(relevant), reachable && !port.excluded && port.oper === 'up');
+  const counts = summarizeAlerts(relevant);
+  const tone = alertTone(counts, reachable && !port.excluded && port.oper === 'up');
   const label = tone !== 'unknown' ? alertStates[tone].label :
     port.excluded || relevant.some(alert => alert.suppressed) ? 'rack.suppressed' : !reachable ? 'rack.offline' : 'rack.unused';
-  return { tone, symbol: alertStates[tone].symbol, label } as const;
+  return { tone, symbol: alertStates[tone].symbol, label, issues: counts.items } as const;
 }
 
 export function sortedAlerts(alerts: Alert[]): Alert[] {

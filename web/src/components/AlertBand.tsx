@@ -1,4 +1,5 @@
 import { jstTime, pcTimestamp } from '../pcTime';
+import { canAcknowledgeAlert } from '../events';
 import { eventHint, eventTitle, t } from '../i18n';
 import { sortedAlerts } from '../rackModel';
 import type { Alert } from '../types';
@@ -21,7 +22,7 @@ export function AlertEntry({ alert, busy, ack }: { alert: Alert; busy: boolean; 
       <p>{eventTitle(alert)}</p>
       {hint && <p className="alert-hint">{hint}</p>}
     </div>
-    {!alert.acked && ack && <button className="button-primary" data-action="ack" disabled={busy} onClick={() => ack(alert.event_id)}>{t('rack.ack')}</button>}
+    {ack && canAcknowledgeAlert(alert) && <button className="button-primary" data-action="ack" disabled={busy} onClick={() => ack(alert.event_id)}>{t('rack.ack')}</button>}
   </article>;
 }
 export function AlertBand({ alerts, wall = false, busy = false, ack, ackMany, pending = false, locked = false, undoCount = 0, undo }: {
@@ -34,7 +35,7 @@ export function AlertBand({ alerts, wall = false, busy = false, ack, ackMany, pe
   ]);
   const groups = wall ? groupWallAlerts(rows) : [];
   const canAck = !locked && (ack || ackMany);
-  const ackRows = rows.filter(alert => !alert.acked && (!ackMany || !alert.suppressed));
+  const ackRows = rows.filter(canAcknowledgeAlert);
   return <section className={`alert-band${wall && groups.length > 6 ? ' wall-alerts-dense' : ''}`} aria-label={t('rack.alertBand')}>
     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
       <h2 className="font-bold">{wall ? t('cleanup.allAlerts', { count: counts.unacked }) : t('rack.alertBand')} {!wall && <span className="tabular-nums">{counts.count}</span>}</h2>

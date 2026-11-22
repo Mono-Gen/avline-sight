@@ -1,19 +1,8 @@
-import { t } from '../i18n';
+import { eventTitle, t } from '../i18n';
 import { frontPanelRows } from '../frontPanelLayout';
-import type { ModelDefinitions, Port } from '../types';
+import type { Alert, ModelDefinitions, Port } from '../types';
 import { lampState } from '../rackModel';
 import { matchingPortAlerts } from '../wallAlerts';
-import type { Alert } from '../types';
-
-export function portHasAlert(port: Port): boolean {
-  return [port.err_delta, port.discard_delta, port.fcs_delta, port.cos_drop_delta, port.err_since_reset]
-    .some(value => value > 0);
-}
-
-export function poeHasFault(port: Port): boolean {
-  const fault = port.poe?.fault?.trim().toLowerCase();
-  return Boolean(fault && fault !== 'none');
-}
 
 export function FrontPanel({ ports, selected, onSelect, model, definitions, alerts = [], switchId = 0, reachable = true }: {
   ports: Port[];
@@ -35,9 +24,10 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
           <div className="flex w-max gap-1">
             {row.slots.map((port, position) => {
               if (!port) return <span key={`gap-${position}`} className="w-20 shrink-0" aria-hidden="true" />;
-              const fault = poeHasFault(port);
-              const alert = portHasAlert(port);
               const state = lampState(port, matchingPortAlerts(alerts, switchId, port.if_index), reachable);
+              const fault = state.issues.find(alert =>
+                (state.tone === 'critical' ? alert.active : !alert.active) &&
+                (alert.code === 'POE_PORT_FAULT' || alert.code === 'POE_FAULT'));
               return (
                 <button
                   key={port.if_index}
@@ -49,9 +39,9 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
                   {state.symbol} {port.name}
                   <br />
                   {port.excluded ? t('ui.m133') : port.oper === 'up' ? t('ui.m134') : t('ui.m135')}
-                  {alert && <span title={t('ui.m136')}> {t('ui.m137')}</span>}
+                  {state.issues.length > 0 && <span title={t(state.label)}> {t('ui.m137')}</span>}
                   {fault
-                    ? <span title={port.poe?.fault}> {t('ui.m138')}</span>
+                    ? <span title={eventTitle(fault)}> {t('ui.m138')}</span>
                     : (port.poe?.power_w || 0) > 0 && <span title={t('ui.m139')}> ⚡</span>}
                 </button>
               );

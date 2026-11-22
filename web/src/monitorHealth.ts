@@ -7,8 +7,12 @@ export function monitoringStopped(online: boolean, updatedAt: number | undefined
   return !online || updatedAt === undefined || now - updatedAt >= MONITOR_STALE_MS;
 }
 
+export function isIssueAlert(alert: Alert) {
+  return !alert.suppressed && (alert.severity === 'CRITICAL' || alert.severity === 'WARNING');
+}
+
 export function issueAlerts(alerts: Alert[]) {
-  return alerts.filter(alert => !alert.suppressed && (alert.severity === 'CRITICAL' || alert.severity === 'WARNING'));
+  return alerts.filter(isIssueAlert);
 }
 
 export function newIssueAlerts(alerts: Alert[], previous: Set<number>) {

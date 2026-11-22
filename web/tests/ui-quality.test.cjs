@@ -256,6 +256,38 @@ test('通常・壁の更新時刻とカードの発生・復旧をJSTでそろ�
   assert.match(html, /発生 <time[^>]*>18:29:32<\/time> → 復旧 <time[^>]*>18:30:10 JST<\/time>/);
 });
 
+test('External topology nodes use all linked switch ports and select the highest-priority edge', () => {
+  const cy = require('cytoscape')({ headless: true, styleEnabled: true });
+  const { updateTopology } = require('../src/topologyGraph.ts');
+  const topology = {
+    nodes: [
+      ...[1, 2, 3].map(id => ({ id: `sw${id}`, switch_id: id, kind: 'switch', label: `Switch ${id}`, reachable: true })),
+      { id: 'ext', label: 'External', kind: 'external', reachable: true },
+    ],
+    edges: [
+      { id: 'first', source: 'sw1', target: 'ext', local_port: '1/0/1' },
+      { id: 'second', source: 'sw2', target: 'ext', local_port: '1/0/2' },
+      { id: 'third', source: 'ext', target: 'sw3', remote_port: '1/0/3' },
+    ],
+  };
+  const recovered = fault(2, { switch_id: 2, if_index: 2, port: '1/0/2', active: false });
+  const active = fault(3, { switch_id: 3, if_index: 3, port: '1/0/3', active: true, acked: true });
+  const check = (alerts, tone, id) => {
+    updateTopology(cy, topology, undefined, '', true, false, alerts);
+    const node = cy.getElementById('ext');
+    assert.equal(node.data('statusTone'), tone);
+    assert.equal(node.data('monitorSwitchId'), id);
+    assert.equal(node.data('monitorPortName'), `1/0/${id}`);
+  };
+  try {
+    check([recovered, active], 'critical', 3);
+    check([recovered, { ...active, suppressed: true }], 'warning', 2);
+    check([{ ...recovered, acked: true }, { ...active, port: '1/0/20' }], 'healthy', 1);
+  } finally {
+    cy.destroy();
+  }
+});
+
 test('ログはPC受信時刻だけを時刻列にし、展開時にSyslog原文を表示する', () => {
   const raw = '<13> Nov  7 15:16:44 SwitchWest LLDP: neighbor keepalive';
   assert.equal(syslogMessage(raw), 'LLDP: neighbor keepalive');
@@ -268,6 +300,50 @@ test('ログはPC受信時刻だけを時刻列にし、展開時にSyslog原文
   assert.match(html, /<summary>LLDP: neighbor keepalive<\/summary>/);
   assert.match(html, /<pre>&lt;13&gt; Nov  7 15:16:44 SwitchWest LLDP: neighbor keepalive<\/pre>/);
   assert.doesNotMatch(html, /data-action="ack"/);
+});
+
+test('Log search, live rows and export use JST datetime boundaries in a non-JST timezone', async () => {
+  const previousZone = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    const filter = { category: '', severity: '', switch_id: '', q: '', from: '2026-03-08T02:30', to: '2026-03-08T03:00' };
+    const from = '2026-03-07T17:30:00.000Z';
+    const to = '2026-03-07T18:00:00.000Z';
+    const live = ['2026-03-07T17:29:59.999Z', from, to, '2026-03-07T18:00:00.001Z']
+      .map((ts, id) => ({ id, ts }));
+    assert.deepEqual(logRows([], live, filter).map(event => event.id), [2, 1]);
+
+    let load;
+    let searched;
+    const { Logs } = sourceWith('../src/views/Logs.tsx', {
+      react: { ...React, useState: initial => [typeof initial === 'object' ? filter : initial, noop] },
+      '../usePolling': { usePolling: callback => { load = callback; return {}; } },
+      '../api': { api: async url => { searched = new URL(url, 'http://test.invalid').searchParams; } },
+    }, { URLSearchParams });
+    render(Logs, { overview: { switches: [] }, events: [] });
+    await load(new AbortController().signal);
+    assert.equal(searched.get('from'), from);
+    assert.equal(searched.get('to'), to);
+
+    const states = [[], '', 5, filter.from, filter.to];
+    let exported;
+    let request;
+    const { ExportDialog } = sourceWith('../src/components/ExportDialog.tsx', {
+      react: { useState: () => [states.shift(), noop], useEffect: noop },
+      '../api': {
+        json: (_method, body) => body, download: noop,
+        response: async (_url, body) => { exported = body; return { blob: async () => ({}) }; },
+      },
+    });
+    const tree = ExportDialog({ close: noop, run: action => { request = action(); } });
+    elements(tree, node => node.type === 'button')[0].props.onClick();
+    await request;
+    assert.equal(exported.from, from);
+    assert.equal(exported.to, to);
+  } finally {
+    if (previousZone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousZone;
+  }
 });
 
 test('ログのクイック絞り込みと確認ボタンは対象行だけに適用する', () => {
@@ -285,13 +361,65 @@ test('ログのクイック絞り込みと確認ボタンは対象行だけに�
   assert.deepEqual(filtered({ unackedOnly: true }), [1]);
   assert.deepEqual(filtered({ category: 'MARKER' }), [3]);
   assert.deepEqual(filtered({ category: 'ANOMALY', severity: 'WARNING', switch_id: '7' }), [4]);
-  assert.deepEqual(logRows(events, [{ ...events[0], acked: true }], { ...filter, unackedOnly: true }, ids), []);
+  assert.deepEqual(logRows(events, [{ ...events[0], acked: true }], { ...filter, unackedOnly: true }, ids).map(event => event.id), [1]);
   const { Logs } = sourceWith('../src/views/Logs.tsx', { '../usePolling': { usePolling: () => ({ data: events }) } });
   const html = render(Logs, { overview: { switches: [] }, events, operations: { alerts }, locked: false });
   assert.equal((html.match(/<select/g) || []).length, 3);
   assert.match(html, /<option value="7">West<\/option>/);
   assert.match(html, /異常・警告のみ[^]*未確認のみ[^]*マーカー/);
   assert.equal((html.match(/data-action="ack"/g) || []).length, 1);
+});
+
+test('Log acknowledgement refreshes after remote ack and unack, including during a search', async () => {
+  const event = { id: 1, ts: '2026-11-07T15:16:45Z', title: 'Fault', code: 'CUSTOM', category: 'ANOMALY', severity: 'WARNING', acked: false };
+  const live = [{ ...event, acked: true }];
+  const window = new EventTarget();
+  const effects = [];
+  const revision = { current: { observed: 0, requested: 0 } };
+  const requests = [];
+  let data;
+  let load;
+  const { createPoller } = require('../src/polling.ts');
+  const poller = createPoller({
+    load: signal => load(signal), onData: value => { data = value; }, onError: assert.fail,
+    delayMs: 60000, intervalMs: 0,
+  });
+  const { Logs } = sourceWith('../src/views/Logs.tsx', {
+    react: { ...React, useRef: () => revision, useEffect: effect => effects.push(effect) },
+    '../usePolling': { usePolling: callback => { load = callback; return { data, refresh: poller.refresh }; } },
+    '../api': { api: () => new Promise(resolve => requests.push(resolve)) },
+  }, { window, URLSearchParams });
+  const draw = alerts => render(Logs, { overview: { switches: [] }, events: live, operations: { alerts } });
+  const notify = type => window.dispatchEvent(new CustomEvent('live-control', { detail: { type } }));
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  draw([fault(1)]);
+  const cleanup = effects[0]();
+  try {
+    const initial = poller.refresh();
+    await flush();
+    notify('alerts_changed');
+    requests[0]([event]);
+    await initial;
+    await flush();
+    assert.equal(requests.length, 2);
+    requests[1]([{ ...event, acked: true }]);
+    await flush();
+    assert.ok(draw([fault(1, { acked: true })]).includes(t('ui.m269')));
+
+    notify('alerts_changed');
+    await flush();
+    assert.equal(requests.length, 3);
+    requests[2]([event]);
+    await flush();
+    assert.match(draw([fault(1)]), /data-action="ack"/);
+    assert.match(draw([]), /class="whitespace-nowrap">—<\/td>/);
+    notify('phase_changed');
+    await flush();
+    assert.equal(requests.length, 3);
+  } finally {
+    cleanup();
+    poller.stop();
+  }
 });
 
 test('同じスイッチとポートの同一分だけをまとめ、全メンバーを確認する', () => {
@@ -312,6 +440,33 @@ test('同じスイッチとポートの同一分だけをまとめ、全メン�
   const html = render(AlertBand, { alerts, wall: true, ackMany: noop });
   assert.match(html, /<details><summary>Fault（関連2件）/);
   assert.match(html, /復旧済み・未確認/);
+});
+
+test('Alert band and bulk acknowledgement use the same eligible IDs', async () => {
+  const alerts = [fault(1), fault(2, { severity: 'CRITICAL' }), fault(3, { suppressed: true, title: 'Suppressed fault' }),
+    fault(4, { severity: 'INFO' }), fault(5, { acked: true, active: true })];
+  const html = render(AlertBand, { alerts, ack: noop });
+  assert.match(html, /Suppressed fault/);
+  assert.equal((html.match(/data-action="ack"/g) || []).length, 2);
+  assert.match(html, /data-action="ack-all"/);
+  assert.doesNotMatch(render(AlertBand, { alerts: alerts.slice(2), ack: noop }), /data-action="ack/);
+
+  const calls = [];
+  let action;
+  const { useOperations } = sourceWith('../src/useOperations.ts', {
+    react: {
+      useState: initial => [initial?.length === 0 ? alerts : initial, noop],
+      useRef: current => ({ current }), useEffect: noop, useCallback: callback => callback, useMemo: callback => callback(),
+    },
+    './usePolling': { usePolling: () => ({}) },
+    './acknowledge': { acknowledgeEvents: async ids => calls.push(...ids) },
+  }, { window: { confirm: () => true } });
+  const { ack } = useOperations({ online: true, replay: false, profileId: 1, setStatus: noop, run: callback => { action = callback(); } });
+  ack(3);
+  assert.equal(action, undefined);
+  ack();
+  await action;
+  assert.deepEqual(calls, [1, 2]);
 });
 
 test('確認・取り消しは処理中に無効化し、ロック中は隠し、既知の復旧時刻だけ表示する', () => {
@@ -402,6 +557,54 @@ test('起動時は統合ポートモニターで、専門画面は詳細の下�
   assert.doesNotMatch(nav, /俯瞰|ポート一覧|DHCP|マルチキャスト|ヘルス/);
   assert.match(html, /aria-label="表示方法"/);
   assert.match(html, />図<|>一覧</);
+});
+
+test('Port monitor clears navigation targets on a header group change and when port detail closes', () => {
+  const { PortMonitor } = require('../src/views/PortMonitor.tsx');
+  const state = [];
+  let nextState = 0;
+  const App = sourceWith('../src/App.tsx', {
+    react: {
+      useState: initial => {
+        const index = nextState++;
+        if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial;
+        return [state[index], value => { state[index] = value; }];
+      },
+      useCallback: callback => callback, useEffect: noop, useRef: current => ({ current }),
+    },
+    './components/TerminalDrawer': { TerminalDrawer: () => null },
+    './i18n': { t, useLang: () => ['ja'] },
+    './pcTime': { usePcTime: () => 0 },
+    './useDesktopNotifications': { useDesktopNotifications: noop },
+    './useLiveFeed': { useLiveFeed: () => ({}) },
+    './useOperations': { useOperations: () => ({ alerts: [], groups: [] }) },
+  }).default;
+  const drawApp = () => { nextState = 0; return App(); };
+  const monitor = tree => elements(tree, node => node.type === PortMonitor)[0].props;
+  const header = tree => elements(tree, node => node.type === AppHeader)[0].props;
+  const target = { switchId: 1, ifIndex: 2 };
+
+  monitor(drawApp()).openPortMonitor(target);
+  const beforeGroupChange = drawApp();
+  assert.equal(monitor(beforeGroupChange).target, target);
+  header(beforeGroupChange).setGroupSelection('view:stage');
+  const afterGroupChange = drawApp();
+  assert.equal(monitor(afterGroupChange).part, 'stage');
+  assert.equal(monitor(afterGroupChange).target, undefined);
+
+  monitor(afterGroupChange).openPortMonitor(target);
+  let close;
+  const { OverviewView } = sourceWith('../src/views/Overview.tsx', {
+    '../components/PortDetail': { PortDetail: props => { close = props.close; return null; } },
+    '../useRackData': { useRackData: () => ({ data: { ports: [
+      { switch_id: 1, port: { name: '1/0/2', if_index: 2, oper: 'up' } },
+    ] }, definitions: {}, refresh: noop }) },
+  });
+  const props = monitor(drawApp());
+  assert.equal(props.target, target);
+  render(OverviewView, { ...props, overview: { switches: [{ id: 1, name: 'Switch', group_tag: '', reachable: true }] } });
+  close();
+  assert.equal(monitor(drawApp()).target, undefined);
 });
 
 test('ヘッダーから音声・転送・言語を撤去し、設定には既定OFFの通知・CSV・表示順を置く', () => {

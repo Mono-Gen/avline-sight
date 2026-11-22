@@ -58,11 +58,22 @@ export function updateTopology(
   core.batch(() => {
     core.elements().filter(element => !ids.has(element.id())).remove();
     nodes.forEach((node, index) => {
-      const localEdge = node.switch_id ? undefined : edges.find(edge => edge.target === node.id && switchIds.get(edge.source));
-      const switchId = node.switch_id || (localEdge && switchIds.get(localEdge.source));
-      const portName = localEdge?.local_port;
-      const relevant = node.switch_id ? alerts.filter(alert => alert.switch_id === switchId) :
-        switchId && portName ? alerts.filter(alert => alert.switch_id === switchId && alert.port === portName && isPortAlert(alert)) : [];
+      const links = node.switch_id ? [] : edges.flatMap(edge => {
+        const incoming = edge.target === node.id;
+        if (!incoming && edge.source !== node.id) return [];
+        const switchId = switchIds.get(incoming ? edge.source : edge.target);
+        if (!switchId) return [];
+        const portName = incoming ? edge.local_port : edge.remote_port;
+        const relevant = portName ? alerts.filter(alert =>
+          alert.switch_id === switchId && alert.port === portName && isPortAlert(alert)) : [];
+        return [{ switchId, portName, issues: summarizeAlerts(relevant).items }];
+      });
+      const monitor = links.find(link => link.issues.some(alert => alert.active)) ||
+        links.find(link => link.issues.some(alert => !alert.acked)) || links[0];
+      const relevant = node.switch_id ? alerts.filter(alert => alert.switch_id === node.switch_id) :
+        links.flatMap(link => link.issues);
+      const switchId = node.switch_id || monitor?.switchId;
+      const portName = monitor?.portName;
       const statusTone = alertTone(summarizeAlerts(relevant), node.reachable === true);
       const status = alertStates[statusTone];
       const data = {

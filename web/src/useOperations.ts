@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { api } from './api';
 import { acknowledgeEvents, unacknowledgeEvents } from './acknowledge';
+import { acknowledgeableEventIds } from './events';
 import { asArray } from './format';
 import { t } from './i18n';
 import type { Alert, Event, Phase, Status, SwitchGroup } from './types';
@@ -116,7 +117,8 @@ export function useOperations({ online, replay, profileId, setStatus, run }: {
     if (scope.current === profileId && version === revision.current.alerts) hydrate(fresh);
   };
   const ackMany = (targets: number[]) => {
-    const ids = [...new Set(targets)].filter(id => alerts.some(alert => alert.event_id === id && !alert.acked && !alert.suppressed));
+    const eligible = acknowledgeableEventIds(alerts);
+    const ids = [...new Set(targets)].filter(id => eligible.has(id));
     if (!ids.length || replay) return;
     run(async () => {
       const succeeded: number[] = [];
@@ -141,19 +143,19 @@ export function useOperations({ online, replay, profileId, setStatus, run }: {
       });
     });
   };
-  const ack = (id?: number) => confirmAck(id, run, async () => {
-    const ids = id === undefined ? alerts.filter(alert => !alert.acked).map(alert => alert.event_id) : [id];
-    ids.forEach(value => localAcks.current.set(value, Infinity));
-    try {
-      await acknowledgeEvents(ids, async () => {
-        const version = revision.current.alerts;
-        const fresh = await api<Alert[]>('/api/alerts');
-        if (version === revision.current.alerts) hydrate(fresh);
-      });
-    } finally {
-      ids.forEach(value => localAcks.current.set(value, Date.now() + 5000));
-    }
-  });
+  const ack = (id?: number) => {
+    const eligible = acknowledgeableEventIds(alerts);
+    const ids = id === undefined ? [...eligible] : eligible.has(id) ? [id] : [];
+    if (!ids.length || replay) return;
+    confirmAck(id, run, async () => {
+      ids.forEach(value => localAcks.current.set(value, Infinity));
+      try {
+        await acknowledgeEvents(ids, refreshAlerts);
+      } finally {
+        ids.forEach(value => localAcks.current.set(value, Date.now() + ACK_UNDO_MS));
+      }
+    });
+  };
   const withDetails = useMemo(() => {
     const details = new Map(asArray(displayDetails.data).map(item => [item.event_id, item]));
     return alerts.map(item => {

@@ -24,6 +24,10 @@ function subscribe(listener: () => void) {
 
 export const usePcTime = () => useSyncExternalStore(subscribe, () => now, () => now);
 
+export function parseJstDateTime(value: string) {
+  return new Date(`${value}+09:00`);
+}
+
 const displayTimeZone = 'JST';
 const clock = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',

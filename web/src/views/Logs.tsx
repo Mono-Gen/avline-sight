@@ -1,5 +1,5 @@
 import { eventHint, eventTitle, t } from '../i18n';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { acknowledgeEvents } from '../acknowledge';
 import { confirmAck } from '../useOperations';
@@ -8,9 +8,10 @@ import { PollingStatus } from '../components/PollingStatus';
 import type { EventFilters } from '../events';
 import { acknowledgeableEventIds, canAcknowledgeEvent, logRows, SEARCH_EVENT_LIMIT, syslogMessage } from '../events';
 import { asArray } from '../format';
-import { pcTimestamp } from '../pcTime';
+import { parseJstDateTime, pcTimestamp } from '../pcTime';
 import type { Event } from '../types';
 import { usePolling } from '../usePolling';
+import type { LiveMessage } from '../ws';
 import type { ViewProps } from './props';
 import { groupSwitches, hasGroupFilter } from './props';
 
@@ -29,9 +30,9 @@ export function LogEventRow({ event, ackable, disabled, onAcknowledge }: {
       <summary>{syslogMessage(event.title)}</summary>
       <pre>{event.title}</pre>
     </details> : <>{eventTitle(event)} {eventHint(event)}</>}</td>
-    <td className="whitespace-nowrap">{event.acked && event.severity !== 'INFO' ? t('ui.m269') : canAcknowledgeEvent(event, ackable) && <button
+    <td className="whitespace-nowrap">{event.acked && event.severity !== 'INFO' ? t('ui.m269') : canAcknowledgeEvent(event, ackable) ? <button
       className="button-primary" data-action="ack" disabled={disabled} onClick={() => onAcknowledge(event.id)}
-    >{t('ui.m268')}</button>}</td>
+    >{t('ui.m268')}</button> : '—'}</td>
   </tr>;
 }
 
@@ -50,18 +51,39 @@ export function Logs(props: ViewProps) {
   const filter = groupFiltered && !visibleIds.has(localFilter.switch_id) ? { ...localFilter, switch_id: '' } : localFilter;
   const ackable = acknowledgeableEventIds(asArray(props.operations?.alerts));
   const queryKey = JSON.stringify([filter, filter.unackedOnly ? [...ackable].sort((a, b) => a - b) : []]);
+  const alertRevision = useRef({ observed: 0, requested: 0 });
   const result = usePolling(signal => {
+    alertRevision.current.requested = alertRevision.current.observed;
     const { issuesOnly, unackedOnly, ...fields } = filter;
     const params = new URLSearchParams({
       ...fields,
-      from: filter.from ? new Date(filter.from).toISOString() : '',
-      to: filter.to ? new Date(filter.to).toISOString() : '',
+      from: filter.from ? parseJstDateTime(filter.from).toISOString() : '',
+      to: filter.to ? parseJstDateTime(filter.to).toISOString() : '',
       limit: String(SEARCH_EVENT_LIMIT),
     });
     if (issuesOnly) params.set('issues_only', '1');
     if (unackedOnly) params.set('unacked_only', '1');
     return api<Event[]>(`/api/events?${params}`, { signal });
   }, 0, [queryKey], true, 300);
+  const refreshSearch = result.refresh;
+  useEffect(() => {
+    let mounted = true;
+    const onLiveControl = (event: globalThis.Event) => {
+      if ((event as CustomEvent<LiveMessage>).detail.type !== 'alerts_changed') return;
+      const version = ++alertRevision.current.observed;
+      const refreshIfStale = () => {
+        if (mounted && alertRevision.current.requested < version) {
+          return refreshSearch();
+        }
+      };
+      void refreshSearch().then(refreshIfStale, refreshIfStale).catch(() => undefined);
+    };
+    window.addEventListener('live-control', onLiveControl);
+    return () => {
+      mounted = false;
+      window.removeEventListener('live-control', onLiveControl);
+    };
+  }, [refreshSearch]);
   const rows = logRows(result.data || [], props.events, filter, ackable)
     .filter(event => !groupFiltered || visibleIds.has(String(event.switch_id)));
   const switches = new Map(groupMembers.map(item => [String(item.id), item.name]));

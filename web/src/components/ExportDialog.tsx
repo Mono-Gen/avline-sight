@@ -2,6 +2,7 @@ import { t } from '../i18n';
 import { useEffect, useState } from 'react';
 import { api, download, json, response } from '../api';
 import { asArray, formatTime } from '../format';
+import { parseJstDateTime } from '../pcTime';
 import type { Event } from '../types';
 import { Dialog } from './Common';
 type Run = (f: () => Promise<void>) => void;
@@ -38,8 +39,8 @@ export function ExportDialog({ close, run, busy }: {
     <button
       disabled={busy}
       onClick={() => run(async () => {
-        const end = to ? new Date(to) : new Date();
-        const start = from ? new Date(from) : new Date(end.getTime() - 3600000);
+        const end = to ? parseJstDateTime(to) : new Date();
+        const start = from ? parseJstDateTime(from) : new Date(end.getTime() - 3600000);
         const body = marker ? {
           marker_id: Number(marker),
           minutes

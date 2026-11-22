@@ -249,8 +249,13 @@ export default function App() {
   };
   return <div className={wall ? 'wall-shell' : 'min-h-screen'}>
     <AppHeader {...{ online, phase: operations.phase || status?.phase, onPhase: operations.setPhase, onTrapHelp: props.onTrapHelp,
-      wall, setWall, status, busy, locked, profiles, settings, groupSelection, setGroupSelection, groupNames, replay, markerInput, run, refresh, setDialog, summary,
-      updatedAt: replay ? replay.ts : live.updatedAt }} />
+      wall, setWall, status, busy, locked, profiles, settings, groupSelection, groupNames, replay, markerInput, run, refresh, setDialog, summary,
+      updatedAt: replay ? replay.ts : live.updatedAt }}
+      setGroupSelection={value => {
+        if (value === groupSelection) return;
+        setMonitorTarget(undefined);
+        setGroupSelection(value);
+      }} />
     {stopped && <MonitorStopped updatedAt={live.updatedAt} />}
     {replay && !wall && <ScrubBar
       key={replay.id}
@@ -286,7 +291,8 @@ export default function App() {
       <main className={wall ? 'wall-main' : 'min-w-0 flex-1 space-y-4 p-4'}>
         {!wall && <h1 className="text-2xl font-bold">{pageTitle}</h1>}
         <ErrorBoundary key={wall ? 'wall' : page} name={wall ? t('rack.wall') : pageTitle}>
-          {(wall || page === 'monitor') && <PortMonitor key={status?.profile.id || 0} {...props} target={wall ? undefined : monitorTarget} />}
+          {(wall || page === 'monitor') && <PortMonitor key={status?.profile.id || 0} {...props} target={wall ? undefined : monitorTarget}
+            onClosePortDetail={() => setMonitorTarget(undefined)} />}
 
           {!wall && page === 'topology' && <Topology {...props} />}
 

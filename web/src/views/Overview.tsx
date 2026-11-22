@@ -61,7 +61,10 @@ function indexBySwitch<T extends { switch_id?: number }>(rows: T[]) {
   return index;
 }
 
-type OverviewProps = ViewProps & { wall?: boolean; operations?: Operations; onTrapHelp?: () => void; target?: PortMonitorTarget };
+type OverviewProps = ViewProps & {
+  wall?: boolean; operations?: Operations; onTrapHelp?: () => void;
+  target?: PortMonitorTarget; onClosePortDetail?: () => void;
+};
 const noAlerts: Alert[] = [];
 const noDevices: InventoryRow[] = [];
 
@@ -71,7 +74,9 @@ export function OverviewView(props: OverviewProps) {
   const [edit, setEdit] = useState<SwitchConfig | null>();
   const [discover, setDiscover] = useState(false);
   const [groupEdit, setGroupEdit] = useState<GroupEdit>();
-  const [selected, setSelected] = useState<PortMonitorTarget | undefined>(() => target?.ifIndex || target?.portName ? target : undefined);
+  const portTarget = target?.ifIndex || target?.portName ? target : undefined;
+  const [selected, setSelected] = useState(portTarget);
+  useEffect(() => { setSelected(portTarget); }, [portTarget, props.group, props.part]);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [notice, setNotice] = useState('');
   const [wallSwitch, setWallSwitch] = useState<number>();
@@ -238,7 +243,7 @@ export function OverviewView(props: OverviewProps) {
       switchId={selected.switchId} switchName={selectedSwitch.name} port={selectedPort}
       devices={(bySwitch.get(selected.switchId) || []).filter(device => device.if_index === selectedPort.if_index)}
       alerts={matchingPortAlerts(byAlert.get(selected.switchId) || [], selected.switchId, selectedPort.if_index)}
-      close={() => setSelected(undefined)} replay={replay !== null} />}
+      close={() => { setSelected(undefined); props.onClosePortDetail?.(); }} replay={replay !== null} />}
     {!wall && !locked && props.status?.lab && <LabPanel run={props.run} busy={busy} switches={asArray(props.overview.switches)} />}
     {!wall && !locked && edit !== undefined && <SwitchForm value={edit || undefined} groups={allGroupNames} busy={busy} run={props.run}
       close={() => { setEdit(undefined); void refresh().catch(() => undefined); }} />}

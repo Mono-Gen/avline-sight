@@ -19,9 +19,9 @@ const event = (id, changes = {}) => ({
   category: 'ANOMALY', severity: 'INFO', title: `イベント${id}`, acked: false, ...changes,
 });
 
-test('検索結果の更新前でもライブ行で成功済みの確認を取り消さない', () => {
+test('Server search acknowledgement overrides stale acknowledgement in live rows', () => {
   const [row] = logRows([event(1)], [event(1, { acked: true })], blankFilter);
-  assert.equal(row.acked, true);
+  assert.equal(row.acked, false);
 });
 
 test('nullのoverview_tickでも直前のイベント履歴を維持する', () => {
