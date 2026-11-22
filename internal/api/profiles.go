@@ -3,11 +3,12 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/Mono-Gen/avline-sight/internal/engine"
 	"github.com/Mono-Gen/avline-sight/internal/model"
 	"github.com/Mono-Gen/avline-sight/internal/store"
-	"net/http"
-	"strings"
 )
 
 // ---- プロファイル ----
@@ -39,6 +40,8 @@ func (s *Server) createProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) activateProfile(w http.ResponseWriter, r *http.Request) {
+	s.groupMu.Lock()
+	defer s.groupMu.Unlock()
 	id, err := pathID(r, "id")
 	if err == nil {
 		err = s.Store.ActivateProfile(id)
@@ -48,7 +51,12 @@ func (s *Server) activateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Engine.SetProfile(id)
-	s.resync()
+	if s.Poller != nil {
+		s.resync()
+	}
+	if s.Hub != nil {
+		s.Hub.Broadcast("groups_changed", nil)
+	}
 	writeJSON(w, 200, map[string]any{"id": id})
 }
 

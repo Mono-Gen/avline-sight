@@ -1,4 +1,4 @@
-import { t } from './i18n';
+import { getLang, t } from './i18n';
 import type { DeviceAliasImportResponse, InventoryRow, PingStatus, ReplayRef } from './types';
 
 export type DeviceScope = 'all' | 'unnamed';
@@ -7,6 +7,7 @@ interface DeviceFilters {
   scope: DeviceScope;
   q: string;
   vlans: readonly number[];
+  group?: string;
 }
 
 export function deviceUrl(filters: DeviceFilters, replay?: ReplayRef, download = false): string {
@@ -16,6 +17,8 @@ export function deviceUrl(filters: DeviceFilters, replay?: ReplayRef, download =
   params.set('scope', filters.scope);
   if (filters.q.trim()) params.set('q', filters.q.trim());
   if (filters.vlans.length) params.set('vlans', filters.vlans.join(','));
+  if (filters.group !== undefined) params.set('group', filters.group);
+  if (download) params.set('lang', getLang());
   return `${base}${download ? '/export.csv' : ''}?${params}`;
 }
 
@@ -50,7 +53,8 @@ export function bulkPingTimeoutMs(count: number): number {
 export function pingTargets(rows: readonly InventoryRow[]): string[] {
   const seen = new Set<string>();
   for (const row of rows) {
-    if (row.ip && !seen.has(row.ip)) seen.add(row.ip);
+    const ip = row.ip || row.planned_ip;
+    if (ip) seen.add(ip);
   }
   return [...seen];
 }

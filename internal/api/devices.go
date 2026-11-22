@@ -29,12 +29,45 @@ func inventoryOptions(r *http.Request) engine.InventoryOptions {
 }
 
 func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("include") == "registration" {
+		s.groupMu.Lock()
+		defer s.groupMu.Unlock()
+	}
 	rows, err := s.Engine.Inventory(inventoryOptions(r))
 	if err != nil {
 		writeErr(w, 500, "接続機器一覧を作れません", err.Error(), "")
 		return
 	}
-	writeJSON(w, 200, inventoryGroupRows(r, rows))
+	rows = inventoryGroupRows(r, rows)
+	if r.URL.Query().Get("include") == "registration" {
+		s.writeDeviceDisplay(w, rows)
+		return
+	}
+	writeJSON(w, 200, rows)
+}
+
+// MACで登録した機器とポートに設定した表示名を区別する。
+func (s *Server) writeDeviceDisplay(w http.ResponseWriter, rows []engine.InventoryRow) {
+	aliases, err := s.Store.Aliases(s.Engine.ProfileID())
+	if err != nil {
+		writeErr(w, 500, "接続機器一覧を作れません", err.Error(), "")
+		return
+	}
+	registered := make(map[string]bool)
+	for _, alias := range aliases {
+		if alias.MatchType == "mac" {
+			registered[strings.ToUpper(alias.MatchKey)] = true
+		}
+	}
+	type displayRow struct {
+		engine.InventoryRow
+		Registered bool `json:"registered"`
+	}
+	result := make([]displayRow, len(rows))
+	for i, row := range rows {
+		result[i] = displayRow{row, registered[strings.ToUpper(row.MAC)]}
+	}
+	writeJSON(w, 200, result)
 }
 
 func (s *Server) devicesCSV(w http.ResponseWriter, r *http.Request) {

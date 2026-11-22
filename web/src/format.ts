@@ -1,4 +1,4 @@
-import { t } from './i18n';
+import { getLang, t } from './i18n';
 
 export function asArray<T>(value: T): (T extends readonly (infer Item)[] ? NonNullable<Item> : never)[] {
   return (Array.isArray(value) ? value.filter(item => item != null) : []) as (T extends readonly (infer Item)[] ? NonNullable<Item> : never)[];
@@ -6,7 +6,7 @@ export function asArray<T>(value: T): (T extends readonly (infer Item)[] ? NonNu
 
 export function decimal(value: unknown, digits = 1): string {
   return typeof value === 'number' && Number.isFinite(value)
-    ? value.toLocaleString('ja-JP', {
+    ? value.toLocaleString(getLang() === 'ja' ? 'ja-JP' : 'en-US', {
       minimumFractionDigits: digits,
       maximumFractionDigits: digits
     })
@@ -50,5 +50,5 @@ export function alertCount(counts: object | null | undefined, severity: string):
 export function formatTime(value: unknown): string {
   if (typeof value !== 'string' || value === '') return '—';
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString('ja-JP', { hour12: false });
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleString(getLang() === 'ja' ? 'ja-JP' : 'en-US', { hour12: false });
 }

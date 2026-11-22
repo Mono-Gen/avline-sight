@@ -40,6 +40,7 @@ type Server struct {
 	Ctx     context.Context
 
 	mu      sync.Mutex
+	groupMu sync.Mutex
 	locked  bool
 	pinHash string
 	replays map[string]*replay
@@ -80,10 +81,13 @@ func (s *Server) Handler() http.Handler {
 	h := func(pattern string, f http.HandlerFunc) { m.HandleFunc(pattern, f) }
 
 	h("GET /api/status", s.status)
-	h("GET /api/alerts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Engine.Alerts()) })
+	h("GET /api/alerts", s.displayAlerts)
 	h("GET /api/phase", s.getPhase)
 	h("PUT /api/phase", s.putPhase)
 	h("GET /api/groups", s.groups)
+	h("PUT /api/groups/{name}", s.renameGroup)
+	h("PUT /api/groups/{$}", s.renameGroup)
+	h("PUT /api/groups/order", s.setGroupOrder)
 	h("POST /api/work", s.startWork)
 	h("DELETE /api/work/{group}", s.endWork)
 	h("DELETE /api/work/{$}", s.endWork)

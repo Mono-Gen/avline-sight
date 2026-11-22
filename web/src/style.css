@@ -40,13 +40,216 @@ td {
   background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, #64748b 4px, #64748b 6px);
 }
 
-.wallboard button,
-.wallboard section,
-.wallboard select {
-  display: none;
-}
 
-.wallboard article {
-  font-size: 1.4rem;
-  min-height: 13rem;
+.phase-control { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.phase-pill {
+  display: inline-block;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: .15em .64em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.phase-setup { color: #93c5fd; }
+.phase-rehearsal { color: #fde68a; }
+.phase-show { color: #86efac; }
+.phase-teardown { color: #cbd5e1; }
+.trap-ready { color: #166534; }
+.trap-failed { color: #991b1b; }
+.pc-clock {
+  margin-inline-start: auto;
+  display: grid;
+  justify-items: end;
+  align-content: center;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pc-clock small { color: #cbd5e1; }
+.rack-overview { display: grid; gap: .7rem; min-width: 0; }
+.alert-band, .rack-group, .rack-toolbar {
+  border: 1px solid #334155;
+  border-radius: .55rem;
+  background: #0f172a;
+  color: #f1f5f9;
+}
+.alert-band { padding: .65rem .8rem; }
+.alert-list { display: grid; gap: .35rem; max-height: 13rem; overflow: auto; }
+.alert-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: .55rem;
+  padding: .32em .55em;
+  border-inline-start: 3px solid currentColor;
+  border-radius: .25rem;
+  background: #1e293b;
+}
+.alert-entry time { font-variant-numeric: tabular-nums; }
+.alert-critical { color: #fecaca; }
+.alert-warning { color: #fde68a; }
+.alert-suppressed, .alert-acked { color: #cbd5e1; }
+.alert-hint { font-size: .87em; color: #e2e8f0; overflow-wrap: anywhere; }
+.alert-symbol { font-weight: 800; }
+.alert-clear { color: #86efac; }
+.alert-entry button { align-self: center; }
+.rack-toolbar, .rack-group-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  padding: .28rem .55rem;
+}
+.rack-toolbar small { margin-inline-start: auto; color: #cbd5e1; }
+.rack-group-header { background: #18253a; border-radius: .5rem .5rem 0 0; }
+.rack-group-header h2 { font-weight: 750; overflow-wrap: anywhere; }
+.rack-group-header .group-menu { margin-inline-start: auto; }
+.rack-critical-count { color: #fca5a5; }
+.rack-warning-count, .health-abnormal { color: #fde68a; }
+.work-badge { color: #e2e8f0; background: #38455a; padding: .04em .45em; border-radius: .2rem; }
+.rack-groups { display: grid; gap: .46rem; }
+.rack-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 13rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .45rem;
+  min-height: 4.1rem;
+  padding: .24rem .55rem;
+  border-top: 1px solid #334155;
+}
+.rack-row:nth-child(odd) { background: #111c30; }
+.rack-offline .rack-identity strong, .rack-stale { color: #fde68a; }
+.rack-identity { display: flex; flex-wrap: wrap; align-items: center; gap: 0 .5rem; min-width: 0; }
+.rack-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.rack-identity > span { color: #cbd5e1; font-variant-numeric: tabular-nums; font-size: .83em; }
+.rack-switch-actions { display: flex; align-items: center; gap: .25rem; }
+.rack-front { min-width: 0; }
+.rack-port-row { display: flex; width: 100%; align-items: stretch; gap: 2px; }
+.rack-port-row + .rack-port-row { margin-top: 2px; }
+.rack-port-slot, .rack-port-gap { flex: 0 1 1.76rem; min-width: 0; position: relative; }
+.rack-port-gap { opacity: .4; }
+.port-lamp {
+  width: 100%;
+  min-width: 0;
+  min-height: 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: .2rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.lamp-symbol { font-size: .84em; font-weight: 800; }
+.lamp-number { font-size: .64em; }
+.lamp-critical { background: #7f1d1d; color: #fee2e2; }
+.lamp-warning { background: #713f12; color: #fef08a; }
+.lamp-healthy { background: #154434; color: #86efac; }
+.lamp-unused { background: #182338; color: #94a3b8; border-color: #3a4b65; }
+.lamp-offline, .lamp-suppressed { background: #344155; color: #e2e8f0; }
+.lamp-unacked { outline: 1px solid white; outline-offset: -1px; animation: lamp-pulse 1.5s ease-in-out infinite; }
+@keyframes lamp-pulse {
+  0%, 100% { outline-color: #fff; }
+  50% { outline-color: #fff6; }
+}
+@media (prefers-reduced-motion: reduce) { .lamp-unacked { animation: none; } }
+.uplink-spark { display: block; width: 100%; height: .42rem; color: #7dd3fc; }
+.rack-callouts { display: flex; align-items: center; flex-wrap: wrap; gap: .22rem; padding-top: .15rem; font-size: .8em; }
+.rack-callouts > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 32%;
+  border-radius: .2rem;
+  padding: .04em .28em;
+  background: #233246;
+}
+.rack-health { display: flex; flex-wrap: wrap; gap: .35rem; color: #94a3b8; font-variant-numeric: tabular-nums; }
+.rack-health .health-abnormal { color: #fde68a; }
+.group-menu { position: relative; flex-shrink: 0; }
+.group-menu summary { cursor: pointer; list-style: none; padding: .12em .3em; }
+.group-menu-items {
+  position: absolute;
+  z-index: 12;
+  inset-inline-end: 0;
+  display: grid;
+  gap: .2rem;
+  min-width: max-content;
+  background: #0f172a;
+  padding: .35rem;
+  border: 1px solid #64748b;
+  border-radius: .35rem;
+  box-shadow: 0 .35rem .8rem #0008;
+}
+.rack-toolbar .group-menu-items, .rack-switch-actions .group-menu-items { inset-inline: 0 auto; }
+.group-menu-items a { padding: .18em .4em; text-decoration: underline; }
+.trap-help-button { padding: 0 .19em; color: #1e3a8a; }
+.rack-toast {
+  position: fixed;
+  inset: auto 1rem 1rem auto;
+  z-index: 40;
+  padding: .5rem .75rem;
+  color: #dcfce7;
+  background: #14532d;
+  border-radius: .35rem;
+}
+.rack-data-error { color: #b91c1c; }
+.dark .rack-data-error, .wall-shell .rack-data-error { color: #fecaca; }
+.port-detail {
+  position: fixed;
+  z-index: 40;
+  inset: 0 0 0 auto;
+  width: min(36rem, 100%);
+  padding: 1rem;
+  overflow: auto;
+  box-shadow: -.5rem 0 1.5rem #0006;
+  @apply bg-white dark:bg-slate-900;
+}
+.port-detail h2 { font-size: 1.2rem; font-weight: 750; }
+.wall-shell {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0b1220;
+  color: #f1f5f9;
+  font-size: 1.3rem;
+}
+.wall-header {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  padding: .38rem 1rem;
+  flex-shrink: 0;
+  background: #151f31;
+}
+.wall-header .pc-clock { font-size: 1.2em; }
+.wall-exit { font-size: .8em; line-height: 1; padding: .12em .3em; }
+.wall-content, .wall-main { flex: 1; min-width: 0; min-height: 0; }
+.wall-main { height: 100%; padding: .35rem .7rem; }
+.wall-main .rack-overview { height: 100%; display: flex; flex-direction: column; gap: .28rem; }
+.wall-main .alert-band { flex-shrink: 0; padding: .2rem .5rem; }
+.wall-main .alert-list { max-height: 4.4rem; font-size: .84em; }
+.wall-main .rack-groups { min-height: 0; overflow: auto; gap: 2px; }
+.wall-main .rack-group-header { line-height: 1; padding: 2px 5px; font-size: .79em; gap: 5px; }
+.wall-main .rack-row { min-height: 34px; padding: 1px 5px; gap: 5px; grid-template-columns: minmax(9rem, 15rem) minmax(0, 1fr) auto; }
+.wall-main .rack-identity { flex-wrap: nowrap; font-size: .87em; }
+.wall-main .port-lamp { min-height: 14px; }
+.wall-main .lamp-symbol { font-size: .61em; }
+.wall-main .lamp-number { font-size: .47em; }
+.wall-main .rack-callouts { line-height: 1.1; font-size: .62em; padding: 1px 0 0; }
+.wall-main .rack-health { font-size: .66em; }
+.wall-main .rack-dense .rack-group-header { padding-block: 1px; font-size: .68em; }
+.wall-main .rack-dense .rack-row { min-height: 26px; padding-block: 0; }
+.wall-main .rack-dense .port-lamp { min-height: 10px; }
+.wall-main .rack-dense .lamp-number { font-size: .43em; }
+.wall-main .rack-dense .lamp-symbol { font-size: .52em; }
+.wall-main .rack-dense .rack-port-row + .rack-port-row { margin-top: 1px; }
+.wall-main .rack-dense .rack-callouts { font-size: .56em; }
+@media (max-width: 720px) {
+  .rack-row, .wall-main .rack-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .rack-front { grid-row: 2; grid-column: 1 / -1; }
+  .rack-health { grid-row: 1; grid-column: 2; }
+  .lamp-number { display: none; }
 }

@@ -24,12 +24,16 @@
 
 | メソッド | パス | 入出力 |
 |---|---|---|
-| GET | `/api/groups` | `[{name, switch_ids:[id], work_until:RFC3339|null}]`（名前順）。全体とグループ両方の作業中があれば遅い期限を表示 |
+| GET | `/api/groups` | `[{name, switch_ids:[id], work_until:RFC3339|null}]`。設定順、未指定のグループは名前順、未所属は最後。全体とグループ両方の作業中があれば遅い期限を表示 |
+| PUT | `/api/groups/{name}` | `{new_name}` → グループ一覧。対象プロファイルの全スイッチを一括変更し、同名のグループがあれば統合。旧名はURLエスケープし、未所属は `/api/groups/`。空の新名と予約名 `*`、`.`、`..` は400、旧グループ独自の作業中は409 |
+| PUT | `/api/groups/order` | `{names:[...]}` → グループ一覧。順序はプロファイルごとにmetaに保存。重複名・空名は400。`{new_name}` を送ると名前が `order` のグループを改名 |
 | POST | `/api/work` | `{group, minutes:15|30|60|120}` → グループ一覧。`group:"*"` は全スイッチ。存在しないグループは404 |
 | DELETE | `/api/work/{group}` | グループ名をURLエスケープして指定、`*` も可。未所属は `/api/work/`。解除済みの再解除も成功 → グループ一覧 |
 | POST | `/api/counters/reset` | `{group}`（`"*"` は全台）→ `{results:[{switch_id,ok,reset_at?,error?}]}`。既存ソフトリセットを呼び、停止中・無効なスイッチは `ok:false` |
 
-作業中はmetaの `work_mode` にグループ名→期限のJSONとして保存し、再起動で復元。対象スイッチのアラートを抑止する。横断アラート（switch_id=0）は対象外。開始時INFO `WORK_STARTED`、手動解除・期限到達時INFO `WORK_ENDED`。期限切れは5秒周期と起動時に削除し、`work_changed`・`alerts_changed` を配信する。`*` の解除は全体指定のみを解除し、別途指定したグループの作業中は残す。
+作業中はmetaの `work_mode` にグループ名→期限のJSONとして保存し、再起動で復元。プロファイルを切り替えても同名グループは期限を共有する。対象スイッチのアラートを抑止する。横断アラート（switch_id=0）は対象外。開始時INFO `WORK_STARTED`、手動解除・期限到達時INFO `WORK_ENDED`。期限切れは5秒周期と起動時に削除し、`work_changed`・`alerts_changed` を配信する。`*` の解除は全体指定のみを解除し、別途指定したグループの作業中は残す。
+
+改名・順序保存・作業中の開始と解除・一括リセットで `X-AVLine-Profile` を指定すると、表示していたプロファイルIDが現在のIDと異なる場合に409を返す。旧データに `*` という名前のグループがある場合、改名だけが可能。旧名が `.` または `..` の場合は `/api/groups/?legacy_name=.` または `?legacy_name=..` で指定する。
 
 `Settings`:
 ```json
@@ -62,6 +66,8 @@
 
 `InventoryRow`: `{mac,label,note,planned_ip,ip_mismatch,ip,ip_stale?,vendor,lldp_name,switch_id?,switch_name,group_tag,port,if_index?,vlan,poe_w?,speed_mbps,seen,last_seen?,source,via_uplink,ping?,ping_ok:bool|null,ping_rtt_ms:number|null,ping_ts:RFC3339|null}`。`ping` は既存互換の `{status,rtt_ms,at}`。Ping未実施は追加3フィールドがnull。結果はMAC単位で直近1件をメモリに保持し、再起動・プロファイル切替で消える。再生にはライブPing結果を付けない。
 
+`GET /api/devices?include=registration` は `registered:bool` を追加し、MAC単位で名称登録された機器をポート名だけが設定された機器と区別する。ラック表示はこの情報で登録機器がつながるポートのリンク断を重大として表示する。
+
 機器名CSVは第4列に `予定IP`（英語見出し `planned_ip`）を追加。旧3列CSV・旧書出CSV（第4列が観測IP）も読込可能。見出しがあれば列名で判定し、なければ先頭4列を使う。不正IPv4・IPv6は行エラーとなり、確定は422。予定IPも変更件数・プレビューの比較対象。`device_aliases.planned_ip` は起動時に既存DBへ自動追加し、旧再生DBの列欠落は空文字として読む。
 
 登録機器は最終観測したスイッチが到達可能なとき、FDBの取得で2回連続不在ならWARNING `DEVICE_MISSING`。最初の不在から10秒後にFDBだけを再取得する（同じスイッチへの要求は集約し、その前にSlowでFDBを取得した場合は兼用）。登録機器の最終ポートでポーリングが `LINK_DOWN` を検知した場合はFDBの即時取得も要求する。未観測・到達不能・FDB取得失敗では発報せず、連続回数をリセットする。詳細は `mac,name,port,last_ip`。復帰で解消。予定IPが空でなく最終IPが判明し異なる場合は `ip_mismatch:true`、リハ・本番でWARNING `IP_MISMATCH`。
@@ -89,6 +95,7 @@
 - `GET /api/events?category=&severity=&switch_id=&q=&from=&to=&limit=500` → `[Event]`（新しい順）
 - `POST /api/events/:id/ack`、`POST /api/events/ack-all`
 - `GET /api/alerts` → `[{event_id,switch_id,switch_name,if_index,severity,code,title,ts,active,acked,cleared_at:RFC3339|null,port,mac?,device_name?,state:"active"|"latched",suppressed,suppressed_by:"phase"|"work"|""}]`。抑止中の発生条件も含む。CRITICAL→WARNING→INFO、同重要度はts降順（同時刻はevent_id降順）
+  - REST応答は保存イベント由来の翻訳引数 `detail`、対処文 `hint`、確認時刻 `acked_at` を取得できる場合に補う。WebSocket通知では省略する。
 - `POST /api/markers` 入力 `{note}` → `Event`（category=MARKER）
 
 発生時にイベントIDを持つエントリを作成し、未確認の復旧は `active:false,state:"latched"` と復旧時刻を保持する。同じキーが未確認の間に再発生したら同じイベントIDを再使用する。発生中の確認は `acked:true` として残り、確認済みで復旧すると削除。復旧後の確認は直ちに削除。DBの `acked_at` を更新するが確認者は記録しない。確認後は `alerts_changed` を全ブラウザへ配信する。
@@ -140,6 +147,7 @@ M4250（FW 13.0.4.7）の工場出荷時・各AVプロファイル適用後の�
 - `{"type":"alerts_changed","data":[Alert]}`（発生・復旧ラッチ・削除・確認・抑止変更時。GET `/api/alerts` と同形式）
 - `{"type":"phase_changed","data":{"phase":"setup"|"rehearsal"|"show"|"teardown"}}`
 - `{"type":"work_changed","data":[{name,switch_ids,work_until}]}`（GET `/api/groups` と同形式）
+- `{"type":"groups_changed","data":null}`（名前・表示順を更新、またはプロファイルを切替。GET `/api/groups` で再取得）
 - `{"type":"lock_changed","data":{"locked":bool,"pin_set":bool}}`
 - `{"type":"switch_state","data":SwitchState}`（購読中スイッチの更新時）
 クライアント→サーバー: `{"subscribe": <switch_id>}`（0で解除）

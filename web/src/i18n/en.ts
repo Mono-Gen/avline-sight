@@ -1,7 +1,9 @@
+import { operationsEn } from './operations';
 import { eventEn } from './eventEn';
 import type { Dictionary } from './index';
 import { rackEn } from './rack';
 export const en: Dictionary = {
+  operations: operationsEn,
   ui: {
   "m001": "No data",
   "m002": "MVR groups",

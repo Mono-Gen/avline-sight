@@ -1,5 +1,6 @@
 import { getLang, t } from './i18n';
 export const DEFAULT_TIMEOUT_MS = 15000;
+class ApiError extends Error {}
 
 async function consumeResponse<T>(path: string, options: RequestInit, consume: (response: Response) => Promise<T>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
@@ -25,7 +26,7 @@ async function consumeResponse<T>(path: string, options: RequestInit, consume: (
       } catch {
         reason = `HTTP ${r.status}`;
       }
-      throw new Error(t('rack.error', { reason }));
+      throw new ApiError(t('rack.error', { reason }));
     }
     return await consume(r);
   } finally {
@@ -73,6 +74,5 @@ export function upload(file: File) {
 }
 export function message(e: unknown) {
   const reason = e instanceof Error ? e.message : t('rack.unknown');
-  return e instanceof Error && (reason.startsWith(t('rack.error', { reason: '' }).split('(')[0].split('（')[0]))
-    ? reason : t('rack.error', { reason });
+  return e instanceof ApiError ? reason : t('rack.error', { reason });
 }

@@ -1,6 +1,8 @@
+import { operationsJa } from './operations';
 import { eventJa } from './eventJa';
 import { rackJa } from './rack';
 export const ja = {
+  operations: operationsJa,
   ui: {
   "m001": "（データなし）",
   "m002": "MVRグループ",

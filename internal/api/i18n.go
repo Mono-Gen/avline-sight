@@ -98,6 +98,15 @@ var errorFragments = [][2]string{
 }
 
 var errorEnglish = map[string]string{
+	"プロファイルIDが不正です":                                               "Invalid profile ID",
+	"表示中のプロファイルが変更されました":                                          "The active profile has changed",
+	"画面を更新してから再試行してください":                                          "Refresh the page and try again",
+	"グループ名が不正です":                                                  "Invalid group name",
+	"作業中のグループは名前を変更できません":                                         "Cannot rename a group while its work mode is active",
+	"作業中を終了してから名前を変更してください":                                       "End work mode before renaming the group",
+	"グループ名を保存できません":                                               "Could not save the group name",
+	"グループ順が不正です":                                                  "Invalid group order",
+	"グループ順を保存できません":                                               "Could not save the group order",
 	"内部エラーが発生しました":                                                "An internal error occurred",
 	"ログを確認し、再現手順とともに報告してください":                                     "Check the logs and report the steps to reproduce the issue",
 	"他サイトからの操作要求を拒否しました":                                          "The request from another website was rejected",

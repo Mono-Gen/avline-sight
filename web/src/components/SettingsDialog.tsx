@@ -24,8 +24,9 @@ const thresholdLabels: Record<string, string> = {
 };
 const commaList = (value: string) => asArray(value.split(',')).map(item => item.trim()).filter(Boolean);
 
-export function SettingsDialog({ value, close, run, busy }: {
+export function SettingsDialog({ value, close, run, busy, webAddr }: {
   value: Settings;
+  webAddr?: string;
   close: () => void;
   run: (action: () => Promise<void>) => void;
   busy: boolean;
@@ -70,6 +71,7 @@ export function SettingsDialog({ value, close, run, busy }: {
 
   return (
     <Dialog title={t('ui.m179')} close={close}>
+      {webAddr?.startsWith('127.0.0.1:') && <p role="status">ⓘ {t('rack.loopback')}</p>}
       <fieldset disabled={busy} className="space-y-4">
         <legend className="font-bold">{t('ui.m180')}</legend>
         <div className="grid gap-2 sm:grid-cols-2">

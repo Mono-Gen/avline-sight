@@ -43,7 +43,10 @@ export function matchesEvent(event: Event, filter: EventFilters): boolean {
 export function logRows(searchResults: Event[], liveEvents: Event[], filter: EventFilters): Event[] {
   const search = asArray(searchResults).slice(0, SEARCH_EVENT_LIMIT).filter(event => matchesEvent(event, filter));
   const live = asArray(liveEvents).slice(0, LIVE_EVENT_LIMIT).filter(event => matchesEvent(event, filter));
-  
-  return Array.from(new Map([...live, ...search].map(event => [event.id, event])).values())
+  const merged = new Map(live.map(event => [event.id, event]));
+  for (const event of search) {
+    merged.set(event.id, { ...event, acked: event.acked || merged.get(event.id)?.acked === true });
+  }
+  return Array.from(merged.values())
     .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts));
 }

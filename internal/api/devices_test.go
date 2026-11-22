@@ -38,6 +38,30 @@ func do(h http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	return w
 }
 
+func TestDeviceDisplayDistinguishesMACRegistrationFromPortLabel(t *testing.T) {
+	s, h := newDevicesServer(t)
+	pid := s.Engine.ProfileID()
+	if err := s.Store.SaveAlias(pid, store.Alias{MatchType: "port", MatchKey: "1:1", Label: "ポート名"}); err != nil {
+		t.Fatal(err)
+	}
+	check := func(want bool) {
+		t.Helper()
+		w := do(h, "GET", "/api/devices?include=registration", "")
+		var rows []struct {
+			Registered *bool `json:"registered"`
+		}
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &rows) != nil ||
+			len(rows) != 1 || rows[0].Registered == nil || *rows[0].Registered != want {
+			t.Fatalf("登録済み=%v を期待: %s", want, w.Body)
+		}
+	}
+	check(false)
+	if err := s.Store.SaveAlias(pid, store.Alias{MatchType: "mac", MatchKey: "00:11:22:33:44:55", Label: "機器名"}); err != nil {
+		t.Fatal(err)
+	}
+	check(true)
+}
+
 // 試行→確定の流れ、エラー行があると確定を拒否、ロック中は拒否、書出に登録名が反映される
 func TestAliasImportFlow(t *testing.T) {
 	s, h := newDevicesServer(t)

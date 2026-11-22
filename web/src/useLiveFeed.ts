@@ -20,7 +20,7 @@ export function useLiveFeed({ muted, replay, settings, setOverview, setState, se
   preferences.current = { muted, replay, settings };
   useEffect(() => {
     const live = new LiveSocket(message => {
-      if (['alerts_changed', 'phase_changed', 'work_changed', 'lock_changed'].includes(message.type)) {
+      if (['alerts_changed', 'phase_changed', 'work_changed', 'groups_changed', 'lock_changed'].includes(message.type)) {
         window.dispatchEvent(new CustomEvent('live-control', { detail: message }));
       }
       if (message.type === 'overview_tick') setOverview(previous => mergeOverviewTick(previous, message.data));
@@ -38,6 +38,7 @@ export function useLiveFeed({ muted, replay, settings, setOverview, setState, se
         oscillator.start();
         oscillator.stop(context.currentTime + 0.15);
       } catch {
+        return;
       }
     }, setOnline);
     socket.current = live;

@@ -1,4 +1,4 @@
-import type { SwitchState } from './switchTypes';
+import type { GPTP, Lease, McastGroup, Mrouter, SwitchState, VlanIGMP } from './switchTypes';
 export * from './switchTypes';
 export * from './operationTypes';
 export interface Event {
@@ -212,6 +212,7 @@ export interface ReplaySnapshot {
 }
 
 export interface InventoryRow {
+  registered?: boolean;
   mac: string;
   label: string;
   note: string;

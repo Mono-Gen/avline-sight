@@ -5,6 +5,7 @@ export type LiveMessage =
   | { type: 'alerts_changed'; data: Alert[] }
   | { type: 'phase_changed'; data: { phase: Phase } }
   | { type: 'work_changed'; data: SwitchGroup[] }
+  | { type: 'groups_changed'; data: null }
   | { type: 'lock_changed'; data: { locked: boolean; pin_set: boolean } }
   | {
     type: 'overview_tick';

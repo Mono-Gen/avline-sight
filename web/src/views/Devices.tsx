@@ -7,11 +7,11 @@ import { PollingStatus } from '../components/PollingStatus';
 import { bulkPingTimeoutMs, deviceUrl, importSummary, MAX_BULK_PING, pingLabel, pingTargets } from '../deviceCsv';
 import type { DeviceScope } from '../deviceCsv';
 import { asArray, decimal, formatTime } from '../format';
+import { pcTimestamp } from '../pcTime';
 import type { BulkPingResult, BulkPingResponse, InventoryRow } from '../types';
 import { STATE_REFRESH_MS, usePolling } from '../usePolling';
 import type { ViewProps } from './props';
 
-const columns = [t('ui.m100'), 'MAC', 'IP', 'Ping', t('ui.m074'), t('ui.m213'), t('ui.m018'), t('ui.m020'), 'VLAN', 'PoE(W)', t('ui.m214'), t('ui.m215'), t('ui.m216')];
 const emptyCell = '—';
 
 function lastSeen(value: string | undefined): string {
@@ -20,6 +20,8 @@ function lastSeen(value: string | undefined): string {
 }
 
 export function DeviceInventoryTable({ rows }: { rows: InventoryRow[] }) {
+  const columns = [t('ui.m100'), 'MAC', 'IP', t('rack.plannedIP'), t('rack.pingStatus'), t('operations.pingAt'),
+    t('ui.m074'), t('ui.m213'), t('ui.m018'), t('ui.m020'), 'VLAN', 'PoE(W)', t('ui.m214'), t('ui.m215'), t('ui.m216')];
   return (
     <div className="overflow-auto">
       <table className="w-full text-sm">
@@ -40,9 +42,12 @@ export function DeviceInventoryTable({ rows }: { rows: InventoryRow[] }) {
                   </span>
                 )}
               </td>
-              <td className="whitespace-nowrap" title={row.ping ? t('ui.m221', { p0: formatTime(row.ping.at) }) : undefined}>
-                {row.ping ? pingLabel(row.ping.status, row.ping.rtt_ms) : emptyCell}
+              <td className="whitespace-nowrap">{row.planned_ip || emptyCell}
+                {row.ip_mismatch && <span className="text-amber-700 dark:text-amber-300" title={t('operations.mismatch')} aria-label={t('operations.mismatch')}> ▲</span>}
               </td>
+              <td className="whitespace-nowrap">{row.ping ? pingLabel(row.ping.status, row.ping.rtt_ms) :
+                row.ping_ok == null ? emptyCell : pingLabel(row.ping_ok ? 'ok' : 'timeout', row.ping_rtt_ms ?? 0)}</td>
+              <td className="whitespace-nowrap">{pcTimestamp(row.ping_ts || row.ping?.at || '')}</td>
               <td>{row.vendor || emptyCell}</td>
               <td>{row.lldp_name || emptyCell}</td>
               <td>{row.switch_name || emptyCell}</td>
@@ -70,6 +75,7 @@ export function DeviceInventoryTable({ rows }: { rows: InventoryRow[] }) {
 export function Devices(p: ViewProps) {
   const [scope, setScope] = useState<DeviceScope>('all');
   const [q, setQuery] = useState('');
+  const [group, setGroup] = useState<string>();
   const [importOpen, setImportOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [revision, setRevision] = useState(0);
@@ -78,7 +84,10 @@ export function Devices(p: ViewProps) {
   const isReplay = p.replay !== null;
   const replay = p.replayRef;
   const enabled = !isReplay || Boolean(replay);
-  const filters = { scope, q, vlans };
+  const groups = isReplay ? [...new Set(asArray(p.replay).map(sw => sw.group_tag))] :
+    asArray(p.operations?.groups).map(item => item.name);
+  const selectedGroup = group !== undefined && groups.includes(group) ? group : undefined;
+  const filters = { scope, q, vlans, group: selectedGroup };
   const url = enabled ? deviceUrl(filters, replay) : '';
   const profileId = p.status?.profile.id;
   const key = JSON.stringify([url, profileId, revision]);
@@ -98,7 +107,7 @@ export function Devices(p: ViewProps) {
     setNotice('');
     const r = await api<BulkPingResponse>('/api/diagnostics/ping-bulk', json('POST', body),
       bulkPingTimeoutMs(body.ips ? body.ips.length : MAX_BULK_PING));
-    const listed = new Set(rows.map(row => row.ip));
+    const listed = new Set(pingTargets(rows));
     setManualResults(asArray(r.results).filter(x => !listed.has(x.ip)));
     setNotice(t('ui.m228', { p0: r.ok, p1: r.total, p2: (r.elapsed_ms / 1000).toFixed(1) }));
     setRevision(value => value + 1);
@@ -114,6 +123,11 @@ export function Devices(p: ViewProps) {
           <button aria-pressed={scope === 'unnamed'} onClick={() => setScope('unnamed')}>{t('ui.m233')}</button>
         </div>
         <label>{t('ui.m234')}<input type="search" value={q} onChange={event => setQuery(event.target.value)} /></label>
+        <label>{t('operations.group')} <select value={selectedGroup === undefined ? '' : `g:${selectedGroup}`}
+          onChange={event => setGroup(event.target.value ? event.target.value.slice(2) : undefined)}>
+          <option value="">{t('rack.all')}</option>
+          {groups.map(name => <option key={name} value={`g:${name}`}>{name || t('rack.ungrouped')}</option>)}
+        </select></label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         {enabled && <>

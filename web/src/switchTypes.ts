@@ -1,3 +1,5 @@
+import type { MSRPFailure, MVRGroup } from './types';
+
 export interface SwitchConfig {
   id: number;
   profile_id: number;
@@ -8,6 +10,7 @@ export interface SwitchConfig {
   community?: string;
   enabled: boolean;
   web_url?: string;
+  last_trap_ts?: string | null;
 }
 export interface SwitchState {
   id: number;

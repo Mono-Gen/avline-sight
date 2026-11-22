@@ -1,7 +1,9 @@
 import type React from 'react';
 import type { Event, Overview, ReplayRef, Settings, Status, SwitchState, WatchItem } from '../types';
+import type { Operations } from '../useOperations';
 export interface ViewProps {
   overview: Overview;
+  operations?: Operations;
   status?: Status;
   settings?: Settings;
   part: string;

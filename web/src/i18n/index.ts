@@ -36,14 +36,15 @@ function subscribe(listener: () => void) {
 export function useLang(): [Language, typeof setLang] {
   return [useSyncExternalStore(subscribe, getLang, () => 'ja'), setLang];
 }
-export function t(key: TranslationKey, params: Record<string, unknown> = {}): string {
+function translation(key: TranslationKey): string {
   let value: unknown = language === 'en' ? en : ja;
   for (const part of key.split('.')) {
     value = value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined;
   }
-  return typeof value === 'string'
-    ? value.replace(/\{(\w+)\}/g, (_, name: string) => params[name] == null ? '' : String(params[name]))
-    : key;
+  return typeof value === 'string' ? value : key;
+}
+export function t(key: TranslationKey, params: Record<string, unknown> = {}): string {
+  return translation(key).replace(/\{(\w+)\}/g, (_, name: string) => params[name] == null ? '' : String(params[name]));
 }
 interface LocalizedEvent {
   code: string;
@@ -52,10 +53,13 @@ interface LocalizedEvent {
   detail?: Record<string, unknown>;
 }
 export function eventTitle(event: LocalizedEvent): string {
-  if (!(event.code in ja.events)) return event.title || event.code;
-  return t(`events.${event.code}.title` as TranslationKey, event.detail);
+  if (!Object.prototype.hasOwnProperty.call(ja.events, event.code)) return event.title || event.code;
+  const key = `events.${event.code}.title` as TranslationKey;
+  const variables = [...translation(key).matchAll(/\{(\w+)\}/g)];
+  if (variables.some(([, name]) => event.detail?.[name] == null) && event.title) return event.title;
+  return t(key, event.detail);
 }
 export function eventHint(event: LocalizedEvent): string {
-  if (!(event.code in ja.events)) return event.hint || '';
-  return t(`events.${event.code}.hint` as TranslationKey, event.detail);
+  if (!Object.prototype.hasOwnProperty.call(ja.events, event.code)) return event.hint || '';
+  return t(`events.${event.code}.hint` as TranslationKey, event.detail) || event.hint || '';
 }

@@ -1,6 +1,8 @@
-import { t } from '../i18n';
+import { eventHint, eventTitle, t } from '../i18n';
 import { useState } from 'react';
-import { api, json } from '../api';
+import { api } from '../api';
+import { acknowledgeEvents } from '../acknowledge';
+import { confirmAck } from '../useOperations';
 import { Badge } from '../components/Badge';
 import { PollingStatus } from '../components/PollingStatus';
 import type { EventFilters } from '../events';
@@ -41,6 +43,10 @@ export function Logs(props: ViewProps) {
   }, 0, [queryKey], true, 300);
   const refresh = result.refresh;
   const rows = logRows(result.data || [], props.events, filter);
+  const acknowledge = (ids: number[]) => acknowledgeEvents(ids, refresh, saved => {
+    const confirmed = new Set(saved);
+    props.setEvents(old => old.map(event => confirmed.has(event.id) ? { ...event, acked: true } : event));
+  });
   return (
     <section className="panel space-y-2">
       <PollingStatus {...result} />
@@ -58,11 +64,8 @@ export function Logs(props: ViewProps) {
           </label>
         ))}
         <button
-          disabled={props.busy || props.locked}
-          onClick={() => props.run(async () => {
-            await api('/api/events/ack-all', json('POST'));
-            await refresh();
-          })}
+          disabled={props.busy || !!props.replay || !rows.some(event => !event.acked)}
+          onClick={() => confirmAck(undefined, props.run, () => acknowledge(rows.filter(event => !event.acked).map(event => event.id)))}
         >{t('ui.m267')}</button>
         <a href="/api/export/csv?type=events">CSV</a>
         <a href="/api/export/json?type=events">JSON</a>
@@ -74,13 +77,10 @@ export function Logs(props: ViewProps) {
             {rows.map(event => (
               <tr key={event.id}>
                 <td>{formatTime(event.ts)}</td><td><Badge text={event.severity} /></td><td>{event.category}</td>
-                <td>{event.switch_name}</td><td>{event.title} {event.hint}</td>
+                <td>{event.switch_name}</td><td>{eventTitle(event)} {eventHint(event)}</td>
                 <td>{event.acked ? t('ui.m269') : <button
-                  disabled={props.busy || props.locked}
-                  onClick={() => props.run(async () => {
-                    await api(`/api/events/${event.id}/ack`, json('POST'));
-                    await refresh();
-                  })}
+                  disabled={props.busy || !!props.replay}
+                  onClick={() => props.run(() => acknowledge([event.id]))}
                 >{t('ui.m268')}</button>}</td>
               </tr>
             ))}

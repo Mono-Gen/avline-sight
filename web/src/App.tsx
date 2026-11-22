@@ -4,6 +4,7 @@ import { AppHeader } from './components/AppHeader';
 import { ExportDialog, ScrubBar, SettingsDialog } from './components/Dialogs';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TerminalDrawer } from './components/TerminalDrawer';
+import { TrapHelp } from './components/TrapHelp';
 import { asArray } from './format';
 import type { Event, Overview, Profile, ReplaySession, ReplaySnapshot, Settings, Status, SwitchState, WatchItem } from './types';
 import { Devices } from './views/Devices';
@@ -15,6 +16,8 @@ import { useLiveFeed } from './useLiveFeed';
 import { t, useLang } from './i18n';
 import { useOperations } from './useOperations';
 const pages = ['overview', 'topology', 'monitor', 'ports', 'devices', 'multicast', 'dhcp', 'health', 'logs'] as const;
+type Page = typeof pages[number];
+const isPage = (value: string): value is Page => (pages as readonly string[]).includes(value);
 const replayPages: readonly string[] = ['overview', 'monitor', 'devices', 'multicast', 'health'];
 const empty: Overview = {
   switches: [],
@@ -40,10 +43,11 @@ function put(key: string, value: string) {
   }
 }
 export default function App() {
-  useLang();
+  const [language] = useLang();
+  useEffect(() => { document.documentElement.lang = language; }, [language]);
   const [page, setPage] = useState(() => {
     const v = get('view', 'overview');
-    return (pages as readonly string[]).includes(v) ? v : 'overview';
+    return isPage(v) ? v : 'overview';
   });
   const [theme, setTheme] = useState(() => get('theme', 'dark'));
   const [muted, setMuted] = useState(() => get('muted', 'false') === 'true');
@@ -51,6 +55,7 @@ export default function App() {
   const [status, setStatus] = useState<Status>();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [settings, setSettings] = useState<Settings>();
+  const [settingsVersion, setSettingsVersion] = useState(0);
   const [part, setPart] = useState('');
   const [online, setOnline] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
@@ -71,9 +76,25 @@ export default function App() {
   }, [wall]);
   const [terminal, setTerminal] = useState(0);
   const [dialog, setDialog] = useState('');
+  const trapHelpShown = useRef(false);
   const [replay, setReplay] = useState<ReplaySession | null>(null);
   const replayId = replay?.id;
   const replayStart = replay?.timeline.from;
+  const profileId = status?.profile.id;
+  const locked = !status || status.locked || !!replay;
+  const trapFailed = status?.trap?.ok === false;
+  useEffect(() => {
+    if (wall || dialog || !trapFailed || trapHelpShown.current) return;
+    trapHelpShown.current = true;
+    let shown = false;
+    try {
+      shown = sessionStorage.getItem('trap-help-shown') === 'yes';
+      sessionStorage.setItem('trap-help-shown', 'yes');
+    } catch {
+      shown = false;
+    }
+    if (!shown) setDialog('trap');
+  }, [wall, dialog, trapFailed]);
   const socket = useLiveFeed({ muted, replay: !!replay, settings, setOverview, setState, setEvents, setOnline });
   const run = useCallback((f: () => Promise<void>) => {
     if (busyRef.current) return;
@@ -86,17 +107,31 @@ export default function App() {
     });
   }, []);
   const refresh = useCallback(async () => {
-    const [s, pr, se, w] = await Promise.all([
+    const [s, pr] = await Promise.all([
       api<Status>('/api/status'),
       api<Profile[]>('/api/profiles'),
-      api<Settings>('/api/settings'),
-      api<WatchItem[]>('/api/watchlist')
     ]);
     setStatus(s);
     setProfiles(pr || []);
-    setSettings(se);
-    setWatch(w || []);
   }, []);
+  useEffect(() => {
+    if (profileId === undefined) return;
+    const request = new AbortController();
+    const { signal } = request;
+    setSettings(undefined);
+    setWatch([]);
+    void Promise.all([
+      api<Settings>('/api/settings', { signal }),
+      api<WatchItem[]>('/api/watchlist', { signal }),
+    ]).then(([currentSettings, currentWatch]) => {
+      if (signal.aborted) return;
+      setSettings(currentSettings);
+      setWatch(asArray(currentWatch));
+    }).catch(reason => {
+      if (!signal.aborted) setError(message(reason));
+    });
+    return () => request.abort();
+  }, [profileId, settingsVersion]);
   useEffect(() => {
     const handler = (e: globalThis.Event) => setError((e as CustomEvent<string>).detail);
     window.addEventListener('api-error', handler);
@@ -131,13 +166,13 @@ export default function App() {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setWall(false); return; }
-      if (wall) return;
+      if (wall || locked || dialog) return;
       const el = e.target as HTMLElement;
       if (e.key.toLowerCase() === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey && !asArray(['INPUT', 'TEXTAREA', 'SELECT']).includes(el.tagName) && !el.isContentEditable && !terminal) marker();
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [marker, terminal, wall]);
+  }, [marker, terminal, wall, locked, dialog]);
   useEffect(() => {
     if (!replayId || !replayStart) return;
     const controller = new AbortController();
@@ -161,10 +196,12 @@ export default function App() {
     setSelected(id);
     setPage('monitor');
   };
-  const locked = !status || !!status.locked || !!replay;
-  const operations = useOperations({ online, replay: !!replay, profileId: status?.profile.id, setStatus, run });
+  const operations = useOperations({ online, replay: !!replay, profileId, setStatus, run });
   const props = {
     overview,
+    operations,
+    wall,
+    onTrapHelp: () => setDialog('trap'),
     status,
     settings,
     part,
@@ -182,10 +219,13 @@ export default function App() {
     watch,
     setWatch
   };
-  return <div className={wall ? "wall-shell" : "min-h-screen"}>
+  return <div className={wall ? 'wall-shell' : 'min-h-screen'}>
     <AppHeader
       {...{
         online,
+        phase: operations.phase || status?.phase,
+        onPhase: operations.setPhase,
+        onTrapHelp: props.onTrapHelp,
         wall,
         setWall,
         theme,
@@ -221,19 +261,15 @@ export default function App() {
       run={run}
     />}
 
-    {error && <div role="alert" className="bg-red-900 p-3 text-white">⚠
+    {!wall && error && <div role="alert" className="bg-red-900 p-3 text-white">⚠
       {error}
 
-      <button onClick={() => setError('')}>閉じる
+      <button onClick={() => setError('')}>{t('rack.close')}
       </button>
     </div>}
-    {busy && <div role="status" className="bg-amber-100 text-black">{t('rack.busy')}
+    {!wall && busy && <div role="status" className="bg-amber-100 text-black">{t('rack.busy')}
     </div>}
-    {status?.trap && !status.trap.ok && <div className="bg-amber-100 p-2 text-black">{t('rack.trapFail')}:
-      {status.trap.error}
-      
-    </div>}
-    <div className="flex flex-col md:flex-row">
+    <div className={wall ? 'wall-content' : 'flex flex-col md:flex-row'}>
       {!wall && <nav className="flex flex-wrap gap-1 bg-slate-200 p-3 dark:bg-slate-900 md:w-52 md:flex-col">
         {asArray(pages).map(v => <button
           key={v}
@@ -241,17 +277,13 @@ export default function App() {
           aria-current={page === v ? 'page' : undefined}
           onClick={() => setPage(v)}
         >
-          {v}
+          {t(`rack.nav.${v}`)}
         </button>)}
       </nav>}
-      <main className="min-w-0 flex-1 space-y-4 p-4">
-        <h1 className="text-2xl font-bold">
-          {wall ? t('rack.wall') : t(`rack.nav.${page}` as 'rack.nav.overview')}
-        </h1>
-        <ErrorBoundary key={wall ? '壁表示' : page} name={wall ? '壁表示' : page}>
-          {(wall || page === 'overview') && <div className={wall ? 'wallboard' : undefined}>
-            <OverviewView {...props} />
-          </div>}
+      <main className={wall ? 'wall-main' : 'min-w-0 flex-1 space-y-4 p-4'}>
+        {!wall && <h1 className="text-2xl font-bold">{t(`rack.nav.${page}`)}</h1>}
+        <ErrorBoundary key={wall ? 'wall' : page} name={wall ? t('rack.wall') : t(`rack.nav.${page}`)}>
+          {(wall || page === 'overview') && <OverviewView key={status?.profile.id || 0} {...props} />}
 
           {!wall && page === 'topology' && <Topology {...props} />}
 
@@ -273,14 +305,15 @@ export default function App() {
     </div>
     {!wall && terminal > 0 && !locked && <TerminalDrawer id={terminal} close={() => setTerminal(0)} />}
 
-    {!wall && dialog === 'export' && <ExportDialog close={() => setDialog('')} busy={busy} run={run} />}
+    {!wall && !locked && dialog === 'export' && <ExportDialog close={() => setDialog('')} busy={busy} run={run} />}
 
-    {!wall && dialog === 'settings' && settings && <SettingsDialog
+    {!wall && dialog === 'trap' && <TrapHelp close={() => setDialog('')} error={status?.trap.error} />}
+    {!wall && !locked && dialog === 'settings' && settings && <SettingsDialog
       value={settings}
       webAddr={status?.web_addr}
       close={() => {
         setDialog('');
-        void refresh().catch(e => setError(message(e)));
+        setSettingsVersion(value => value + 1);
       }}
       busy={busy}
       run={run}

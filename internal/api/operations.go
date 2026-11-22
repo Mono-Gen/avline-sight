@@ -34,6 +34,12 @@ func (s *Server) groups(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, "グループ一覧を取得できません", err.Error(), "")
 		return
 	}
+	names, err := s.Store.GroupOrder(r.Context(), s.Engine.ProfileID())
+	if err != nil {
+		writeErr(w, 500, "グループ一覧を取得できません", err.Error(), "")
+		return
+	}
+	orderGroups(groups, names)
 	writeJSON(w, 200, groups)
 }
 
@@ -54,6 +60,11 @@ func (s *Server) knownGroup(group string) (bool, error) {
 }
 
 func (s *Server) startWork(w http.ResponseWriter, r *http.Request) {
+	s.groupMu.Lock()
+	defer s.groupMu.Unlock()
+	if !s.checkGroupProfile(w, r) {
+		return
+	}
 	var in struct {
 		Group   *string `json:"group"`
 		Minutes int     `json:"minutes"`
@@ -83,6 +94,11 @@ func (s *Server) startWork(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) endWork(w http.ResponseWriter, r *http.Request) {
+	s.groupMu.Lock()
+	defer s.groupMu.Unlock()
+	if !s.checkGroupProfile(w, r) {
+		return
+	}
 	group := r.PathValue("group")
 	if err := s.Engine.EndWork(group); err != nil {
 		writeErr(w, 500, "作業中を解除できません", err.Error(), "")
@@ -92,6 +108,11 @@ func (s *Server) endWork(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) resetGroupCounters(w http.ResponseWriter, r *http.Request) {
+	s.groupMu.Lock()
+	defer s.groupMu.Unlock()
+	if !s.checkGroupProfile(w, r) {
+		return
+	}
 	var in struct {
 		Group *string `json:"group"`
 	}
