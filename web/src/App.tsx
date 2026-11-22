@@ -315,7 +315,8 @@ export default function App() {
           {(wall || page === 'monitor') && <PortMonitor key={status?.profile.id || 0} {...props} target={wall ? undefined : monitorTarget}
             onClosePortDetail={() => setMonitorTarget(undefined)} />}
 
-          {!wall && expert && page === 'topology' && <Topology {...props} />}
+          {!wall && expert && page === 'topology' && <Topology key={status?.profile.id || 0} {...props}
+            openDevices={() => setPage('devices')} />}
 
           {!wall && page === 'switch' && <SwitchPorts {...props} />}
 

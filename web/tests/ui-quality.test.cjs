@@ -23,6 +23,7 @@ require('./ui-regressions.cjs');
 require('./live-regressions.cjs');
 require('./rack-quality.cjs');
 require('./fix-round1.cjs');
+require('./topology-quality.cjs');
 
 const assert = require('node:assert/strict');
 const React = require('react');
@@ -468,11 +469,12 @@ test('トポロジーと接続機器は同じ色・記号を使い、監視対�
   const cy = require('cytoscape')({ headless: true, styleEnabled: true });
   try {
     const { updateTopology } = require('../src/topologyGraph.ts');
-    updateTopology(cy, {
+    const { buildTopology } = require('../src/topologyModel.ts');
+    updateTopology(cy, buildTopology({
       nodes: [{ id: 'sw', switch_id: 1, label: 'West', kind: 'switch', reachable: true },
         { id: 'ext', label: 'Other', kind: 'external', reachable: true }],
       edges: [{ id: 'link', source: 'sw', target: 'ext', local_port: '1/0/2' }],
-    }, undefined, '', true, false, alerts);
+    }, [], []), undefined, { alerts });
     assert.equal(cy.getElementById('sw').data('statusLabel'), '! West');
     assert.equal(cy.getElementById('ext').data('statusTone'), 'warning');
     assert.equal(cy.getElementById('ext').data('monitorSwitchId'), 1);
@@ -512,6 +514,7 @@ test('通常・壁の更新時刻とカードの発生・復旧をJSTでそろ�
 test('External topology nodes use all linked switch ports and select the highest-priority edge', () => {
   const cy = require('cytoscape')({ headless: true, styleEnabled: true });
   const { updateTopology } = require('../src/topologyGraph.ts');
+  const { buildTopology } = require('../src/topologyModel.ts');
   const topology = {
     nodes: [
       ...[1, 2, 3].map(id => ({ id: `sw${id}`, switch_id: id, kind: 'switch', label: `Switch ${id}`, reachable: true })),
@@ -526,7 +529,7 @@ test('External topology nodes use all linked switch ports and select the highest
   const recovered = fault(2, { switch_id: 2, if_index: 2, port: '1/0/2', active: false });
   const active = fault(3, { switch_id: 3, if_index: 3, port: '1/0/3', active: true, acked: true });
   const check = (alerts, tone, id) => {
-    updateTopology(cy, topology, undefined, '', true, false, alerts);
+    updateTopology(cy, buildTopology(topology, [], []), undefined, { alerts });
     const node = cy.getElementById('ext');
     assert.equal(node.data('statusTone'), tone);
     assert.equal(node.data('monitorSwitchId'), id);

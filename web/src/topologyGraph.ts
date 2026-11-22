@@ -1,7 +1,18 @@
 import type cytoscape from 'cytoscape';
-import { asArray } from './format';
-import type { Alert, Multicast, Topology } from './types';
+import { asArray, decimal } from './format';
+import { t } from './i18n';
+import { buildTopology, linkAppearance, topologyHighlights, topologyQueriers } from './topologyModel';
+import type { TopologySelection } from './topologyModel';
+import type { Alert, Multicast, TopologyNode } from './types';
 import { alertStates, alertTone, isPortAlert, summarizeAlerts } from './wallAlerts';
+
+const linkHighlight = (color: string, padding: number): cytoscape.Css.Edge & {
+  'underlay-color': string;
+  'underlay-opacity': number;
+  'underlay-padding': number;
+} => ({
+  'underlay-color': color, 'underlay-opacity': 1, 'underlay-padding': padding,
+});
 
 export const topologyStyles: cytoscape.Stylesheet[] = [
   {
@@ -9,7 +20,10 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
     style: {
       label: 'data(statusLabel)',
       'background-color': 'data(statusColor)',
-      color: '#ddd',
+      color: '#f8fafc',
+      'text-wrap': 'wrap',
+      'text-outline-color': '#0f172a',
+      'text-outline-width': 2,
       'text-valign': 'bottom'
     }
   },
@@ -21,40 +35,65 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
   {
     selector: 'edge',
     style: {
-      width: 3,
-      'line-color': '#94a3b8',
-      label: 'data(local_port)',
-      'font-size': 9,
-      color: '#ddd'
+      width: 'data(lineWidth)',
+      'line-color': 'data(lineColor)',
+      label: 'data(edgeLabel)',
+      'font-size': 10,
+      'text-wrap': 'wrap',
+      'text-outline-color': '#0f172a',
+      'text-outline-width': 2,
+      color: '#f8fafc'
     }
   },
-  { selector: 'edge[?blocking]', style: { 'line-style': 'dashed' } },
-  { selector: 'edge.hidden', style: { display: 'none' } },
   {
     selector: 'node[?highlight]',
     style: { 'border-color': '#7dd3fc', 'border-width': 3 }
   },
-  { selector: 'edge[?highlight]', style: { 'line-color': '#f59e0b', width: 5 } },
+  { selector: 'edge[?highlight]', style: linkHighlight('#f59e0b', 3) },
+  { selector: 'edge[?path], edge[?selected]', style: linkHighlight('#c4b5fd', 4) },
+  { selector: 'edge[?down]', style: { 'line-style': 'dashed' } },
+  { selector: 'node[?path], node[?selected]', style: { 'border-color': '#c4b5fd', 'border-width': 4 } },
+  { selector: 'node[?impacted]', style: { 'background-color': '#f87171', 'border-color': '#fecaca', 'border-width': 3 } },
+  {
+    selector: 'node[kind = "device-count"]',
+    style: {
+      shape: 'round-rectangle', width: 28, height: 22, 'font-size': 11,
+      'background-color': '#0f172a', 'border-color': '#cbd5e1', 'border-width': 1,
+      'text-valign': 'center', 'text-outline-width': 0, 'z-index': 10
+    }
+  },
 ];
+
+export function countPosition(position: cytoscape.Position): cytoscape.Position {
+  return { x: position.x + 27, y: position.y - 17 };
+}
+
+export const countId = (node: string) => `count:${node}`;
+export const deviceLabel = (row: { label: string; lldp_name: string; mac: string }) => row.label || row.lldp_name || row.mac;
 
 export function updateTopology(
   core: cytoscape.Core,
-  topology: Topology,
+  model: ReturnType<typeof buildTopology>,
   multicast: Multicast | undefined,
-  selectedGroup: string,
-  showBlocking: boolean,
-  initial: boolean,
-  alerts: Alert[] = [],
+  { group = '', vlan = 0, coreId, selection, initial = false, alerts = [] }: {
+    group?: string; vlan?: number; coreId?: string; selection?: TopologySelection; initial?: boolean; alerts?: Alert[];
+  } = {},
 ) {
-  const nodes = asArray(topology.nodes);
-  const edges = asArray(topology.edges);
-  const groups = asArray(multicast?.groups).filter(item => item.group === selectedGroup);
+  const { edges, parent, devices } = model;
+  const { impacted, path } = topologyHighlights(model, coreId, selection);
+  const queriers = topologyQueriers(multicast, vlan).switchIds;
+  const rows = new Map([...devices.values()].flat().map(row => [`device:${row.mac}`, row]));
+  const nodes: TopologyNode[] = [...model.nodes, ...Array.from(rows, ([id, row]) => ({
+    id, kind: 'device', label: deviceLabel(row), reachable: row.seen,
+  }))];
+  const groups = asArray(multicast?.groups).filter(item => item.group === group);
   const members = new Set(groups.map(item => item.switch_id));
   const switchIds = new Map(nodes.map(node => [node.id, node.switch_id]));
   const carries = (node: string, port: string, vlan: number) => groups.some(item =>
     item.switch_id === switchIds.get(node) && item.vlan === vlan && asArray(item.ports).includes(port));
-  const ids = new Set([...nodes.map(node => node.id), ...edges.map(edge => edge.id)]);
-  const nodeIds = new Set(nodes.map(node => node.id));
+  const switchNodes = model.nodes.filter(node => node.kind === 'switch' && node.switch_id);
+  const ids = new Set([...nodes.map(node => node.id), ...edges.map(edge => edge.id),
+    ...switchNodes.map(node => countId(node.id)), ...Array.from(parent.keys(), id => `attachment:${id}`)]);
   core.batch(() => {
     core.elements().filter(element => !ids.has(element.id())).remove();
     nodes.forEach((node, index) => {
@@ -72,22 +111,33 @@ export function updateTopology(
         links.find(link => link.issues.some(alert => !alert.acked)) || links[0];
       const relevant = node.switch_id ? alerts.filter(alert => alert.switch_id === node.switch_id) :
         links.flatMap(link => link.issues);
-      const switchId = node.switch_id || monitor?.switchId;
-      const portName = monitor?.portName;
-      const statusTone = alertTone(summarizeAlerts(relevant), node.reachable === true);
+      const row = rows.get(node.id);
+      const switchId = node.switch_id || row?.switch_id || monitor?.switchId;
+      const portName = row?.port || monitor?.portName;
+      const deviceAlerts = row ? alerts.filter(alert => alert.switch_id === switchId && alert.port === portName && isPortAlert(alert)) : relevant;
+      const statusTone = alertTone(summarizeAlerts(deviceAlerts), node.reachable === true);
       const status = alertStates[statusTone];
+      const isImpacted = impacted.has(node.id);
+      const isQuerier = node.switch_id !== undefined && queriers.has(node.switch_id) && node.reachable !== false;
+      const badge = isQuerier ? `\n${t('topology.querierBadge', { vlan })}` : '';
+      const impactLabel = isImpacted ? `\n${t('topology.affected')}` : '';
       const data = {
-        ...node,
+        id: node.id,
+        kind: node.kind,
+        label: node.label,
         monitorSwitchId: switchId || 0,
         monitorPortName: portName || '',
         statusTone,
-        statusLabel: `${status.symbol} ${node.label}`,
+        statusLabel: `${status.symbol} ${node.label}${badge}${impactLabel}`,
         statusColor: status.color,
-        highlight: Boolean(selectedGroup && node.switch_id !== undefined && members.has(node.switch_id))
+        highlight: node.switch_id !== undefined && members.has(node.switch_id),
+        impacted: isImpacted,
+        querier: isQuerier,
+        path: path.has(node.id),
+        selected: selection?.kind === 'node' && selection.id === node.id,
       };
       const existing = core.getElementById(node.id);
       if (existing.length) {
-        
         existing.data(data);
       } else {
         core.add({
@@ -99,26 +149,53 @@ export function updateTopology(
         });
       }
     });
-    edges.forEach(edge => {
-      if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) return;
-      const data = {
-        ...edge,
-        blocking: Boolean(edge.blocking),
-        highlight: Boolean(selectedGroup && groups.some(item =>
-          carries(edge.source, edge.local_port, item.vlan) && carries(edge.target, edge.remote_port, item.vlan))),
-      };
-      let existing = core.getElementById(edge.id);
-      if (existing.length && (existing.data('source') !== edge.source || existing.data('target') !== edge.target)) {
+    const upsertEdge = (data: cytoscape.EdgeDataDefinition) => {
+      const existing = core.getElementById(data.id!);
+      if (existing.length && existing.data('source') === data.source && existing.data('target') === data.target) {
+        existing.data(data);
+      } else {
         existing.remove();
-        existing = core.collection();
+        core.add({ group: 'edges', data });
       }
-      const element = existing.length ? existing.data(data) : core.add({ group: 'edges', data });
-      element.toggleClass('hidden', !showBlocking && data.blocking);
+    };
+    edges.forEach(edge => {
+      const down = model.failedLinks.has(edge.id);
+      const { width, color, speed, util } = linkAppearance(edge, down, !model.failedNodes.has(edge.source));
+      const metrics = t('topology.linkMetrics', {
+        speed: speed === undefined ? '—' : `${speed} Mbps`,
+        utilization: util === undefined ? '—' : `${decimal(util)}%`,
+      });
+      upsertEdge({
+        id: edge.id, source: edge.source, target: edge.target, interSwitch: true,
+        lineWidth: width, lineColor: color, down, path: path.has(edge.id),
+        selected: selection?.kind === 'edge' && selection.id === edge.id,
+        edgeLabel: `${edge.local_port} ↔ ${edge.remote_port}\n${down ? `${t('topology.linkDown')} · ` : ''}${metrics}`,
+        highlight: groups.some(item =>
+          carries(edge.source, edge.local_port, item.vlan) && carries(edge.target, edge.remote_port, item.vlan)),
+      });
     });
+    for (const [device, source] of parent) {
+      const id = `attachment:${device}`;
+      upsertEdge({ id, source, target: device, edgeLabel: '', lineWidth: 1, lineColor: '#94a3b8', path: path.has(id) });
+    }
   });
-  
   if (initial && nodes.length) {
-    const saved = nodes.some(node => Number.isFinite(node.x) && Number.isFinite(node.y));
-    core.layout({ name: saved ? 'preset' : 'grid' }).run();
+    const saved = model.nodes.some(node => Number.isFinite(node.x) && Number.isFinite(node.y));
+    core.elements().not('node[kind = "device-count"]').layout({ name: saved ? 'preset' : 'grid' }).run();
   }
+  core.batch(() => {
+    for (const node of switchNodes) {
+      const id = countId(node.id);
+      const count = devices.get(node.id)?.length ?? 0;
+      const position = countPosition(core.getElementById(node.id).position());
+      const existing = core.getElementById(id);
+      if (existing.length) {
+        existing.data('statusLabel', String(count));
+        existing.position(position);
+      } else {
+        core.add({ group: 'nodes', data: { id, kind: 'device-count', switchNode: node.id, statusLabel: String(count), statusColor: '#0f172a' },
+          position, grabbable: false, selectable: false });
+      }
+    }
+  });
 }

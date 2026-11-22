@@ -3,6 +3,15 @@ import { eventEn } from './eventEn';
 import type { Dictionary } from './index';
 import { rackEn } from './rack';
 export const en: Dictionary = {
+  topology: {
+    core: 'Path origin', autoCore: 'Automatic', chooseCore: 'Select the core switch to view impact and paths.',
+    querierVlan: 'Querier VLAN', noVlan: 'None selected', querierBadge: 'VLAN {vlan} querier',
+    noQuerier: 'No monitored querier was confirmed for VLAN {vlan}.',
+    selection: 'Topology selection', noSelection: 'Nothing selected', affected: '⚠ Affected',
+    noPath: 'No path to the core switch was confirmed for the selected device.',
+    linkMetrics: '{speed} · {utilization} utilization', linkDown: '⚠ Link down',
+    deviceCount: '{count} connected devices', deviceList: 'Devices connected to {name}', noDevices: 'No connected devices detected.',
+  },
   expert: {
     setting: 'Expert display', badge: 'Expert', recommendations: 'Settings that differ from recommendations',
     noRecommendations: 'No differences from recommendations on the ports shown.',
@@ -372,7 +381,6 @@ export const en: Dictionary = {
   "m299": "{p0} min",
   "m300": "{p0} h",
   "m301": "Port history",
-  "m302": "Show blocking",
   "m303": "Multicast path candidates",
   "m304": "Save layout",
   "m305": "Background image",

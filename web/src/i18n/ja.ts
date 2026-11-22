@@ -2,6 +2,15 @@ import { operationsJa } from './operations';
 import { eventJa } from './eventJa';
 import { rackJa } from './rack';
 export const ja = {
+  topology: {
+    core: '経路の起点', autoCore: '自動', chooseCore: '影響範囲と経路を表示するには、起点となるコアスイッチを選択してください。',
+    querierVlan: 'クエリアのVLAN', noVlan: '指定なし', querierBadge: 'VLAN {vlan} クエリア',
+    noQuerier: 'VLAN {vlan} のクエリアを監視対象内で確認できません。',
+    selection: 'トポロジー上の選択', noSelection: '選択なし', affected: '⚠ 影響範囲',
+    noPath: '選択した機器からコアスイッチまでの経路を確認できません。',
+    linkMetrics: '{speed} · 使用率 {utilization}', linkDown: '⚠ リンクダウン',
+    deviceCount: '接続機器 {count}台', deviceList: '{name} の接続機器', noDevices: '接続機器は確認されていません。',
+  },
   expert: {
     setting: 'エキスパート表示', badge: 'エキスパート', recommendations: '推奨と違う設定',
     noRecommendations: '表示対象のポートに推奨との差はありません。',
@@ -371,7 +380,6 @@ export const ja = {
   "m299": "{p0}分",
   "m300": "{p0}時間",
   "m301": "ポート履歴",
-  "m302": "ブロッキングを表示",
   "m303": "マルチキャスト経路候補",
   "m304": "配置を保存",
   "m305": "背景画像",

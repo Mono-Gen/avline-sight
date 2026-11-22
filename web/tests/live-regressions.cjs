@@ -104,41 +104,45 @@ test('定期更新は失敗後の次の周期で復帰できる', async context 
 });
 const cytoscape = require('cytoscape');
 const { updateTopology, topologyStyles } = require('../src/topologyGraph.ts');
+const { buildTopology } = require('../src/topologyModel.ts');
 const { frontPanelRows } = require('../src/frontPanelLayout.ts');
 
-test('トポロジーは真偽値セレクターでBlockingと経路候補を描画する', context => {
+test('Topology hides blocked links and preserves multicast highlights on forwarding links', context => {
   const core = cytoscape({ headless: true, styleEnabled: true, elements: [], style: topologyStyles });
   context.after(() => core.destroy());
   const topology = {
     nodes: [{ id: 'a', label: 'A', kind: 'switch', switch_id: 1 }, { id: 'b', label: 'B', kind: 'switch', switch_id: 2 }],
-    edges: [{ id: 'ab', source: 'a', target: 'b', local_port: '1/0/1', remote_port: '1/0/2', blocking: true }],
+    edges: [
+      { id: 'ab', source: 'a', target: 'b', local_port: '1/0/1', remote_port: '1/0/2' },
+      { id: 'blocked', source: 'a', target: 'b', local_port: '1/0/3', remote_port: '1/0/4', blocking: true },
+    ],
   };
   const multicast = { groups: [
     { switch_id: 1, group: '239.1.1.1', vlan: 10, ports: ['1/0/1'] },
     { switch_id: 2, group: '239.1.1.1', vlan: 10, ports: ['1/0/2'] },
   ] };
-  updateTopology(core, topology, multicast, '239.1.1.1', true, false);
-  assert.equal(core.edges('[?blocking]').length, 1);
+  const model = buildTopology(topology, [], []);
+  updateTopology(core, model, multicast, { group: '239.1.1.1' });
+  assert.equal(core.getElementById('blocked').length, 0);
   assert.equal(core.edges('[?highlight]').length, 1);
-  assert.equal(core.getElementById('ab').style('line-style'), 'dashed');
-  assert.equal(core.getElementById('ab').style('width'), '5px');
-  updateTopology(core, topology, multicast, '', false, false);
+  assert.equal(core.getElementById('ab').style('underlay-opacity'), '1');
+  updateTopology(core, model, multicast);
   assert.equal(core.edges('[?highlight]').length, 0);
-  assert.equal(core.getElementById('ab').style('display'), 'none');
+  assert.equal(core.getElementById('blocked').length, 0);
 });
 
 test('トポロジー再取得・表示切替はドラッグ位置とズームを維持する', context => {
   const core = cytoscape({ headless: true, elements: [] });
   context.after(() => core.destroy());
   let layouts = 0;
-  const original = core.layout.bind(core);
-  core.layout = options => { layouts++; return original(options); };
+  const original = core.makeLayout.bind(core);
+  core.makeLayout = options => { layouts++; return original(options); };
   const topology = { nodes: [{ id: 'a', label: '旧名', kind: 'switch', x: 10, y: 20 }], edges: [] };
-  updateTopology(core, topology, undefined, '', true, true);
+  updateTopology(core, buildTopology(topology, [], []), undefined, { initial: true });
   core.getElementById('a').position({ x: 321, y: 654 });
   core.zoom(1.5);
   core.pan({ x: 25, y: 30 });
-  updateTopology(core, { ...topology, nodes: [{ ...topology.nodes[0], label: '新名', x: 0, y: 0 }] }, undefined, '', false, false);
+  updateTopology(core, buildTopology({ ...topology, nodes: [{ ...topology.nodes[0], label: '新名', x: 0, y: 0 }] }, [], []));
   assert.deepEqual(core.getElementById('a').position(), { x: 321, y: 654 });
   assert.equal(core.getElementById('a').data('label'), '新名');
   assert.equal(core.zoom(), 1.5);
