@@ -37,6 +37,15 @@ func (w *worker) recordStormSetting(p *model.Port, field string, value int64) {
 	}
 }
 
+func (w *worker) markConfigFailed(fields ...string) {
+	if w.configFailed == nil {
+		w.configFailed = make(map[string]bool)
+	}
+	for _, field := range fields {
+		w.configFailed[field] = true
+	}
+}
+
 func (w *worker) finishConfigCollection(tier string) {
 	var fields []string
 	switch tier {
@@ -52,6 +61,9 @@ func (w *worker) finishConfigCollection(tier string) {
 			p.ConfigSettings = make(map[string]string)
 		}
 		for _, field := range fields {
+			if w.configFailed[field] {
+				continue
+			}
 			before, after := p.ConfigSettings[field], w.configRead[p.IfIndex][field]
 			if after == "" {
 				delete(p.ConfigSettings, field)

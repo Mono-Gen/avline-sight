@@ -601,6 +601,8 @@ func (w *worker) collectSlow() error {
 		for _, r := range rows {
 			w.basePort[ifIdx(r)] = int(sx.Int(r.Cols[mib.Dot1dBasePortIfIdx]))
 		}
+	} else {
+		w.markConfigFailed("pvid")
 	}
 	if rows, err := w.c.WalkColumns([]string{mib.Dot1qVlanStaticName}); err == nil {
 		for _, r := range rows {
@@ -614,6 +616,8 @@ func (w *worker) collectSlow() error {
 				w.recordPositiveSetting(p, "pvid", p.PVID)
 			}
 		}
+	} else {
+		w.markConfigFailed("pvid")
 	}
 
 	// --- 接続機器の統合（LLDP → DHCP Snooping → ARP → FDB+OUI） ---
@@ -786,6 +790,7 @@ func (w *worker) collectConfig(pm map[int]*model.Port) {
 		mib.SSLAdminMode, mib.SSLSecurePort, mib.SSHAdminMode, mib.SSHMgmtPortNum, mib.TelnetMgmtPortNum,
 		mib.CableTesterIfIndex, mib.CableTesterCableStatus, mib.CableTesterMinLen, mib.CableTesterMaxLen, mib.CableTesterFailLoc})
 	if err != nil {
+		w.markConfigFailed("eee", "trust", "max_frame", "bcast_storm_ctl", "mcast_storm_ctl")
 		return
 	}
 	if v, ok := res[mib.StpForceVersion]; ok {
@@ -815,33 +820,40 @@ func (w *worker) collectConfig(pm map[int]*model.Port) {
 				MinLen: int(sx.U64(res[mib.CableTesterMinLen])), MaxLen: int(sx.U64(res[mib.CableTesterMaxLen])), FailLoc: int(sx.U64(res[mib.CableTesterFailLoc]))}
 		}
 	}
-	perPort := func(cols []string, f func(p *model.Port, r sx.Row)) {
-		if rows, err := w.c.WalkColumns(cols); err == nil {
-			for _, r := range rows {
-				if p := pm[ifIdx(r)]; p != nil {
-					f(p, r)
-				}
+	perPort := func(cols []string, f func(p *model.Port, r sx.Row)) error {
+		rows, err := w.c.WalkColumns(cols)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			if p := pm[ifIdx(r)]; p != nil {
+				f(p, r)
 			}
 		}
+		return nil
 	}
-	perPort([]string{mib.GreenEeeMode}, func(p *model.Port, r sx.Row) {
+	if err := perPort([]string{mib.GreenEeeMode}, func(p *model.Port, r sx.Row) {
 		if v := r.Cols[mib.GreenEeeMode]; v.Type == gosnmp.Integer && v.Value != nil {
 			p.EEE = mib.GreenModeEnum.Name(int(sx.Int(v)))
 			if p.EEE != "not-applicable" {
 				w.recordSetting(p, "eee", mib.GreenModeEnum[int(sx.Int(v))])
 			}
 		}
-	})
+	}); err != nil {
+		w.markConfigFailed("eee")
+	}
 	perPort([]string{mib.UdldIntfOperStatus}, func(p *model.Port, r sx.Row) {
 		p.UDLD = mib.UdldOperEnum.Name(int(sx.Int(r.Cols[mib.UdldIntfOperStatus])))
 	})
 	perPort([]string{mib.StpCstPortFwdState}, func(p *model.Port, r sx.Row) {
 		p.StpState = mib.StpFwdStateEnum.Name(int(sx.Int(r.Cols[mib.StpCstPortFwdState])))
 	})
-	perPort([]string{mib.CosMapIntfTrustMode}, func(p *model.Port, r sx.Row) {
+	if err := perPort([]string{mib.CosMapIntfTrustMode}, func(p *model.Port, r sx.Row) {
 		p.Trust = mib.TrustModeEnum.Name(int(sx.Int(r.Cols[mib.CosMapIntfTrustMode])))
 		w.recordSetting(p, "trust", mib.TrustModeEnum[int(sx.Int(r.Cols[mib.CosMapIntfTrustMode]))])
-	})
+	}); err != nil {
+		w.markConfigFailed("trust")
+	}
 	// agentPortConfigTable（INDEX=basePort。PortCfgIfIndex列でifIndexへ変換）
 	if rows, err := w.c.WalkColumns([]string{mib.PortCfgIfIndex, mib.PortCfgMaxFrameSize, mib.PortCfgBcastCtrlMode, mib.PortCfgMcastCtrlMode}); err == nil {
 		for _, r := range rows {
@@ -854,6 +866,8 @@ func (w *worker) collectConfig(pm map[int]*model.Port) {
 				w.recordStormSetting(p, "mcast_storm_ctl", sx.Int(r.Cols[mib.PortCfgMcastCtrlMode]))
 			}
 		}
+	} else {
+		w.markConfigFailed("max_frame", "bcast_storm_ctl", "mcast_storm_ctl")
 	}
 	if w.supported("sfp") {
 		perPort([]string{mib.OpticsInfoVendor, mib.OpticsInfoPartNo, mib.OpticsInfoSupported}, func(p *model.Port, r sx.Row) {

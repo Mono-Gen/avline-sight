@@ -16,16 +16,18 @@ func TestPortConfigChangesAcrossPolls(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range []struct {
-		name      string
-		frame     int
-		storm     int64
-		err       error
-		wantFrom  string
-		wantTo    string
-		wantField string
+		name        string
+		frame       int
+		storm       int64
+		frameFailed bool
+		err         error
+		wantFrom    string
+		wantTo      string
+		wantField   string
 	}{
 		{name: "first poll", frame: 1522, storm: 2},
 		{name: "unchanged", frame: 1522, storm: 2},
+		{name: "transient max frame request failure", frameFailed: true, storm: 2},
 		{name: "max frame changes", frame: 9216, storm: 2, wantField: "max_frame", wantFrom: "1522", wantTo: "9216"},
 		{name: "storm control changes", frame: 9216, storm: 1, wantField: "bcast_storm_ctl", wantFrom: "disabled", wantTo: "enabled"},
 		{name: "current values unknown"},
@@ -40,10 +42,23 @@ func TestPortConfigChangesAcrossPolls(t *testing.T) {
 				port.Oper = "up"
 				port.SpeedMbps += 100
 				port.ErrDelta++
-				w.recordPositiveSetting(port, "max_frame", tc.frame)
+				if tc.frameFailed {
+					w.markConfigFailed("max_frame")
+				} else {
+					w.recordPositiveSetting(port, "max_frame", tc.frame)
+				}
 				w.recordStormSetting(port, "bcast_storm_ctl", tc.storm)
 				return tc.err
 			})
+			settings := sink.states[42].Ports[0].ConfigSettings
+			if tc.frameFailed && settings["max_frame"] != "1522" {
+				t.Fatalf("transient failure lost the value in the baseline snapshot: %+v", settings)
+			}
+			if tc.frame == 0 && !tc.frameFailed {
+				if _, ok := settings["max_frame"]; ok {
+					t.Fatalf("successful unknown value retained the previous setting: %+v", settings)
+				}
+			}
 			var changes []model.Event
 			for _, event := range sink.events {
 				if event.Code == model.CodePortConfigChanged {

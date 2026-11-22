@@ -38,7 +38,7 @@ const { AppHeader } = require('../src/components/AppHeader.tsx');
 const { PhaseControls } = require('../src/components/PhaseControls.tsx');
 const { AlertBand, AlertEntry } = require('../src/components/AlertBand.tsx');
 const { summarizeAlerts, groupWallAlerts } = require('../src/wallAlerts.ts');
-const { acknowledgeableEventIds, logRows, syslogMessage } = require('../src/events.ts');
+const { acknowledgeableEventIds, logRows, SEARCH_EVENT_LIMIT, syslogMessage } = require('../src/events.ts');
 const { LogEventRow } = require('../src/views/Logs.tsx');
 const { DeviceInventoryTable } = require('../src/views/Devices.tsx');
 const { VlanQuerierTable } = require('../src/views/MulticastView.tsx');
@@ -244,11 +244,17 @@ test('Details shows the latest baseline diff and recent configuration events in 
   };
   const baselines = '/api/baselines';
   const latestDiff = '/api/baselines/9/diff?read_only=1';
-  const history = '/api/events?category=CONFIG&severity=INFO&active_profile=1&limit=30';
+  const history = `/api/events?category=CONFIG&severity=INFO&active_profile=1&limit=${SEARCH_EVENT_LIMIT}`;
+  const eastEvents = Array.from({ length: 31 }, (_, i) => ({ ...event, id: 100 + i, switch_id: 2, switch_name: 'East' }));
+  const westEvents = Array.from({ length: 29 }, (_, i) => ({
+    ...event, id: 200 + i, switch_name: `West history ${i + 1}`,
+    detail: { ...event.detail, field: 'pvid', before: '1', after: '2' },
+  }));
+  const systemEvent = { ...westEvents[0], id: 300, switch_id: 0, switch_name: 'System-wide' };
   const responses = {
     [baselines]: [baseline, { id: 3, name: 'Old' }],
     [latestDiff]: { diffs: [diff, { ...diff, switch_id: 2, after: '8000' }] },
-    [history]: [event, { ...event, id: 13, switch_id: 2, switch_name: 'East' }],
+    [history]: [...eastEvents, event, systemEvent, ...westEvents],
   };
   const calls = [];
   const results = [];
@@ -282,7 +288,10 @@ test('Details shows the latest baseline diff and recent configuration events in 
       assert.ok(html.includes('Show'));
       assert.ok(html.includes(`1/0/7 ${field} 1522 → 9216`));
       assert.equal(html.split(field).length - 1, 2);
-      assert.doesNotMatch(html, /8000|East|data-action="ack"/);
+      assert.match(html, /System-wide/);
+      assert.match(html, /West history 28 ·/);
+      assert.equal((html.match(/<time\b/g) ?? []).length, 30);
+      assert.doesNotMatch(html, /8000|East|West history 29|data-action="ack"/);
       const log = render(LogEventRow, { event, ackable: new Set([event.id]), onAcknowledge: noop });
       assert.ok(log.includes(field));
       assert.doesNotMatch(log, /<button/);

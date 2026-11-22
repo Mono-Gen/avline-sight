@@ -142,6 +142,7 @@ type worker struct {
 	ifLastChange map[int]uint64
 	flapChange   map[int]uint64
 	configRead   map[int]map[string]string
+	configFailed map[string]bool
 
 	c           *sx.Client
 	st          *model.SwitchState
@@ -316,6 +317,7 @@ func (w *worker) run(ctx context.Context) {
 func (w *worker) poll(ctx context.Context, tier string, collect func() error) bool {
 	w.mu.Lock()
 	w.configRead = nil
+	w.configFailed = nil
 	err := collect()
 	if ctx.Err() != nil {
 		w.events = nil

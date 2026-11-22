@@ -1,5 +1,6 @@
 import { api } from '../api';
 import { PollingStatus } from '../components/PollingStatus';
+import { SEARCH_EVENT_LIMIT } from '../events';
 import { asArray } from '../format';
 import { eventTitle, t } from '../i18n';
 import { pcTimestamp } from '../pcTime';
@@ -8,7 +9,7 @@ import { TOPOLOGY_REFRESH_MS, usePolling } from '../usePolling';
 import type { BaselineDiff } from './detailTables';
 import { baselineDiffItem, localizedStatus } from './detailTables';
 import type { ViewProps } from './props';
-import { groupSwitches, hasGroupFilter } from './props';
+import { groupSwitches, hasGroupFilter, inGroupScope } from './props';
 
 interface Baseline {
   id: number;
@@ -26,14 +27,14 @@ export function ConfigChanges(p: ViewProps) {
     const result = await api<{ diffs: BaselineDiff[] }>(`/api/baselines/${latest.id}/diff?read_only=1`, { signal });
     return { latest, diffs: asArray(result.diffs) };
   }, TOPOLOGY_REFRESH_MS, [profile, phase]);
-  const history = usePolling(signal => api<Event[]>('/api/events?category=CONFIG&severity=INFO&active_profile=1&limit=30', { signal }),
+  const history = usePolling(signal => api<Event[]>(`/api/events?category=CONFIG&severity=INFO&active_profile=1&limit=${SEARCH_EVENT_LIMIT}`, { signal }),
     TOPOLOGY_REFRESH_MS, [profile]);
   const switches = groupSwitches(p);
   const visibleIds = new Set(switches.map(sw => sw.id));
   const filtered = hasGroupFilter(p);
   const latest = comparison.data?.latest;
   const diffs = asArray(comparison.data?.diffs).filter(row => !filtered || visibleIds.has(row.switch_id));
-  const events = asArray(history.data).filter(event => !filtered || visibleIds.has(event.switch_id));
+  const events = asArray(history.data).filter(event => inGroupScope(event, visibleIds, filtered)).slice(0, 30);
   return <section className="panel space-y-4">
     <section>
       <h2>{t('configChanges.latestBaseline')}</h2>
