@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const cytoscape = require('cytoscape');
 const { countId, countPosition, topologyStyles, updateTopology } = require('../src/topologyGraph.ts');
-const { automaticCore, buildTopology, topologyHighlights, topologyQueriers } = require('../src/topologyModel.ts');
+const { automaticCore, buildTopology, topologyHighlights, topologyNodeDetails, topologyQueriers } = require('../src/topologyModel.ts');
 const { t } = require('../src/i18n/index.ts');
 
 const edge = (id, source, target, local_port, remote_port, fields = {}) => ({
@@ -36,22 +36,24 @@ test('Topology highlights dependent switches and devices for selection and obser
   const model = buildTopology(topology, [], inventory);
   assert.equal(model.defaultCore, 'a');
   assert.deepEqual(topologyHighlights(model, undefined, { kind: 'edge', id: main.id }).impacted, new Set());
-  updateTopology(graph, model, undefined, { coreId: 'a', selection: { kind: 'node', id: 'b' } });
+  const select = (model, selection) => updateTopology(graph, model, undefined,
+    { selection, highlights: topologyHighlights(model, 'a', selection) });
+  select(model, { kind: 'node', id: 'b' });
   assert.deepEqual(graph.nodes('[?impacted]').map(node => node.id()).sort(), ['c', 'device:CC']);
   assert.match(graph.getElementById('device:CC').data('statusLabel'), /⚠/);
-  updateTopology(graph, model, undefined, { coreId: 'a', selection: { kind: 'edge', id: main.id } });
+  select(model, { kind: 'edge', id: main.id });
   assert.deepEqual(graph.nodes('[?impacted]').map(node => node.id()).sort(), ['b', 'c', 'device:CC']);
 
   const down = { switch_id: 2, port: { name: '1', oper: 'down' } };
   const missingLldp = { ...topology, edges: [branch, spare] };
   const failed = buildTopology(missingLldp, [down], inventory, model.edges);
-  updateTopology(graph, failed, undefined, { coreId: 'a' });
+  select(failed);
   assert.deepEqual(graph.nodes('[?impacted]').map(node => node.id()).sort(), ['b', 'c', 'device:CC']);
   assert.equal(graph.getElementById(main.id).data('down'), true);
   assert.equal(buildTopology(missingLldp, [{ ...down, port: { ...down.port, oper: 'up' } }], inventory, failed.edges)
     .edges.some(link => link.id === main.id), false);
   const discarding = { ...topology, edges: [{ ...main, blocking: true }, branch, spare] };
-  const knownOutage = buildTopology(discarding, [down], inventory, model.edges);
+  const knownOutage = buildTopology(discarding, [down], inventory);
   assert.deepEqual(topologyHighlights(knownOutage, 'a').impacted, new Set(['b', 'c', 'device:CC']));
   assert.equal(buildTopology(discarding, [], inventory, model.edges).edges.some(link => link.id === main.id), false);
 
@@ -117,13 +119,89 @@ test('Topology highlights the device attachment and each live hop to the core', 
   const graph = createGraph(context);
   const model = buildTopology(topology, [], inventory);
   const selection = { kind: 'node', id: 'device:CC' };
-  updateTopology(graph, model, undefined, { coreId: 'a', selection });
+  updateTopology(graph, model, undefined, { selection, highlights: topologyHighlights(model, 'a', selection) });
   assert.deepEqual(graph.nodes('[?path]').map(node => node.id()).sort(), ['a', 'b', 'c', 'device:CC']);
   assert.deepEqual(graph.edges('[?path]').map(link => link.id()).sort(), ['attachment:device:CC', 'branch', 'main']);
   const failure = buildTopology(topology, [{ switch_id: 2, port: { name: '1', oper: 'down' } }], inventory);
-  updateTopology(graph, failure, undefined, { coreId: 'a', selection });
+  updateTopology(graph, failure, undefined, { selection, highlights: topologyHighlights(failure, 'a', selection) });
   assert.equal(graph.elements('[?path]').length, 0);
   assert.equal(graph.getElementById('device:CC').data('impacted'), true);
+});
+
+test('Topology remembers a device attachment across uplink-only sightings and missing inventory', () => {
+  const healthy = buildTopology(topology, [], inventory);
+  const failedTopology = { ...topology, nodes: topology.nodes.map(node =>
+    node.id === 'c' ? { ...node, reachable: false } : node) };
+  const device = inventory.find(row => row.mac === 'CC');
+  const uplink = { ...device, switch_id: 1, port: '1', via_uplink: true };
+  const failed = buildTopology(failedTopology, [], [uplink], healthy.edges, healthy.deviceRows);
+  assert.equal(failed.parent.get('device:CC'), 'c');
+  assert.deepEqual(failed.deviceRows.get('device:CC'), { ...device, seen: false });
+  assert.ok(topologyHighlights(failed, 'a').impacted.has('device:CC'));
+  const stillFailed = buildTopology(failedTopology, [], [], failed.edges, failed.deviceRows);
+  assert.equal(stillFailed.parent.get('device:CC'), 'c');
+  const restored = buildTopology(topology, [], [{ ...uplink, port: '8', via_uplink: false }],
+    stillFailed.edges, stillFailed.deviceRows);
+  assert.equal(restored.parent.get('device:CC'), 'a');
+  assert.equal(restored.deviceRows.get('device:CC').port, '8');
+  assert.equal(buildTopology(topology, [], [uplink], failed.edges, failed.deviceRows).parent.has('device:CC'), false);
+});
+
+test('Topology reads the reachable endpoint, refreshes retained link metrics, and drops stale samples', context => {
+  const graph = createGraph(context);
+  const outage = (...failed) => topology.nodes.map(node => ({ ...node, reachable: !failed.includes(node.id) }));
+  const sample = (switch_id, speed_mbps, util_rx, util_tx) => ({
+    switch_id, port: { name: '1', oper: 'up', speed_mbps, util_rx, util_tx },
+  });
+  const ports = [sample(1, 10000, 99, 80), sample(2, 1000, 7, 23)];
+  const check = (model, expected) => {
+    updateTopology(graph, model);
+    assert.match(graph.getElementById(main.id).data('edgeLabel'), expected);
+  };
+  const current = buildTopology({ nodes: outage('a'), edges: [main] }, ports, []);
+  check(current, /1000 Mbps.*23[.,]0%/);
+  const retained = buildTopology({ nodes: outage('a'), edges: [] },
+    [ports[0], sample(2, 100, 42, 12)], [], current.edges);
+  check(retained, /100 Mbps.*42[.,]0%/);
+  check(buildTopology({ nodes: outage('b'), edges: [] }, ports, [], retained.edges), /10000 Mbps.*99[.,]0%/);
+  check(buildTopology({ nodes: outage('a', 'b'), edges: [] }, ports, [], retained.edges), /—.*—/);
+});
+
+test('Topology uses device MAC alerts and limits port fallback to alerts for the port itself', context => {
+  const graph = createGraph(context);
+  const rows = [
+    { ...inventory[0], if_index: 4 },
+    { ...inventory[0], mac: 'AB', if_index: 4 },
+    inventory[1],
+  ];
+  const alerts = [
+    { mac: 'aa', switch_id: 2, if_index: 1, active: true },
+    { mac: 'OTHER', switch_id: 1, if_index: 4, port: '4', active: true },
+    { mac: 'OTHER', switch_id: 3, if_index: 4, port: '4', active: true },
+    { switch_id: 3, if_index: 4, port: '4', active: false },
+  ].map(alert => ({ severity: 'WARNING', acked: false, ...alert }));
+  const model = buildTopology(topology, [], rows);
+  updateTopology(graph, model, undefined, { nodeDetails: topologyNodeDetails(model, alerts) });
+  const tone = mac => graph.getElementById(`device:${mac}`).data('statusTone');
+  assert.equal(tone('AA'), 'critical');
+  assert.equal(tone('AB'), 'healthy');
+  assert.equal(tone('CC'), 'warning');
+  updateTopology(graph, model, undefined, { nodeDetails: topologyNodeDetails(model,
+    [{ switch_id: 1, if_index: 4, port: 'old-name', active: false, acked: false, severity: 'WARNING' }]) });
+  assert.equal(tone('AB'), 'warning');
+});
+
+test('Topology writes data only when node, edge or count values change', context => {
+  const graph = createGraph(context);
+  const model = buildTopology(topology, [], inventory);
+  updateTopology(graph, model);
+  const writes = [];
+  graph.on('data', 'node, edge', event => writes.push(event.target.id()));
+  updateTopology(graph, buildTopology(topology, [], inventory));
+  assert.deepEqual(writes, []);
+  const ports = [{ switch_id: 1, port: { name: '1', oper: 'up', speed_mbps: 10000, util_rx: 17, util_tx: 10 } }];
+  updateTopology(graph, buildTopology(topology, ports, inventory));
+  assert.deepEqual(writes, [main.id]);
 });
 
 test('Topology switch count badges point to the exact attached device list, including an empty switch', context => {

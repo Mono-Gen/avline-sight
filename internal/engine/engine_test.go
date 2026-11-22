@@ -70,6 +70,34 @@ func TestRulesFromSpec(t *testing.T) {
 	}
 }
 
+func TestTopologyBlockingRequiresOperationalPort(t *testing.T) {
+	for _, tt := range []struct {
+		name, firstOper, firstSTP, secondOper, secondSTP string
+		blocking                                         bool
+	}{
+		{"discarding on down source", "down", "discarding", "up", "forwarding", false},
+		{"discarding on down peer", "up", "forwarding", "down", "discarding", false},
+		{"discarding on up source", "up", "discarding", "up", "forwarding", true},
+		{"discarding on up peer", "up", "forwarding", "up", "discarding", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			e := &Engine{
+				order: []int64{1, 2},
+				states: map[int64]*model.SwitchState{
+					1: {ID: 1, SysName: "A", Ports: []*model.Port{{Name: "1", Oper: tt.firstOper, StpState: tt.firstSTP}},
+						Neighbors: []model.Neighbor{{SysName: "B", LocalPort: "1", PortID: "2"}}},
+					2: {ID: 2, SysName: "B", Ports: []*model.Port{{Name: "2", Oper: tt.secondOper, StpState: tt.secondSTP}},
+						Neighbors: []model.Neighbor{{SysName: "A", LocalPort: "2", PortID: "1"}}},
+				},
+			}
+			edges := e.Topology(nil).Edges
+			if len(edges) != 1 || edges[0].Blocking != tt.blocking {
+				t.Fatalf("edges = %+v, want one link with Blocking=%t", edges, tt.blocking)
+			}
+		})
+	}
+}
+
 func TestAuditCrossSwitch(t *testing.T) {
 	e, _ := newTestEngine(t)
 	mk := func(id int64, name, fw string, dhcp bool, prio int) *model.SwitchState {
@@ -155,7 +183,7 @@ func TestRecommendationsDoNotRaiseAlerts(t *testing.T) {
 	}
 	want := map[string][2]string{
 		"EEE_ON_AV_PORT": {"enable", "disable"}, "FLOWCTRL_ON_AV_PORT": {"enabledXmit", "disable"},
-		"DSCP_TRUST": {"trustDot1p", "trustIpDscp"},
+		"DSCP_TRUST":          {"trustDot1p", "trustIpDscp"},
 		"NDI4_NEEDS_FLOWCTRL": {"disabled", "enable"}, "QSYS_MTU": {"9216", "1522"},
 		"BCAST_STORM_CTRL_UPLINK": {"enable", "disable"}, "MCAST_STORM_CTRL_UPLINK": {"enable", "disable"},
 		"UPLINK_MTU_MISMATCH": {"9216", "1522"},

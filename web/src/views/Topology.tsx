@@ -6,7 +6,7 @@ import { WatchBar } from '../components/Dialogs';
 import { PollingStatus } from '../components/PollingStatus';
 import { asArray } from '../format';
 import { countId, countPosition, deviceLabel, topologyStyles, updateTopology } from '../topologyGraph';
-import { automaticCore, buildTopology, topologyHighlights, topologyQueriers } from '../topologyModel';
+import { automaticCore, buildTopology, topologyHighlights, topologyNodeDetails, topologyQueriers } from '../topologyModel';
 import type { TopologyPort, TopologySelection } from '../topologyModel';
 import type { InventoryRow, Topology as Graph, Multicast, TopologyEdge } from '../types';
 import { TOPOLOGY_REFRESH_MS, usePolling } from '../usePolling';
@@ -25,22 +25,25 @@ export function Topology(props: ViewProps & { openDevices: () => void }) {
   const initialized = useRef(false);
   const knownLinks = useRef<TopologyEdge[]>([]);
   const knownCore = useRef<string>();
+  const knownDevices = useRef<ReadonlyMap<string, InventoryRow>>();
   const result = usePolling(async signal => {
     const [topology, multicast, ports, inventory] = await Promise.all([
       api<Graph>('/api/topology', { signal }),
       api<Multicast>('/api/multicast', { signal }),
       api<TopologyPort[]>('/api/ports/search', { signal }),
-      api<InventoryRow[]>('/api/devices?scope=all&include=registration', { signal }),
+      api<InventoryRow[]>('/api/devices?scope=all', { signal }),
     ]);
     return { topology, multicast, ports, inventory };
   }, TOPOLOGY_REFRESH_MS, [], !props.replay);
   const data = result.data;
-  const model = useMemo(() => data && buildTopology(data.topology, data.ports, data.inventory, knownLinks.current), [data]);
+  const model = useMemo(() => data && buildTopology(data.topology, data.ports, data.inventory,
+    knownLinks.current, knownDevices.current), [data]);
   const autoCore = model && automaticCore(model, knownCore.current);
   useEffect(() => {
     if (model) {
       knownLinks.current = model.edges;
       knownCore.current = autoCore;
+      knownDevices.current = model.deviceRows;
     }
   }, [model, autoCore]);
   const switches = model?.nodes.filter(node => node.kind === 'switch') ?? [];
@@ -52,6 +55,9 @@ export function Topology(props: ViewProps & { openDevices: () => void }) {
   const selectedLink = model?.edges.find(edge => selection?.kind === 'edge' && edge.id === selection.id);
   const activeSelection = selectedNode || selectedDevice || selectedLink ? selection : undefined;
   const selectedVlan = topologyQueriers(data?.multicast, vlan);
+  const impact = useMemo(() => model && topologyHighlights(model, coreId, activeSelection), [model, coreId, activeSelection]);
+  const alerts = props.operations?.alerts;
+  const nodeDetails = useMemo(() => model && topologyNodeDetails(model, alerts), [model, alerts]);
 
   useEffect(() => {
     if (!container.current) return;
@@ -81,10 +87,10 @@ export function Topology(props: ViewProps & { openDevices: () => void }) {
   useEffect(() => {
     if (!graph.current || !model) return;
     updateTopology(graph.current, model, data?.multicast, {
-      group, vlan, coreId, selection: activeSelection, initial: !initialized.current, alerts: props.operations?.alerts,
+      group, vlan, highlights: impact, selection: activeSelection, initial: !initialized.current, nodeDetails,
     });
     if (model.nodes.length) initialized.current = true;
-  }, [model, data, group, vlan, coreId, activeSelection, props.operations?.alerts, language]);
+  }, [model, data, group, vlan, impact, activeSelection, nodeDetails, language]);
 
   const background = data?.topology.background;
   const switchNames = new Map(model?.nodes.map(node => [node.id, node.label]));
@@ -96,9 +102,7 @@ export function Topology(props: ViewProps & { openDevices: () => void }) {
       label: `${deviceLabel(row)} · ${row.switch_name} ${row.port}` })),
   ] : [];
   const selectionKey = ({ kind, id }: TopologySelection) => `${kind}:${id}`;
-  const monitorTarget = activeSelection?.kind === 'node' ? graph.current?.getElementById(activeSelection.id) : undefined;
-  const monitorSwitchId = selectedNode?.switch_id || monitorTarget?.data('monitorSwitchId');
-  const impact = model && topologyHighlights(model, coreId, activeSelection);
+  const monitorTarget = activeSelection?.kind === 'node' ? nodeDetails?.get(activeSelection.id)?.monitorTarget : undefined;
   return (
     <>
       <WatchBar items={props.watch} onChange={props.setWatch} run={props.run} disabled={props.locked || props.busy} />
@@ -151,9 +155,7 @@ export function Topology(props: ViewProps & { openDevices: () => void }) {
         {selectedNode?.switch_id && <button onClick={() => setListedSwitch(selectedNode.id)}>
           {t('topology.deviceCount', { count: model?.devices.get(selectedNode.id)?.length ?? 0 })}
         </button>}
-        {Boolean(monitorSwitchId) && <button onClick={() => props.openPortMonitor?.({
-          switchId: monitorSwitchId, portName: monitorTarget?.data('monitorPortName'),
-        })}>{t('rack.nav.monitor')}</button>}
+        {monitorTarget && <button onClick={() => props.openPortMonitor?.(monitorTarget)}>{t('rack.nav.monitor')}</button>}
       </div>
       <div role="status">
         {model && !coreId && switches.length > 0 && <p>{t('topology.chooseCore')}</p>}

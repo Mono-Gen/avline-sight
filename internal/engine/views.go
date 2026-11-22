@@ -68,6 +68,7 @@ func (e *Engine) Topology(layout map[string]struct{ X, Y float64 }) Topology {
 				peer = byName[nb.SysName]
 			}
 			lp := findPort(s, nb.LocalPort)
+			blocking := lp != nil && lp.StpState == "discarding" && lp.Oper == "up"
 			var src, dst string
 			src = fmt.Sprintf("sw-%d", s.ID)
 			switch {
@@ -96,16 +97,15 @@ func (e *Engine) Topology(layout map[string]struct{ X, Y float64 }) Topology {
 			if seenEdge[k] {
 				// 反対側からも見えている: Blocking状態を合成
 				for i := range t.Edges {
-					if t.Edges[i].ID == k && lp != nil && lp.StpState == "discarding" {
+					if t.Edges[i].ID == k && blocking {
 						t.Edges[i].Blocking = true
 					}
 				}
 				continue
 			}
 			seenEdge[k] = true
-			ed := TopoEdge{ID: k, Source: src, Target: dst, LocalPort: nb.LocalPort, RemotePort: nb.PortID}
+			ed := TopoEdge{ID: k, Source: src, Target: dst, LocalPort: nb.LocalPort, RemotePort: nb.PortID, Blocking: blocking}
 			if lp != nil {
-				ed.Blocking = lp.StpState == "discarding"
 				ed.SpeedMbps = lp.SpeedMbps
 				ed.UtilPct = maxf(lp.UtilRx, lp.UtilTx)
 			}

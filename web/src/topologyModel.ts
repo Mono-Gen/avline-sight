@@ -1,5 +1,6 @@
 import { asArray } from './format';
-import type { InventoryRow, Multicast, Port, Topology, TopologyEdge } from './types';
+import type { Alert, InventoryRow, Multicast, Port, Topology, TopologyEdge } from './types';
+import { alertTone, isPortAlert, matchingDeviceAlerts, summarizeAlerts } from './wallAlerts';
 
 export type TopologySelection = { kind: 'node' | 'edge'; id: string };
 export type TopologyPort = { switch_id: number; port: Port };
@@ -9,6 +10,7 @@ export function buildTopology(
   ports: TopologyPort[],
   inventory: InventoryRow[],
   previousLinks: TopologyEdge[] = [],
+  previousDevices: ReadonlyMap<string, InventoryRow> = new Map(),
 ) {
   const nodes = asArray(topology.nodes);
   const byId = new Map(nodes.map(node => [node.id, node]));
@@ -18,43 +20,121 @@ export function buildTopology(
     { node: byId.get(edge.source), name: edge.local_port },
     { node: byId.get(edge.target), name: edge.remote_port },
   ];
+  const livePort = (node: (typeof nodes)[number] | undefined, name: string) =>
+    node?.switch_id && node.reachable !== false ? portByName.get(portKey(node.switch_id, name)) : undefined;
   const down = (edge: TopologyEdge) => endpoints(edge).some(({ node, name }) => {
-    const oper = portByName.get(portKey(node?.switch_id, name))?.oper;
-    return node?.reachable !== false && (oper === 'down' || oper === 'lowerLayerDown' || oper === 'notPresent');
+    const oper = livePort(node, name)?.oper;
+    return oper === 'down' || oper === 'lowerLayerDown' || oper === 'notPresent';
   });
   const current = asArray(topology.edges);
   const currentIds = new Set(current.map(edge => edge.id));
-  const previousById = new Map(previousLinks.map(edge => [edge.id, edge]));
   const currentPorts = new Set(current.flatMap(edge =>
     [`${edge.source}/${edge.local_port}`, `${edge.target}/${edge.remote_port}`]));
   const retained = previousLinks.filter(edge => !currentIds.has(edge.id) &&
     !currentPorts.has(`${edge.source}/${edge.local_port}`) &&
     !currentPorts.has(`${edge.target}/${edge.remote_port}`) &&
     (down(edge) || endpoints(edge).some(({ node }) => node?.reachable === false)));
-  const edges = [...current, ...retained].flatMap(edge => {
-    if (edge.source === edge.target || !byId.has(edge.source) || !byId.has(edge.target)) return [];
-    if (!edge.blocking) return [edge];
-    const prior = previousById.get(edge.id);
-    return prior && !prior.blocking && down(edge) ? [prior] : [];
-  });
+  const edges = [...current, ...retained].filter(edge => edge.source !== edge.target &&
+    byId.has(edge.source) && byId.has(edge.target) && (!edge.blocking || down(edge)));
+  const linkMetrics = new Map(edges.map(edge => {
+    const [source, target] = endpoints(edge);
+    const sourcePort = livePort(source.node, source.name);
+    const targetPort = livePort(target.node, target.name);
+    const live = [sourcePort, targetPort].find(port => port && port.speed_mbps > 0);
+    if (live) return [edge.id, { speed: live.speed_mbps, util: Math.max(live.util_rx, live.util_tx) }];
+    const currentSource = !sourcePort && source.node?.switch_id && source.node.reachable !== false && currentIds.has(edge.id);
+    return [edge.id, currentSource ? { speed: edge.speed_mbps, util: edge.util_pct } : {}];
+  }));
+  const failedNodes = new Set(nodes.filter(node => node.reachable === false).map(node => node.id));
   const devices = new Map<string, InventoryRow[]>();
+  const deviceRows = new Map<string, InventoryRow>();
   const parent = new Map<string, string>();
   const switches = new Map(nodes.filter(node => node.switch_id).map(node => [node.switch_id, node]));
+  const attach = (id: string, row: InventoryRow, nodeId: string) => {
+    if (parent.has(id)) return;
+    const attached = devices.get(nodeId) ?? [];
+    const device = failedNodes.has(nodeId) && row.seen ? { ...row, seen: false } : row;
+    attached.push(device);
+    devices.set(nodeId, attached);
+    deviceRows.set(id, device);
+    parent.set(id, nodeId);
+  };
   for (const row of asArray(inventory)) {
     const node = switches.get(row.switch_id);
-    if (!node || row.via_uplink || !row.mac || !row.port || !(row.seen || (node.reachable === false && row.source))) continue;
-    const id = `device:${row.mac}`;
-    if (parent.has(id)) continue;
-    const attached = devices.get(node.id) ?? [];
-    attached.push(row);
-    devices.set(node.id, attached);
-    parent.set(id, node.id);
+    if (!node || row.via_uplink || !row.mac || !row.port || !(row.seen || (failedNodes.has(node.id) && row.source))) continue;
+    attach(`device:${row.mac}`, row, node.id);
   }
-  const failedNodes = new Set(nodes.filter(node => node.reachable === false).map(node => node.id));
+  for (const [id, row] of previousDevices) {
+    const node = switches.get(row.switch_id);
+    if (node && failedNodes.has(node.id)) attach(id, row, node.id);
+  }
   const failedLinks = new Set(edges.filter(down).map(edge => edge.id));
   const defaultCore = nodes.filter(node => node.kind === 'switch' && node.is_root);
-  return { nodes, edges, devices, parent, failedNodes, failedLinks,
+  return { nodes, byId, edges, linkMetrics, devices, deviceRows, parent, failedNodes, failedLinks,
     defaultCore: defaultCore.length === 1 ? defaultCore[0].id : undefined };
+}
+
+interface MonitorTarget {
+  switchId: number;
+  portName?: string;
+}
+
+export function topologyNodeDetails(model: ReturnType<typeof buildTopology>, alerts: Alert[] = []) {
+  const bySwitch = new Map<number, Alert[]>();
+  const byPortName = new Map<string, Alert[]>();
+  const byPortIndex = new Map<string, Alert[]>();
+  const byMac = new Map<string, Alert[]>();
+  const portKey = (switchId: number | undefined, port: string | number) => `${switchId}/${port}`;
+  const add = <K>(index: Map<K, Alert[]>, key: K, alert: Alert) => {
+    const items = index.get(key);
+    if (items) items.push(alert);
+    else index.set(key, [alert]);
+  };
+  for (const alert of alerts) {
+    add(bySwitch, alert.switch_id, alert);
+    if (alert.mac) add(byMac, alert.mac.toLowerCase(), alert);
+    if (isPortAlert(alert)) {
+      add(byPortName, portKey(alert.switch_id, alert.port), alert);
+      if (!alert.mac) add(byPortIndex, portKey(alert.switch_id, alert.if_index), alert);
+    }
+  }
+
+  const details = new Map<string, { monitorTarget?: MonitorTarget; statusTone: ReturnType<typeof alertTone> }>();
+  for (const node of model.nodes) {
+    let monitorTarget: MonitorTarget | undefined;
+    let relevant: Alert[] = [];
+    if (node.switch_id) {
+      monitorTarget = { switchId: node.switch_id };
+      relevant = bySwitch.get(node.switch_id) ?? [];
+    } else if (node.kind === 'external') {
+      const links = model.edges.flatMap(edge => {
+        const incoming = edge.target === node.id;
+        if (!incoming && edge.source !== node.id) return [];
+        const switchId = model.byId.get(incoming ? edge.source : edge.target)?.switch_id;
+        if (!switchId) return [];
+        const portName = incoming ? edge.local_port : edge.remote_port;
+        const issues = summarizeAlerts(byPortName.get(portKey(switchId, portName)) ?? []);
+        return [{ target: { switchId, portName }, issues }];
+      });
+      monitorTarget = (links.find(link => link.issues.active) ||
+        links.find(link => link.issues.unacked) || links[0])?.target;
+      relevant = links.flatMap(link => link.issues.items);
+    }
+    details.set(node.id, { monitorTarget, statusTone: alertTone(summarizeAlerts(relevant), node.reachable === true) });
+  }
+  for (const [id, row] of model.deviceRows) {
+    const macAlerts = byMac.get(row.mac.toLowerCase()) ?? [];
+    const portAlerts = byPortIndex.get(portKey(row.switch_id, row.if_index ?? 0)) ?? [];
+    const relevant = matchingDeviceAlerts([...macAlerts, ...portAlerts], row);
+    if (!row.mac || !row.if_index) {
+      for (const alert of byPortName.get(portKey(row.switch_id, row.port)) ?? []) {
+        if (!alert.mac && !relevant.includes(alert)) relevant.push(alert);
+      }
+    }
+    const monitorTarget = row.switch_id ? { switchId: row.switch_id, portName: row.port } : undefined;
+    details.set(id, { monitorTarget, statusTone: alertTone(summarizeAlerts(relevant), row.seen) });
+  }
+  return details;
 }
 
 export function automaticCore(model: ReturnType<typeof buildTopology>, previous: string | undefined) {
@@ -128,10 +208,10 @@ export function topologyQueriers(multicast: Multicast | undefined, vlan: number)
   };
 }
 
-export function linkAppearance(edge: TopologyEdge, down: boolean, telemetryLive: boolean) {
-  const speed = Number.isFinite(edge.speed_mbps) && edge.speed_mbps > 0 ? edge.speed_mbps : undefined;
-  const util = telemetryLive && !down && speed !== undefined && Number.isFinite(edge.util_pct) && edge.util_pct >= 0
-    ? edge.util_pct : undefined;
+export function linkAppearance(metrics: { speed?: number; util?: number } | undefined, down: boolean) {
+  const speed = metrics?.speed !== undefined && Number.isFinite(metrics.speed) && metrics.speed > 0 ? metrics.speed : undefined;
+  const util = speed !== undefined && metrics?.util !== undefined && Number.isFinite(metrics.util) && metrics.util >= 0
+    ? metrics.util : undefined;
   const width = speed === undefined ? 2 : speed < 1000 ? 3 : speed < 10000 ? 5 : 7;
   const color = down ? '#f87171' : util === undefined ? '#94a3b8' : util >= 90 ? '#fb923c' : util >= 70 ? '#fde047' : '#67e8f9';
   return { speed, util, width, color };

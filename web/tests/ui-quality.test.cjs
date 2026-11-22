@@ -469,12 +469,13 @@ test('トポロジーと接続機器は同じ色・記号を使い、監視対�
   const cy = require('cytoscape')({ headless: true, styleEnabled: true });
   try {
     const { updateTopology } = require('../src/topologyGraph.ts');
-    const { buildTopology } = require('../src/topologyModel.ts');
-    updateTopology(cy, buildTopology({
+    const { buildTopology, topologyNodeDetails } = require('../src/topologyModel.ts');
+    const model = buildTopology({
       nodes: [{ id: 'sw', switch_id: 1, label: 'West', kind: 'switch', reachable: true },
         { id: 'ext', label: 'Other', kind: 'external', reachable: true }],
       edges: [{ id: 'link', source: 'sw', target: 'ext', local_port: '1/0/2' }],
-    }, [], []), undefined, { alerts });
+    }, [], []);
+    updateTopology(cy, model, undefined, { nodeDetails: topologyNodeDetails(model, alerts) });
     assert.equal(cy.getElementById('sw').data('statusLabel'), '! West');
     assert.equal(cy.getElementById('ext').data('statusTone'), 'warning');
     assert.equal(cy.getElementById('ext').data('monitorSwitchId'), 1);
@@ -514,7 +515,7 @@ test('通常・壁の更新時刻とカードの発生・復旧をJSTでそろ�
 test('External topology nodes use all linked switch ports and select the highest-priority edge', () => {
   const cy = require('cytoscape')({ headless: true, styleEnabled: true });
   const { updateTopology } = require('../src/topologyGraph.ts');
-  const { buildTopology } = require('../src/topologyModel.ts');
+  const { buildTopology, topologyNodeDetails } = require('../src/topologyModel.ts');
   const topology = {
     nodes: [
       ...[1, 2, 3].map(id => ({ id: `sw${id}`, switch_id: id, kind: 'switch', label: `Switch ${id}`, reachable: true })),
@@ -529,7 +530,8 @@ test('External topology nodes use all linked switch ports and select the highest
   const recovered = fault(2, { switch_id: 2, if_index: 2, port: '1/0/2', active: false });
   const active = fault(3, { switch_id: 3, if_index: 3, port: '1/0/3', active: true, acked: true });
   const check = (alerts, tone, id) => {
-    updateTopology(cy, buildTopology(topology, [], []), undefined, { alerts });
+    const model = buildTopology(topology, [], []);
+    updateTopology(cy, model, undefined, { nodeDetails: topologyNodeDetails(model, alerts) });
     const node = cy.getElementById('ext');
     assert.equal(node.data('statusTone'), tone);
     assert.equal(node.data('monitorSwitchId'), id);
@@ -542,6 +544,48 @@ test('External topology nodes use all linked switch ports and select the highest
   } finally {
     cy.destroy();
   }
+});
+
+test('Topology opens the current external port before graph effects run and fetches plain inventory', async () => {
+  const data = {
+    topology: {
+      nodes: [
+        { id: 'a', switch_id: 1, kind: 'switch' },
+        { id: 'b', switch_id: 2, kind: 'switch' },
+        { id: 'ext', label: 'External', kind: 'external' },
+      ],
+      edges: [
+        { id: 'first', source: 'a', target: 'ext', local_port: '11' },
+        { id: 'second', source: 'b', target: 'ext', local_port: '12' },
+      ],
+    },
+    multicast: {}, ports: [], inventory: [],
+  };
+  const urls = [];
+  let load;
+  const { Topology } = sourceWith('../src/views/Topology.tsx', {
+    react: {
+      useState: initial => [initial === undefined ? { kind: 'node', id: 'ext' } : initial, noop],
+      useRef: initial => ({ current: initial }),
+      useEffect: noop,
+      useMemo: compute => compute(),
+    },
+    '../i18n': { t, useLang: () => ['en'] },
+    '../usePolling': { usePolling: callback => { load = callback; return { data }; } },
+    '../api': { api: async url => { urls.push(url); } },
+  });
+  const targets = [];
+  for (const [alerts, expected] of [
+    [[], { switchId: 1, portName: '11' }],
+    [[fault(2, { switch_id: 2, if_index: 12, port: '12', active: true })], { switchId: 2, portName: '12' }],
+  ]) {
+    const tree = Topology({ operations: { alerts }, openPortMonitor: target => targets.push(target) });
+    const [button] = elements(tree, node => node.type === 'button' && node.props.children === t('rack.nav.monitor'));
+    button.props.onClick();
+    assert.deepEqual(targets.at(-1), expected);
+  }
+  await load(new AbortController().signal);
+  assert.deepEqual(urls.filter(url => url.startsWith('/api/devices')), ['/api/devices?scope=all']);
 });
 
 test('Tapping a switch count opens its connected devices and links to the Devices view', context => {
