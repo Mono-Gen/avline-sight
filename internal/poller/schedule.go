@@ -21,12 +21,12 @@ type linkSignals struct {
 
 // requests はワーカー毎の追加取得を集約する。SNMP通信中でも受信側を待たせない。
 type requests struct {
-	mu          sync.Mutex
-	wake        chan struct{}
-	trap, slow  bool
-	lastTrapRun time.Time
-	fdbAt       time.Time
-	links       map[int]linkSignals
+	mu                 sync.Mutex
+	wake               chan struct{}
+	trap, medium, slow bool
+	lastTrapRun        time.Time
+	fdbAt              time.Time
+	links              map[int]linkSignals
 }
 
 func (q *requests) signal() {
@@ -39,6 +39,7 @@ func (q *requests) signal() {
 func (q *requests) addTrap(ev model.Event) {
 	q.mu.Lock()
 	q.trap = true
+	q.medium = q.medium || mib.TrapNeedsMedium(ev.Code)
 	q.slow = q.slow || mib.TrapNeedsSlow(ev.Code)
 	if ev.IfIndex > 0 && (ev.Code == "linkDown" || ev.Code == "linkUp") {
 		signals, exists := q.links[ev.IfIndex]
@@ -57,15 +58,15 @@ func (q *requests) addTrap(ev model.Event) {
 	q.signal()
 }
 
-func (q *requests) takeTrap(now time.Time) (fast, slow bool) {
+func (q *requests) takeTrap(now time.Time) (fast, medium, slow bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if !q.trap || now.Before(q.lastTrapRun.Add(trapDebounce)) {
-		return false, false
+		return false, false, false
 	}
-	fast, slow = true, q.slow
-	q.lastTrapRun, q.trap, q.slow = now, false, false
-	return fast, slow
+	fast, medium, slow = true, q.medium, q.slow
+	q.lastTrapRun, q.trap, q.medium, q.slow = now, false, false, false
+	return fast, medium, slow
 }
 
 func (q *requests) takeLinkSignals() map[int]linkSignals {

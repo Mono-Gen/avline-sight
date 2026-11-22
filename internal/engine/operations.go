@@ -67,7 +67,7 @@ func (e *Engine) SetPhase(phase string) error {
 		e.pingCancel()
 	}
 	e.pingFails = map[string]int{}
-	e.dropSuppressedLatchesLocked()
+	e.exposeActiveAlertsLocked()
 	e.mu.Unlock()
 	select {
 	case e.phaseWake <- struct{}{}:
@@ -97,16 +97,30 @@ func (e *Engine) suppressedByLocked(a *Alert, now time.Time) string {
 	return ""
 }
 
-func (e *Engine) dropSuppressedLatchesLocked() {
+func (e *Engine) exposeActiveAlertsLocked() {
 	flags := map[string]bool{}
-	for k, a := range e.active {
-		suppressed := e.suppressedByLocked(a, time.Now()) != ""
-		flags[strconv.FormatInt(a.EventID, 10)] = suppressed
-		if !a.Active && suppressed {
-			delete(e.active, k)
+	var exposed []*Alert
+	var reactivated []int64
+	now := time.Now()
+	for _, a := range e.active {
+		if !a.Active || e.suppressedByLocked(a, now) != "" {
+			continue
+		}
+		if a.eventSuppressed {
+			flags[strconv.FormatInt(a.EventID, 10)] = false
+			exposed = append(exposed, a)
+		}
+		if a.priorClearedAt != nil {
+			reactivated = append(reactivated, a.EventID)
+			a.priorClearedAt = nil
 		}
 	}
-	e.saveSuppressionLocked(flags)
+	e.saveClearedAtLocked(reactivated, nil)
+	if e.saveSuppressionLocked(flags) {
+		for _, a := range exposed {
+			a.eventSuppressed = false
+		}
+	}
 }
 
 type Group struct {
@@ -177,7 +191,7 @@ func (e *Engine) changeWork(group string, until time.Time, remove bool) error {
 		e.mu.Unlock()
 		return err
 	}
-	e.dropSuppressedLatchesLocked()
+	e.exposeActiveAlertsLocked()
 	e.mu.Unlock()
 	code, title := "WORK_STARTED", "作業中を開始: "
 	if remove {
@@ -221,7 +235,7 @@ func (e *Engine) ExpireWork(now time.Time) error {
 		e.mu.Unlock()
 		return err
 	}
-	e.dropSuppressedLatchesLocked()
+	e.exposeActiveAlertsLocked()
 	e.mu.Unlock()
 	for _, g := range expired {
 		e.OnEvent(model.Event{Category: "SYSTEM", Severity: model.SevInfo, Code: "WORK_ENDED", Title: "作業期限が終了: " + g, Detail: map[string]any{"group": g}})

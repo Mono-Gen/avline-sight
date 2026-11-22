@@ -208,6 +208,8 @@ func (w *worker) snapshot() *model.SwitchState {
 	if err := json.Unmarshal(b, &cp); err != nil {
 		slog.Error("状態の複製に失敗", "err", err)
 	}
+	// FDBの内部観測は配信・再生に含めない。次の取得ではマップごと差し替える。
+	cp.FDBLastOK, cp.FDBPorts = w.st.FDBLastOK, w.st.FDBPorts
 	return &cp
 }
 
@@ -269,9 +271,9 @@ func (w *worker) run(ctx context.Context) {
 			phase = w.phase()
 		}
 		retry := !retryAt.IsZero()
-		trapFast, trapSlow := false, false
+		trapFast, trapMedium, trapSlow := false, false, false
 		if !retry {
-			trapFast, trapSlow = w.requests.takeTrap(now)
+			trapFast, trapMedium, trapSlow = w.requests.takeTrap(now)
 		}
 		for i := range tiers {
 			if ctx.Err() != nil {
@@ -288,7 +290,10 @@ func (w *worker) run(ctx context.Context) {
 				}
 			}
 			due := !now.Before(t.last.Add(intervalForPhase(t.iv, t.name, phase)))
-			if !due && !(t.name == "fast" && trapFast) && !(t.name == "slow" && (trapSlow || retry)) {
+			forced := t.name == "fast" && trapFast ||
+				t.name == "medium" && trapMedium ||
+				t.name == "slow" && (trapSlow || retry)
+			if !due && !forced {
 				continue
 			}
 			if t.name == "slow" {

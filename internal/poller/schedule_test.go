@@ -13,20 +13,21 @@ func TestTrapRequestDebounceAndFDBCoalescing(t *testing.T) {
 	now := time.Now()
 	q := requests{wake: make(chan struct{}, 1)}
 	q.addTrap(model.Event{Code: "UNKNOWN_TRAP"})
-	if fast, slow := q.takeTrap(now); !fast || slow {
+	if fast, medium, slow := q.takeTrap(now); !fast || medium || slow {
 		t.Fatal("通常TrapはFastのみ")
 	}
 	for range 100 {
 		q.addTrap(model.Event{Code: "linkDown", IfIndex: 7})
 		q.addTrap(model.Event{Code: "authenticationFailure"})
 	}
-	if fast, slow := q.takeTrap(now.Add(4999 * time.Millisecond)); fast || slow {
+	q.addTrap(model.Event{Code: "boxsTemperatureChange"})
+	if fast, medium, slow := q.takeTrap(now.Add(4999 * time.Millisecond)); fast || medium || slow {
 		t.Fatal("5秒未満で再取得")
 	}
-	if fast, slow := q.takeTrap(now.Add(5 * time.Second)); !fast || !slow {
-		t.Fatal("必要なSlowを含めてまとめる")
+	if fast, medium, slow := q.takeTrap(now.Add(5 * time.Second)); !fast || !medium || !slow {
+		t.Fatal("必要なMediumとSlowを含めてまとめる")
 	}
-	if fast, _ := q.takeTrap(now.Add(10 * time.Second)); fast {
+	if fast, medium, slow := q.takeTrap(now.Add(10 * time.Second)); fast || medium || slow {
 		t.Fatal("追加取得が積み上がった")
 	}
 	if ports := q.takeLinkSignals(); len(ports[7].downs) != 1 || len(ports) != 1 {
@@ -109,6 +110,48 @@ func TestTrapStartsFastAndSlowOnExistingWorker(t *testing.T) {
 	waitFor(func() bool { return counts(2, 2) })
 	if !sink.has("LINK_FLAP") || sink.has("LINK_DOWN") {
 		t.Fatal("Trap後もリンクアップならフラップのみ")
+	}
+}
+
+func TestChassisTrapStartsMediumOnExistingWorker(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const port = 27221
+	lab := sim.NewLab(1, 5)
+	if err := lab.Start(ctx, sim.Config{BaseSNMPPort: port}); err != nil {
+		t.Fatal(err)
+	}
+	sink := &capSink{states: map[int64]*model.SwitchState{}, tiers: map[string]int{}}
+	m := NewManager(Intervals{Fast: time.Hour, Medium: time.Hour, Slow: time.Hour, Timeout: time.Second}, sink, nil)
+	m.Sync(ctx, []model.SwitchConfig{{ID: 1, Name: "SW", IP: "127.0.0.1", SNMPPort: port, Community: "public", Enabled: true}})
+	defer m.StopAll()
+
+	waitMedium := func(want int) {
+		t.Helper()
+		deadline := time.After(4 * time.Second)
+		tick := time.NewTicker(10 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			sink.mu.Lock()
+			got := sink.tiers["medium"]
+			sink.mu.Unlock()
+			if got >= want {
+				return
+			}
+			select {
+			case <-deadline:
+				t.Fatalf("Medium取得回数 = %d, want %d", got, want)
+			case <-tick.C:
+			}
+		}
+	}
+	waitMedium(1)
+	m.TriggerTrap(model.Event{SwitchID: 1, Code: "boxsFanStateChange"})
+	waitMedium(2)
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	if sink.tiers["fast"] != 2 || sink.tiers["slow"] != 1 {
+		t.Fatalf("筐体Trapの取得階層: %+v", sink.tiers)
 	}
 }
 

@@ -14,13 +14,13 @@
 | GET | `/api/phase` | `{phase:"setup"|"rehearsal"|"show"|"teardown"}`。既定 `show`、metaの `op_phase` に保存 |
 | PUT | `/api/phase` | 入力 `{phase}` → `{phase}`。実際の変更時にINFO `PHASE_CHANGED` とWS `phase_changed` |
 
-設営（`setup`）は `if_index>0` のポートアラートと `DEVICE_MISSING` / `PING_FAIL` / `IP_MISMATCH` を抑止。撤収（`teardown`）は全件抑止。リハ（`rehearsal`）と本番（`show`）は抑止なし。抑止中もイベントは保存するが、件数に含めず、抑止中の復旧はラッチしない。フェーズによる抑止を作業中より優先して `suppressed_by` に示す。
+設営（`setup`）は `if_index>0` のポートアラートと `DEVICE_MISSING` / `PING_FAIL` / `IP_MISMATCH` を抑止。撤収（`teardown`）は全件抑止。リハ（`rehearsal`）と本番（`show`）は抑止なし。抑止中もイベントは保存する。抑止開始前に復旧していた未確認ラッチは保持し、抑止中の件数から除く。フェーズによる抑止を作業中より優先して `suppressed_by` に示す。
 
 設営・撤収ではFastとMediumの間隔を設定値の3倍、Slowを2倍にする。リハ・本番は設定値どおり。ポーラーを再起動せずフェーズ変更を反映する。
 
 ## グループ・作業中
 
-グループは既存の `switches.group_tag`（1台1グループ、空文字は未所属）。
+グループは既存の `switches.group_tag`（1台1グループ、空文字は未所属）。スイッチの作成・更新時は前後の空白を取り除き、空文字または有効なグループ名を保存する。予約名 `*`、`.`、`..` と制御文字を含む名前は400。
 
 | メソッド | パス | 入出力 |
 |---|---|---|
@@ -149,7 +149,7 @@ M4250（FW 13.0.4.7）の工場出荷時・各AVプロファイル適用後の�
 - `{"type":"alerts_changed","data":[Alert]}`（発生・復旧ラッチ・削除・確認・抑止変更時。GET `/api/alerts` と同形式）
 - `{"type":"phase_changed","data":{"phase":"setup"|"rehearsal"|"show"|"teardown"}}`
 - `{"type":"work_changed","data":[{name,switch_ids,work_until}]}`（GET `/api/groups` と同形式）
-- `{"type":"groups_changed","data":null}`（名前・表示順を更新、またはプロファイルを切替。GET `/api/groups` で再取得）
+- `{"type":"groups_changed","data":null}`（グループの名前・表示順の更新、スイッチの作成・更新・削除、またはプロファイルの切替。GET `/api/groups` で再取得）
 - `{"type":"lock_changed","data":{"locked":bool,"pin_set":bool}}`
 - `{"type":"switch_state","data":SwitchState}`（購読中スイッチの更新時）
 クライアント→サーバー: `{"subscribe": <switch_id>}`（0で解除）

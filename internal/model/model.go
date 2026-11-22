@@ -45,6 +45,8 @@ type SwitchState struct {
 	Ports       []*Port           `json:"ports"`
 	FDBMACs     []string          `json:"fdb_macs,omitempty"`
 	FDBValid    *bool             `json:"fdb_valid,omitempty"`
+	FDBLastOK   time.Time         `json:"-"`
+	FDBPorts    map[int][]string  `json:"-"`
 	Health      Health            `json:"health"`
 	IGMP        IGMP              `json:"igmp"`
 	DHCP        DHCP              `json:"dhcp"`

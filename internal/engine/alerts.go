@@ -15,23 +15,25 @@ import (
 
 // Alert は発生条件と確認状態を保持する。イベント履歴そのものの編集は行わない。
 type Alert struct {
-	EventID      int64      `json:"event_id"`
-	SwitchID     int64      `json:"switch_id"`
-	SwitchName   string     `json:"switch_name"`
-	IfIndex      int        `json:"if_index"`
-	Severity     string     `json:"severity"`
-	Code         string     `json:"code"`
-	Title        string     `json:"title"`
-	TS           time.Time  `json:"ts"`
-	Active       bool       `json:"active"`
-	Acked        bool       `json:"acked"`
-	ClearedAt    *time.Time `json:"cleared_at"`
-	Port         string     `json:"port"`
-	MAC          string     `json:"mac,omitempty"`
-	DeviceName   string     `json:"device_name,omitempty"`
-	State        string     `json:"state"`
-	Suppressed   bool       `json:"suppressed"`
-	SuppressedBy string     `json:"suppressed_by"`
+	EventID         int64      `json:"event_id"`
+	SwitchID        int64      `json:"switch_id"`
+	SwitchName      string     `json:"switch_name"`
+	IfIndex         int        `json:"if_index"`
+	Severity        string     `json:"severity"`
+	Code            string     `json:"code"`
+	Title           string     `json:"title"`
+	TS              time.Time  `json:"ts"`
+	Active          bool       `json:"active"`
+	Acked           bool       `json:"acked"`
+	ClearedAt       *time.Time `json:"cleared_at"`
+	Port            string     `json:"port"`
+	MAC             string     `json:"mac,omitempty"`
+	DeviceName      string     `json:"device_name,omitempty"`
+	State           string     `json:"state"`
+	Suppressed      bool       `json:"suppressed"`
+	SuppressedBy    string     `json:"suppressed_by"`
+	eventSuppressed bool
+	priorClearedAt  *time.Time
 }
 
 func eventKey(ev model.Event) string {
@@ -85,6 +87,7 @@ func alertFromEvent(ev model.Event) *Alert {
 	a.MAC = strings.ToUpper(a.MAC)
 	a.DeviceName, _ = ev.Detail["name"].(string)
 	a.Port, _ = ev.Detail["port"].(string)
+	a.eventSuppressed, _ = ev.Detail["_suppressed"].(bool)
 	return a
 }
 
@@ -151,7 +154,8 @@ func (e *Engine) restoreAlerts() {
 			continue
 		}
 		seen[identity] = true
-		if suppressed, _ := ev.Detail["_suppressed"].(bool); suppressed || e.suppressedByLocked(a, time.Now()) != "" {
+		if a.eventSuppressed || (a.ClearedAt == nil && e.suppressedByLocked(a, time.Now()) != "") ||
+			(isLinkMonitoringEvent(a.Code) && e.portCfg[a.SwitchID][a.IfIndex].Excluded) {
 			continue
 		}
 		e.active[key] = a
@@ -201,33 +205,64 @@ func (e *Engine) broadcastAlerts() {
 }
 
 func (e *Engine) clearKeys(match func(string, *Alert) bool) {
+	e.clearKeysWithPolicy(match, e.dropOnSuppressedClear)
+}
+
+func (e *Engine) dropOnSuppressedClear(a *Alert, now time.Time) bool {
+	return a.Active && a.priorClearedAt == nil && e.suppressedByLocked(a, now) != ""
+}
+
+// 抑止中の再発では、公開済みの復旧記録を抑止解除まで保持する。
+func (e *Engine) reactivateAlertLocked(a *Alert, now time.Time) bool {
+	a.Active = true
+	if a.ClearedAt != nil && e.suppressedByLocked(a, now) != "" {
+		a.priorClearedAt, a.ClearedAt = a.ClearedAt, nil
+		return false
+	}
+	a.ClearedAt = nil
+	return true
+}
+
+func (e *Engine) clearKeysWithPolicy(match func(string, *Alert) bool, discard func(*Alert, time.Time) bool) {
+	e.mu.Lock()
+	changed := e.clearKeysLocked(match, discard)
+	e.mu.Unlock()
+	if changed {
+		e.broadcastAlerts()
+	}
+}
+
+func (e *Engine) clearKeysLocked(match func(string, *Alert) bool, discard func(*Alert, time.Time) bool) bool {
 	changed := false
 	flags := map[string]bool{}
 	var clearedIDs []int64
 	now := time.Now().UTC()
-	e.mu.Lock()
 	for k, a := range e.active {
 		if !match(k, a) {
 			continue
 		}
-		flags[strconv.FormatInt(a.EventID, 10)] = e.suppressedByLocked(a, time.Now()) != ""
+		remove := discard(a, now)
 		if a.Active {
-			clearedIDs = append(clearedIDs, a.EventID)
-		}
-		if a.Acked || e.suppressedByLocked(a, time.Now()) != "" {
-			delete(e.active, k)
+			clearedAt := &now
+			if a.priorClearedAt != nil && !remove && e.suppressedByLocked(a, now) != "" {
+				clearedAt = a.priorClearedAt
+			} else {
+				clearedIDs = append(clearedIDs, a.EventID)
+			}
+			a.Active, a.ClearedAt, a.priorClearedAt = false, clearedAt, nil
 			changed = true
-		} else if a.Active {
-			a.Active, a.ClearedAt = false, &now
+		}
+		if remove {
+			flags[strconv.FormatInt(a.EventID, 10)] = true
+		}
+		if a.Acked || remove {
+			delete(e.active, k)
 			changed = true
 		}
 	}
 	e.saveClearedAtLocked(clearedIDs, &now)
 	e.saveSuppressionLocked(flags)
-	e.mu.Unlock()
-	if changed {
-		e.broadcastAlerts()
-	}
+	return changed
 }
 
 // 復旧・再発生の遷移だけを保存し、再評価のたびに復旧時刻を変えない。
@@ -249,19 +284,22 @@ func (e *Engine) saveClearedAtLocked(ids []int64, at *time.Time) {
 }
 
 // 抑止中に消えた条件を再起動で再ラッチしないよう、イベントにも抑止状態を残す。
-func (e *Engine) saveSuppressionLocked(flags map[string]bool) {
+func (e *Engine) saveSuppressionLocked(flags map[string]bool) bool {
 	if len(flags) == 0 {
-		return
+		return true
 	}
 	b, err := json.Marshal(flags)
 	if err == nil {
-		_, err = e.st.DB.Exec(`UPDATE events SET detail_json=json_set(detail_json,'$._suppressed',
+		_, err = e.st.DB.Exec(`UPDATE events SET detail_json=json_set(
+		CASE WHEN json_valid(detail_json) THEN CASE WHEN json_type(detail_json)='object' THEN detail_json ELSE '{}' END ELSE '{}' END,
+		'$._suppressed',
 		json(CASE WHEN json_extract(?, '$."' || id || '"')=1 THEN 'true' ELSE 'false' END))
 		WHERE id IN (SELECT CAST(key AS INTEGER) FROM json_each(?))`, string(b), string(b))
 	}
 	if err != nil {
 		slog.Warn("アラート抑止状態の保存に失敗", "err", err)
 	}
+	return err == nil
 }
 
 func (e *Engine) clearMatching(match func(*Alert) bool) {
@@ -296,9 +334,13 @@ func (e *Engine) Ack(id int64, all bool) error {
 func (e *Engine) reconcileStateAlerts(s *model.SwitchState) {
 	changed := false
 	var reactivated []int64
+	now := time.Now()
 	e.mu.Lock()
 	for _, a := range e.active {
 		if a.SwitchID != s.ID || a.Active {
+			continue
+		}
+		if isLinkMonitoringEvent(a.Code) && e.portCfg[a.SwitchID][a.IfIndex].Excluded {
 			continue
 		}
 		on := a.Code == "SWITCH_UNREACHABLE" && !s.Reachable && !s.LastPoll.IsZero()
@@ -310,8 +352,9 @@ func (e *Engine) reconcileStateAlerts(s *model.SwitchState) {
 			}
 		}
 		if on {
-			a.Active, a.ClearedAt = true, nil
-			reactivated = append(reactivated, a.EventID)
+			if e.reactivateAlertLocked(a, now) {
+				reactivated = append(reactivated, a.EventID)
+			}
 			changed = true
 		}
 	}

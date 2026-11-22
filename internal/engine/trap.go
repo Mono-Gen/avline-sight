@@ -3,6 +3,7 @@ package engine
 import (
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Mono-Gen/avline-sight/internal/model"
@@ -14,6 +15,10 @@ const linkFlapWindow = 60 * time.Second
 
 func linkFlapKey(ev model.Event) string {
 	return eventKey(ev) + "|flap|" + strconv.FormatInt(ev.ID, 10)
+}
+
+func isLinkMonitoringEvent(code string) bool {
+	return code == "LINK_DOWN" || code == "LINK_FLAP" || code == "linkDown"
 }
 
 func (e *Engine) SetFDBRequester(fn func(int64, time.Time)) {
@@ -38,14 +43,23 @@ func (e *Engine) requestFDBForLinkDown(id int64, ifIndex int) {
 	if request == nil || ifIndex <= 0 {
 		return
 	}
-	last, err := e.st.LastSeenByMAC(pid, time.Now())
+	access := accessPorts(e.States())
+	last, err := e.st.LastSeenByMACPreferringPorts(pid, time.Now(), access.contains)
 	if err != nil {
 		slog.Warn("リンク断時の機器の最終所在を取得できません", "err", err)
 		return
 	}
 	e.mu.RLock()
-	for mac, ls := range last {
-		if ls.SwitchID == id && ls.IfIndex == ifIndex && e.aliases["mac|"+mac] != "" {
+	for key, label := range e.aliases {
+		mac, registered := strings.CutPrefix(key, "mac|")
+		if !registered || label == "" {
+			continue
+		}
+		ls := last[mac]
+		if check, ok := e.missing[mac]; ok {
+			ls = check.location
+		}
+		if ls.SwitchID == id && ls.IfIndex == ifIndex {
 			e.mu.RUnlock()
 			request(id, time.Now())
 			return

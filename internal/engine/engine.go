@@ -83,7 +83,7 @@ type Engine struct {
 	pinger       Pinger
 	pingResults  map[string]DevicePing
 	pingFails    map[string]int
-	missing      map[string]int
+	missing      map[string]missingCheck
 	switchGroups map[int64]string
 	lastTraps    map[int64]time.Time
 	requestFDB   func(int64, time.Time)
@@ -100,7 +100,7 @@ func New(st *store.Store, profileID int64, hub Broadcaster) *Engine {
 	e := &Engine{st: st, profileID: profileID, hub: hub, states: map[int64]*model.SwitchState{},
 		portCfg: map[int64]map[int]store.PortSetting{}, aliases: map[string]string{}, active: map[string]*Alert{},
 		phase: "show", work: map[string]time.Time{}, phaseWake: make(chan struct{}, 1), pinger: systemPinger{},
-		pingResults: map[string]DevicePing{}, pingFails: map[string]int{}, missing: map[string]int{},
+		pingResults: map[string]DevicePing{}, pingFails: map[string]int{}, missing: map[string]missingCheck{},
 		switchGroups: map[int64]string{}, lastTraps: map[int64]time.Time{},
 		baseline: map[string]float64{}, prevQuerier: map[string]string{}, mediumFresh: map[int64]bool{}}
 	e.Reload()
@@ -111,6 +111,14 @@ func New(st *store.Store, profileID int64, hub Broadcaster) *Engine {
 
 // Reload はプロファイル設定・ポート設定・ラベルをDBから再読込する。
 func (e *Engine) Reload() {
+	e.stateMu.Lock()
+	defer e.stateMu.Unlock()
+	e.eventMu.Lock()
+	defer e.eventMu.Unlock()
+	e.reload()
+}
+
+func (e *Engine) reload() {
 	set := DefaultSettings()
 	if err := e.st.ProfileJSON(e.profileID, "settings_json", &set); err != nil {
 		slog.Warn("設定の読込に失敗。既定値を使用", "err", err)
@@ -118,7 +126,11 @@ func (e *Engine) Reload() {
 	if set.Thresholds.ErrDelta == 0 && set.Thresholds.CPUPct == 0 {
 		set = DefaultSettings()
 	}
-	sws, _ := e.st.Switches(e.profileID)
+	sws, err := e.st.Switches(e.profileID)
+	if err != nil {
+		slog.Warn("監視対象の読込に失敗", "err", err)
+		return
+	}
 	pc := map[int64]map[int]store.PortSetting{}
 	for _, s := range sws {
 		m, _ := e.st.PortSettings(s.ID)
@@ -162,9 +174,24 @@ func (e *Engine) Reload() {
 	for id := range e.states {
 		if !keep[id] {
 			delete(e.states, id)
+			delete(e.mediumFresh, id)
 		}
 	}
-	e.dropSuppressedLatchesLocked()
+	for mac, check := range e.missing {
+		if !keep[check.location.SwitchID] {
+			delete(e.missing, mac)
+		}
+	}
+	e.clearKeysLocked(func(_ string, a *Alert) bool {
+		return a.SwitchID != 0 && !keep[a.SwitchID] ||
+			isLinkMonitoringEvent(a.Code) && e.portCfg[a.SwitchID][a.IfIndex].Excluded
+	}, func(a *Alert, now time.Time) bool {
+		_, registered := e.switchGroups[a.SwitchID]
+		return a.SwitchID != 0 && !registered ||
+			isLinkMonitoringEvent(a.Code) && e.portCfg[a.SwitchID][a.IfIndex].Excluded ||
+			a.Active && a.eventSuppressed && e.suppressedByLocked(a, now) != ""
+	})
+	e.exposeActiveAlertsLocked()
 	e.mu.Unlock()
 	e.broadcastAlerts()
 }
@@ -186,11 +213,11 @@ func (e *Engine) SetProfile(id int64) {
 	e.active = map[string]*Alert{}
 	e.pingResults = map[string]DevicePing{}
 	e.pingFails = map[string]int{}
-	e.missing = map[string]int{}
+	e.missing = map[string]missingCheck{}
 	e.mediumFresh = map[int64]bool{}
 	e.prevQuerier = map[string]string{}
 	e.mu.Unlock()
-	e.Reload()
+	e.reload()
 	e.restoreAlerts()
 	e.broadcastAlerts()
 }
@@ -259,13 +286,14 @@ func (e *Engine) OnState(st *model.SwitchState, tier string) {
 	defer e.stateMu.Unlock()
 	now := time.Now().UTC()
 	e.mu.Lock()
-	if e.states[st.ID] == nil {
+	registered := e.states[st.ID]
+	if registered == nil {
 		e.mu.Unlock()
 		return
 	}
 	cfg := e.portCfg[st.ID]
-	// 改名・統合後も古いワーカー出力で登録グループを巻き戻さない。
-	st.GroupTag = e.switchGroups[st.ID]
+	// 改名・統合後も古いワーカー出力で登録名とグループを巻き戻さない。
+	st.Name, st.GroupTag = registered.Name, e.switchGroups[st.ID]
 	for _, p := range st.Ports {
 		if c, ok := cfg[p.IfIndex]; ok {
 			p.Excluded, p.ExpectedSpeed, p.AVRole, p.Memo = c.Excluded, c.ExpectedSpeed, c.AVRole, c.Memo
@@ -321,8 +349,9 @@ func (e *Engine) OnEvent(ev model.Event) {
 	if ev.SwitchID != 0 {
 		e.mu.RLock()
 		_, known := e.switchGroups[ev.SwitchID]
+		enabled := e.states[ev.SwitchID] != nil
 		e.mu.RUnlock()
-		if !known {
+		if !known || (!enabled && ev.Category != "TRAP") {
 			return
 		}
 	}
@@ -332,6 +361,15 @@ func (e *Engine) OnEvent(ev model.Event) {
 		}
 		e.persistEvent(&ev)
 		return
+	}
+	if isLinkMonitoringEvent(ev.Code) {
+		e.mu.RLock()
+		excluded := e.portCfg[ev.SwitchID][ev.IfIndex].Excluded
+		e.mu.RUnlock()
+		if excluded {
+			e.persistEvent(&ev)
+			return
+		}
 	}
 	if ev.Code == "LINK_FLAP" {
 		e.recordLinkFlap(ev)
@@ -368,7 +406,8 @@ func (e *Engine) persistEvent(ev *model.Event) bool {
 			ev.Detail = map[string]any{}
 		}
 		e.mu.RLock()
-		ev.Detail["_suppressed"] = e.suppressedByLocked(alertFromEvent(*ev), time.Now()) != ""
+		ev.Detail["_suppressed"] = e.suppressedByLocked(alertFromEvent(*ev), time.Now()) != "" ||
+			(isLinkMonitoringEvent(ev.Code) && e.portCfg[ev.SwitchID][ev.IfIndex].Excluded)
 		e.mu.RUnlock()
 	}
 	ok, err := e.st.InsertEvent(ev)
@@ -400,7 +439,7 @@ func (e *Engine) raise(seen map[string]bool, key string, ev model.Event) {
 	seen[key] = true
 	e.mu.Lock()
 	if ev.SwitchID != 0 {
-		if _, known := e.switchGroups[ev.SwitchID]; !known {
+		if e.states[ev.SwitchID] == nil {
 			e.mu.Unlock()
 			return
 		}
@@ -417,11 +456,10 @@ func (e *Engine) raise(seen map[string]bool, key string, ev model.Event) {
 	}
 	if a := e.active[key]; a != nil {
 		changed := !a.Active || a.SwitchID != ev.SwitchID || a.IfIndex != ev.IfIndex
-		if !a.Active {
+		a.SwitchID, a.SwitchName, a.IfIndex = ev.SwitchID, ev.SwitchName, ev.IfIndex
+		if !a.Active && e.reactivateAlertLocked(a, time.Now()) {
 			e.saveClearedAtLocked([]int64{a.EventID}, nil)
 		}
-		a.Active, a.ClearedAt = true, nil
-		a.SwitchID, a.SwitchName, a.IfIndex = ev.SwitchID, ev.SwitchName, ev.IfIndex
 		e.mu.Unlock()
 		if changed {
 			e.broadcastAlerts()

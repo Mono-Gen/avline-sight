@@ -537,6 +537,11 @@ type LastSeen struct {
 // 見えていない登録済み機器の表示・Ping用。再生では at に再生時刻を渡し、未来の観測を混ぜない。
 // 相関サブクエリを使わず1回の走査で集計する（履歴が多くても単一DB接続を長く占有しないため）。
 func (s *Store) LastSeenByMAC(profileID int64, at time.Time) (map[string]LastSeen, error) {
+	return s.LastSeenByMACPreferringPorts(profileID, at, nil)
+}
+
+// LastSeenByMACPreferringPorts はライブ監視で信頼できるポートを観測時刻より優先する。
+func (s *Store) LastSeenByMACPreferringPorts(profileID int64, at time.Time, preferred func(int64, int) bool) (map[string]LastSeen, error) {
 	cut := ms(at)
 	rows, err := s.DB.Query(`SELECT mac, last_seen_ts, ip, switch_id, if_index FROM device_bindings WHERE profile_id=? AND first_seen_ts<=? ORDER BY id`, profileID, cut)
 	if err != nil {
@@ -562,7 +567,17 @@ func (s *Store) LastSeenByMAC(profileID int64, at time.Time) (map[string]LastSee
 			ts = cut // at の時点ではまだ接続中だった（その時点が最終確認）
 		}
 		mac = strings.ToUpper(mac)
-		if cur, ok := out[mac]; !ok || ms(cur.TS) < ts || (ms(cur.TS) == ts && cur.IP == "") {
+		cur, ok := out[mac]
+		if ok && preferred != nil {
+			wasPreferred, isPreferred := preferred(cur.SwitchID, cur.IfIndex), preferred(sw, ix)
+			if wasPreferred && !isPreferred {
+				continue
+			}
+			if isPreferred && !wasPreferred {
+				ok = false
+			}
+		}
+		if !ok || ms(cur.TS) < ts || (ms(cur.TS) == ts && cur.IP == "") {
 			out[mac] = LastSeen{TS: fromMS(ts), IP: ip.String, SwitchID: sw, IfIndex: ix}
 		}
 	}
@@ -899,6 +914,7 @@ func (s *Store) AckAll() error {
 func (s *Store) CountRecentLinkFlap(id int64, ifIndex, count int, after, through time.Time, suppressed bool) (bool, error) {
 	res, err := s.DB.Exec(`UPDATE events SET detail_json=json_set(detail_json,'$.count',COALESCE(json_extract(detail_json,'$.count'),1)+?)
 		WHERE id=(SELECT id FROM events WHERE switch_id=? AND if_index=? AND code='LINK_FLAP' AND ts>? AND ts<=? ORDER BY ts DESC,id DESC LIMIT 1)
+		AND acked=0
 		AND COALESCE(json_extract(detail_json,'$._suppressed'),0)=?`, count, id, ifIndex, ms(after), ms(through), suppressed)
 	if err != nil {
 		return false, err

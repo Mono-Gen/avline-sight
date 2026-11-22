@@ -10,11 +10,38 @@ import (
 
 	"github.com/Mono-Gen/avline-sight/internal/model"
 	"github.com/Mono-Gen/avline-sight/internal/ping"
+	"github.com/Mono-Gen/avline-sight/internal/store"
 )
 
 // 周期と失敗回数はバックエンド仕様の定期Ping・機器消失条件による。
 const periodicPingInterval = 60 * time.Second
 const failureThreshold = 2
+
+type missingCheck struct {
+	location  store.LastSeen
+	started   time.Time
+	count     int
+	confirmed bool
+	promoted  bool
+}
+
+type accessPortSet map[int64]map[int]bool
+
+func accessPorts(states []*model.SwitchState) accessPortSet {
+	out := make(accessPortSet, len(states))
+	for _, s := range states {
+		ports := make(map[int]bool, len(s.Ports))
+		for _, p := range s.Ports {
+			if !isUplink(s, p) {
+				ports[p.IfIndex] = true
+			}
+		}
+		out[s.ID] = ports
+	}
+	return out
+}
+
+func (ports accessPortSet) contains(id int64, ix int) bool { return ports[id][ix] }
 
 type Pinger interface {
 	One(context.Context, string, time.Duration) ping.Result
@@ -57,12 +84,21 @@ func (e *Engine) evaluateDevices(st *model.SwitchState, tier string) {
 		slog.Warn("登録機器の読込に失敗", "err", err)
 		return
 	}
-	last, err := e.st.LastSeenByMAC(pid, time.Now())
+	now := time.Now()
+	states := e.States()
+	checkMissing := tier == "slow" || tier == "fdb" || !st.Reachable
+	var preferred func(int64, int) bool
+	var access accessPortSet
+	if checkMissing {
+		access = accessPorts(states)
+		preferred = access.contains
+	}
+	last, err := e.st.LastSeenByMACPreferringPorts(pid, now, preferred)
 	if err != nil {
 		slog.Warn("機器の最終観測の読込に失敗", "err", err)
 		return
 	}
-	rows := BuildInventory(e.States(), al, last, InventoryOptions{}, time.Now())
+	rows := BuildInventory(states, al, last, InventoryOptions{}, now)
 	registered := map[string]bool{}
 	for _, a := range al {
 		if a.MatchType == "mac" {
@@ -81,57 +117,8 @@ func (e *Engine) evaluateDevices(st *model.SwitchState, tier string) {
 		}
 	}
 	e.mu.Unlock()
-	byMAC := map[string]InventoryRow{}
-	for _, r := range rows {
-		byMAC[r.MAC] = r
-	}
-	if tier == "slow" || tier == "fdb" || !st.Reachable {
-		confirm := false
-		valid := st.FDBValid == nil || *st.FDBValid
-		present := map[string]bool{}
-		for _, p := range st.Ports {
-			for _, d := range p.Devices {
-				present[strings.ToUpper(d.MAC)] = true
-			}
-		}
-		if st.FDBValid != nil {
-			present = map[string]bool{}
-			for _, mac := range st.FDBMACs {
-				present[strings.ToUpper(mac)] = true
-			}
-		}
-		for mac := range registered {
-			ls, seen := last[mac]
-			if !seen || ls.SwitchID != st.ID {
-				continue
-			}
-			e.mu.Lock()
-			if !st.Reachable || !valid || present[mac] {
-				e.missing[mac] = 0
-			} else if e.missing[mac] < failureThreshold {
-				e.missing[mac]++
-			}
-			n := e.missing[mac]
-			e.mu.Unlock()
-			key := deviceKey("DEVICE_MISSING", mac)
-			if !st.Reachable || !valid {
-				continue
-			}
-			if n >= failureThreshold {
-				e.raise(map[string]bool{}, key, e.deviceEvent("DEVICE_MISSING", byMAC[mac]))
-			} else if present[mac] {
-				e.clearPrefix(key, map[string]bool{})
-			} else if n == 1 {
-				confirm = true
-			}
-		}
-		if confirm {
-			at := st.LastPoll
-			if at.IsZero() {
-				at = time.Now()
-			}
-			e.scheduleFDB(st.ID, at.Add(missingFDBDelay))
-		}
+	if checkMissing {
+		e.evaluateMissingDevices(st, states, access, last, rows, registered, now)
 	}
 	phase := e.Phase()
 	for _, r := range rows {
@@ -144,13 +131,158 @@ func (e *Engine) evaluateDevices(st *model.SwitchState, tier string) {
 		} else {
 			e.clearPrefix(key, map[string]bool{})
 		}
-		if r.Seen && r.SwitchID != last[r.MAC].SwitchID {
-			e.clearPrefix(deviceKey("DEVICE_MISSING", r.MAC), map[string]bool{})
-		}
 	}
 	e.clearMatching(func(a *Alert) bool {
 		return a.MAC != "" && !registered[a.MAC] && (a.Code == "DEVICE_MISSING" || a.Code == "IP_MISMATCH" || a.Code == "PING_FAIL")
 	})
+}
+
+func (e *Engine) evaluateMissingDevices(st *model.SwitchState, states []*model.SwitchState, access accessPortSet,
+	last map[string]store.LastSeen, rows []InventoryRow, registered map[string]bool, now time.Time) {
+	// FDB単独取得では統合済み機器一覧が更新されないため、取得した行のポートを使う。
+	observed := map[string]map[int64]store.LastSeen{}
+	for _, s := range states {
+		if !s.Reachable || s.FDBValid == nil || !*s.FDBValid || s.FDBLastOK.IsZero() {
+			continue
+		}
+		for ix, macs := range s.FDBPorts {
+			if !access.contains(s.ID, ix) {
+				continue
+			}
+			for _, rawMAC := range macs {
+				mac := strings.ToUpper(rawMAC)
+				if !registered[mac] {
+					continue
+				}
+				if observed[mac] == nil {
+					observed[mac] = map[int64]store.LastSeen{}
+				}
+				if old, seen := observed[mac][s.ID]; !seen || ix < old.IfIndex {
+					observed[mac][s.ID] = store.LastSeen{SwitchID: s.ID, IfIndex: ix, TS: s.FDBLastOK}
+				}
+			}
+		}
+	}
+	present := map[string]bool{}
+	if st.FDBValid == nil {
+		for _, p := range st.Ports {
+			for _, d := range p.Devices {
+				present[strings.ToUpper(d.MAC)] = true
+			}
+		}
+	} else {
+		for _, mac := range st.FDBMACs {
+			present[strings.ToUpper(mac)] = true
+		}
+	}
+	ok := st.Reachable && (st.FDBValid == nil || *st.FDBValid)
+	pollAt := st.LastPoll
+	if pollAt.IsZero() {
+		pollAt = now
+	}
+	fdbAt := st.FDBLastOK
+	if fdbAt.IsZero() {
+		fdbAt = pollAt
+	}
+	confirm := false
+	for _, row := range rows {
+		mac := row.MAC
+		if !registered[mac] {
+			continue
+		}
+		e.mu.Lock()
+		check := e.missing[mac]
+		ls := last[mac]
+		if check.promoted && check.started.IsZero() {
+			seen := observed[mac][ls.SwitchID]
+			if ls.SwitchID == check.location.SwitchID && ls.IfIndex == check.location.IfIndex ||
+				seen.IfIndex == ls.IfIndex && seen.TS.After(check.location.TS) {
+				delete(e.missing, mac)
+				check = missingCheck{}
+			}
+		}
+		if check.location.SwitchID == 0 {
+			check.location = ls
+		}
+		id := check.location.SwitchID
+		var moved store.LastSeen
+		if !check.started.IsZero() {
+			for other, seen := range observed[mac] {
+				if other != id && seen.TS.After(check.started) &&
+					(seen.TS.After(moved.TS) || (seen.TS.Equal(moved.TS) && other < moved.SwitchID)) {
+					moved = seen
+				}
+			}
+		}
+		elsewhere := moved.SwitchID != 0
+		if elsewhere || (id == st.ID && ok && present[mac]) {
+			switch {
+			case elsewhere:
+				// 単独取得は接続履歴を更新しないため、次の判定とリンク断に移動先を引き継ぐ。
+				e.missing[mac] = missingCheck{location: moved, promoted: true}
+			case check.promoted && (ls.SwitchID != id || ls.IfIndex != check.location.IfIndex):
+				e.missing[mac] = missingCheck{location: check.location, promoted: true}
+			default:
+				delete(e.missing, mac)
+			}
+			e.mu.Unlock()
+			e.clearDeviceMissing(mac, elsewhere)
+			continue
+		}
+		if id != st.ID {
+			e.mu.Unlock()
+			continue
+		}
+		if !ok {
+			if !check.confirmed {
+				if check.promoted {
+					e.missing[mac] = missingCheck{location: check.location, promoted: true}
+				} else {
+					delete(e.missing, mac)
+				}
+			} else {
+				check.count = 0
+				e.missing[mac] = check
+			}
+			e.mu.Unlock()
+			continue
+		}
+		if check.started.IsZero() {
+			check.started = fdbAt
+		}
+		if check.count < failureThreshold {
+			check.count++
+		}
+		check.confirmed = check.confirmed || check.count >= failureThreshold
+		e.missing[mac] = check
+		e.mu.Unlock()
+		if check.count == 1 {
+			confirm = true
+		}
+		if check.count >= failureThreshold {
+			row.SwitchID, row.SwitchName, row.IfIndex, row.Port = id, st.Name, check.location.IfIndex, ""
+			for _, p := range st.Ports {
+				if p.IfIndex == row.IfIndex {
+					row.Port = p.Name
+					break
+				}
+			}
+			e.raise(map[string]bool{}, deviceKey("DEVICE_MISSING", mac), e.deviceEvent("DEVICE_MISSING", row))
+		}
+	}
+	if confirm {
+		e.scheduleFDB(st.ID, pollAt.Add(missingFDBDelay))
+	}
+}
+
+func (e *Engine) clearDeviceMissing(mac string, elsewhere bool) {
+	match := func(_ string, a *Alert) bool { return a.Code == "DEVICE_MISSING" && a.MAC == mac }
+	if !elsewhere {
+		e.clearKeys(match)
+		return
+	}
+	// 別のアクセスポートで復旧を確認した場合も、表示済みの未確認ラッチは保持する。
+	e.clearKeysWithPolicy(match, func(a *Alert, _ time.Time) bool { return a.Active && a.eventSuppressed })
 }
 
 func (e *Engine) runPeriodicPing(ctx context.Context, interval time.Duration) {

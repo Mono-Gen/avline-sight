@@ -63,6 +63,17 @@ func TrapNeedsSlow(code string) bool {
 	return false
 }
 
+// 筐体のTrapはMediumで取得するファン・電源・温度の状態で確認する。
+func TrapNeedsMedium(code string) bool {
+	switch code {
+	case "boxsFanStateChange", "boxsPowSupplyStateChange", "boxsTemperatureChange",
+		"boxsThermalShutdown", "boxsTemperatureStateChange", "boxsDyingGaspEventChange",
+		"fanFailureTrap", "powerSupplyStatusChangeTrap":
+		return true
+	}
+	return false
+}
+
 // 名前→OIDの逆引き（シミュレータのTrap送信で使用）
 func TrapOID(name string) string {
 	for oid, d := range Traps {

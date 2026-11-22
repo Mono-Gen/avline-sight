@@ -133,8 +133,12 @@ func (s *Server) setGroupOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) publishGroups(w http.ResponseWriter, r *http.Request) {
+	s.broadcastGroupsChanged()
+	s.groups(w, r)
+}
+
+func (s *Server) broadcastGroupsChanged() {
 	if s.Hub != nil {
 		s.Hub.Broadcast("groups_changed", nil)
 	}
-	s.groups(w, r)
 }

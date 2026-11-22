@@ -327,6 +327,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 // resync はプロファイル・スイッチ変更をポーラーとエンジンへ反映する。
 func (s *Server) resync() {
 	s.Engine.Reload()
+	if s.Poller == nil {
+		return
+	}
 	sws, err := s.Store.Switches(s.Engine.ProfileID())
 	if err != nil {
 		slog.Warn("スイッチ一覧の取得に失敗", "err", err)

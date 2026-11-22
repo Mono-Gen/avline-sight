@@ -78,6 +78,11 @@ func (s *Server) saveSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.IP = strings.TrimSpace(in.IP)
+	in.GroupTag = strings.TrimSpace(in.GroupTag)
+	if in.GroupTag != "" && !validGroupName(in.GroupTag) {
+		writeErr(w, 400, "グループ名が不正です", "", "")
+		return
+	}
 	if strings.TrimSpace(in.Name) == "" || !validHost(in.IP) {
 		writeErr(w, 400, "スイッチを保存できません", "名前またはIPアドレスが不正です", "名前とIPv4アドレス（例 192.168.0.239）を入力してください")
 		return
@@ -118,6 +123,7 @@ func (s *Server) saveSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.resync()
+	s.broadcastGroupsChanged()
 	in.Community = "****"
 	writeJSON(w, 200, in)
 }
@@ -132,6 +138,7 @@ func (s *Server) deleteSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.resync()
+	s.broadcastGroupsChanged()
 	writeJSON(w, 200, map[string]any{"deleted": id})
 }
 

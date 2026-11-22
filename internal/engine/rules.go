@@ -417,7 +417,7 @@ func sevRank(s string) int {
 }
 
 func isUplink(s *model.SwitchState, p *model.Port) bool {
-	if p.AVRole == "uplink" || p.Type == "lag" {
+	if p.AVRole == "uplink" || p.AVRole == "trunk" || p.Type == "lag" {
 		return true
 	}
 	for _, n := range s.Neighbors {
