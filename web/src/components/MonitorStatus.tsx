@@ -6,7 +6,8 @@ export function OverallStatus({ count, critical, ready, stopped, replay = false,
   count: number; critical: boolean; ready: boolean; stopped: boolean; replay?: boolean; active?: number; unacked?: number;
 }) {
   const unknown = stopped || !ready;
-  const tone = unknown ? 'unknown' : count ? critical ? 'critical' : 'warning' : 'healthy';
+  const onlyUnacked = active === 0 && !!unacked;
+  const tone = unknown ? 'unknown' : count ? critical && !onlyUnacked ? 'critical' : 'warning' : 'healthy';
   return <div className={`overall-status status-${tone}`} role="status">
     <strong>{unknown ? '—' : count ? critical ? <ErrorSymbol /> : '▲' : '✓'} {unknown
       ? t(stopped ? 'cleanup.unknown' : 'cleanup.pending') : count && active !== undefined && unacked !== undefined
