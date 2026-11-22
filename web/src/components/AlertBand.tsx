@@ -34,12 +34,17 @@ export function AlertBand({ alerts, wall = false, busy = false, ack, ackMany, pe
   ]);
   const groups = wall ? groupWallAlerts(rows) : [];
   const canAck = !locked && (ack || ackMany);
+  const ackRows = rows.filter(alert => !alert.acked && (!ackMany || !alert.suppressed));
   return <section className={`alert-band${wall && groups.length > 6 ? ' wall-alerts-dense' : ''}`} aria-label={t('rack.alertBand')}>
     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
       <h2 className="font-bold">{wall ? t('cleanup.allAlerts', { count: counts.unacked }) : t('rack.alertBand')} {!wall && <span className="tabular-nums">{counts.count}</span>}</h2>
-      {canAck && rows.some(alert => !alert.acked) && <button className="button-primary" data-action="ack-all" disabled={busy} onClick={() => wall && ackMany
-        ? ackMany(rows.map(alert => alert.event_id)) : ack?.()}>{t('rack.ackAll')}</button>}
     </div>
+    {canAck && ackRows.length > 0 && <div className="operation-area mb-2" role="group" aria-label={t('rack.actions')}>
+      <button className="button-primary" data-action="ack-all" disabled={busy} onClick={() => {
+        if (!ackMany) ack?.();
+        else if (wall || window.confirm(t('rack.ackAllConfirm'))) ackMany(ackRows.map(alert => alert.event_id));
+      }}>{t('rack.ackAll')}</button>
+    </div>}
     {wall && locked && <p className="wall-lock-note">{t('wall.locked')}</p>}
     {!locked && undoCount > 0 && undo && <div className="ack-undo" role="status">{t('wall.acknowledged', { count: undoCount })} <button data-action="undo" disabled={busy} onClick={undo}>{t('wall.undo')}</button></div>}
     <div className="alert-list" role="log" aria-live="polite">

@@ -7,6 +7,7 @@ import { asArray } from '../format';
 import type { Port } from '../types';
 import { STATE_REFRESH_MS, usePolling } from '../usePolling';
 import type { ViewProps } from './props';
+import { groupSwitches, hasGroupFilter } from './props';
 
 export function PortMatrix(p: ViewProps) {
   const [q, setQ] = useState('');
@@ -21,6 +22,8 @@ export function PortMatrix(p: ViewProps) {
     STATE_REFRESH_MS, [q, sort], !p.replay, 300);
   const rows = p.replay ? asArray(p.replay).flatMap(sw => asArray(sw.ports).map(port => ({ switch_id: sw.id, switch_name: sw.name, port }))) : result.data;
   const preset = asArray(p.settings?.views)?.find(v => v.id === p.part);
+  const groupFiltered = hasGroupFilter(p);
+  const visible = new Set(groupSwitches(p).map(sw => sw.id));
   return <section className="panel">
     {!p.replay && <PollingStatus {...result} />}
     <input placeholder={t('ui.m274')} value={q} onChange={e => setQ(e.target.value)} />
@@ -33,7 +36,10 @@ export function PortMatrix(p: ViewProps) {
       <input type="checkbox" checked={anomaly} onChange={e => setAnomaly(e.target.checked)} />
       {t('ui.m278')}</label>
     <Table
-      rows={asArray((rows || [])).filter(x => (!q || [x.switch_name, x.port.name, x.port.memo, ...asArray(x.port.devices).flatMap(d => [d.label, d.mac, d.ip])].join(' ').toLowerCase().includes(q.toLowerCase())) && (!preset?.tags?.length || preset.tags.includes(asArray(p.replay || p.overview.switches).find(sw => sw.id === x.switch_id)?.group_tag || '')) && (!anomaly || x.port.err_delta > 0 || x.port.discard_delta > 0) && (!preset?.vlans?.length || asArray(preset.vlans).includes(x.port.pvid))).map(x => ({
+      rows={asArray(rows).filter(x => (!groupFiltered || visible.has(x.switch_id)) &&
+        (!q || [x.switch_name, x.port.name, x.port.memo, ...asArray(x.port.devices).flatMap(d => [d.label, d.mac, d.ip])].join(' ').toLowerCase().includes(q.toLowerCase())) &&
+        (!anomaly || x.port.err_delta > 0 || x.port.discard_delta > 0) &&
+        (!preset?.vlans?.length || asArray(preset.vlans).includes(x.port.pvid))).map(x => ({
         switch: x.switch_name,
         port: x.port.name,
         vlan: x.port.pvid,

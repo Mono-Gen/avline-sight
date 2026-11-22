@@ -4,11 +4,13 @@ import { api, json } from '../api';
 import { Chart, FrontPanel, Table } from '../components/Common';
 import { PollingStatus } from '../components/PollingStatus';
 import { PortHardware } from '../components/PortHardware';
+import { confirmCounterReset } from '../components/GroupActions';
 import { asArray, decimal, formatBps, resolveSwitchId } from '../format';
 import type { Event, MetricResult, ModelDefinitions, Port } from '../types';
 import { METRICS_REFRESH_MS, usePolling } from '../usePolling';
 import { useSwitchState } from '../useSwitchState';
 import type { ViewProps } from './props';
+import { groupSwitches } from './props';
 const roles = [
   '',
   'dante',
@@ -32,14 +34,17 @@ export function SwitchPorts(p: ViewProps) {
   const [role, setRole] = useState('');
   const [until, setUntil] = useState(0);
   const [now, setNow] = useState(Date.now());
-  const { state: s, polling: statePolling } = useSwitchState(p.selected, p.state, p.replay);
+  const switches = groupSwitches(p);
+  const selected = resolveSwitchId(switches, p.selected);
+  const { state: s, polling: statePolling } = useSwitchState(selected, p.state, p.replay);
   const models = usePolling(signal => api<ModelDefinitions>('/api/models', { signal }), 0);
-  const switches = asArray(p.replay || p.overview.switches);
   useEffect(() => {
     
-    const next = resolveSwitchId(switches, p.selected);
-    if (next && next !== p.selected) p.select(next);
-  }, [p.selected, p.replay, p.overview.switches]);
+    if (selected !== p.selected) {
+      setIdx(0);
+      if (selected) p.select(selected);
+    }
+  }, [selected, p.selected]);
   const port = asArray(s?.ports)?.find(x => x.if_index === idx);
   const preset = asArray(p.settings?.views)?.find(v => v.id === p.part);
   const choose = (x: Port) => {
@@ -72,20 +77,20 @@ export function SwitchPorts(p: ViewProps) {
   return <>
     <div className="flex gap-2">
       <select
-        value={p.selected}
+        value={selected}
         onChange={e => {
           p.select(Number(e.target.value));
           setIdx(0);
         }}
       >
         <option value="0">{t('ui.m254')}</option>
-        {asArray((p.replay || p.overview.switches || [])).map(x => <option key={x.id} value={x.id}>
+        {switches.map(x => <option key={x.id} value={x.id}>
           {x.name}
         </option>)}
       </select>
-      <button disabled={!p.selected || p.locked} onClick={() => p.openTerminal(p.selected)}>{t('ui.m279')}</button>
+      <button disabled={!selected || selected !== p.selected || p.locked} onClick={() => p.openTerminal(selected)}>{t('ui.m279')}</button>
       <button
-        disabled={!p.selected || !!p.replay}
+        disabled={!selected || selected !== p.selected || !!p.replay}
         onClick={() => p.run(async () => {
           const a = await api<{
             web_url: string;
@@ -98,7 +103,7 @@ export function SwitchPorts(p: ViewProps) {
       </button>
     </div>
     {!p.replay && <PollingStatus {...statePolling} />}
-    {s && <>
+    {s && selected === p.selected && <>
       <FrontPanel
         alerts={p.replay ? [] : p.operations?.alerts}
         switchId={s.id}
@@ -214,17 +219,17 @@ export function SwitchPorts(p: ViewProps) {
             })}
           >{t('ui.m293')}</button>
         </div>
-        <button
+        <div className="operation-area" role="group" aria-label={t('rack.actions')}><button
           className="button-danger"
           disabled={p.busy || p.locked}
           onClick={() => {
-            if (confirm(t('ui.m294'))) p.run(async () => {
+            if (confirmCounterReset(t('ui.m294'), p.operations?.phase || p.status?.phase)) p.run(async () => {
               await api(`/api/switches/${p.selected}/counters/reset`, json('POST', { if_index: idx }));
               setUntil(Date.now() + 600000);
               setNow(Date.now());
             });
           }}
-        >{t('ui.m295')}</button>
+        >{t('ui.m295')}</button></div>
 
         {until > now && <span>{t('ui.m296')}{Math.ceil((until - now) / 1000)}
           {t('ui.m297')}{port.err_since_reset}

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { api, json } from '../api';
 import { Badge } from '../components/Badge';
 import { DeviceCsvImportDialog } from '../components/DeviceCsvImportDialog';
+import { confirmBulkPing } from '../components/GroupActions';
 import { PollingStatus } from '../components/PollingStatus';
 import { bulkPingTimeoutMs, deviceUrl, importSummary, MAX_BULK_PING, pingLabel, pingTargets } from '../deviceCsv';
 import type { DeviceScope } from '../deviceCsv';
@@ -24,8 +25,8 @@ function lastSeen(value: string | undefined): string {
 export function DeviceInventoryTable({ rows, alerts = [], onNavigate }: {
   rows: InventoryRow[]; alerts?: Alert[]; onNavigate?: ViewProps['openPortMonitor'];
 }) {
-  const columns = [t('rack.connectionState'), t('ui.m100'), 'MAC', 'IP', t('rack.plannedIP'), t('rack.pingStatus'), t('operations.pingAt'),
-    t('ui.m074'), t('ui.m213'), t('ui.m018'), t('ui.m020'), 'VLAN', 'PoE(W)', t('ui.m214'), t('ui.m215'), t('ui.m216')];
+  const columns = [t('rack.connectionState'), t('pages.deviceName'), t('pages.switchPort'), t('pages.deviceIP'),
+    'Ping', t('ui.m074'), t('pages.vlanPoe'), 'MAC'];
   return (
     <div className="overflow-auto">
       <table className="w-full text-sm">
@@ -39,40 +40,35 @@ export function DeviceInventoryTable({ rows, alerts = [], onNavigate }: {
             return <tr key={row.mac} onClick={navigate} className={navigate ? 'device-port-row' : undefined}>
               <td><span className={`device-state status-${tone}`} title={t(state.label)} aria-label={t(state.label)}>{state.symbol}</span></td>
               <td>
-                {row.label || <span className="text-slate-500 dark:text-slate-400">{t('ui.m091')}</span>}
+                {row.label ? <strong>{row.label}</strong> :
+                  <span className="device-secondary">{row.lldp_name || emptyCell}</span>}
                 {!row.seen && <span className="ml-2 whitespace-nowrap"><Badge text={t('ui.m218')} /></span>}
+                {row.via_uplink && <span className="ml-2 whitespace-nowrap" title={t('ui.m222')}><Badge text={t('ui.m223')} /></span>}
               </td>
-              <td className="whitespace-nowrap font-mono">{row.mac}</td>
-              <td>
-                {row.ip || emptyCell}
-                {row.ip && row.ip_stale && (
-                  <span className="ml-2 whitespace-nowrap" title={t('ui.m219')}>
-                    <Badge text={t('ui.m220')} />
-                  </span>
-                )}
+              <td className="whitespace-nowrap">
+                {row.switch_name || emptyCell}
+                {row.port && <> / {navigate ? <button onClick={event => { event.stopPropagation(); navigate(); }} aria-label={`${t('rack.nav.monitor')} · ${row.switch_name} ${row.port}`}>{row.port}</button> : row.port}</>}
+                {!row.port && navigate && <button onClick={event => { event.stopPropagation(); navigate(); }} aria-label={`${t('rack.nav.monitor')} · ${row.switch_name}`}>↗</button>}
               </td>
-              <td className="whitespace-nowrap">{row.planned_ip || emptyCell}
+              <td className="whitespace-nowrap">
+                <div>{row.ip || emptyCell}
+                  {row.ip && row.ip_stale && <span className="ml-2" title={t('ui.m219')}><Badge text={t('ui.m220')} /></span>}
+                </div>
+                <span className="device-secondary" title={t('rack.plannedIP')}>{row.planned_ip || emptyCell}</span>
                 {row.ip_mismatch && <span className="text-amber-700 dark:text-amber-300" title={t('operations.mismatch')} aria-label={t('operations.mismatch')}> ▲</span>}
               </td>
-              <td className="whitespace-nowrap">{row.ping ? pingLabel(row.ping.status, row.ping.rtt_ms) :
-                row.ping_ok == null ? emptyCell : pingLabel(row.ping_ok ? 'ok' : 'timeout', row.ping_rtt_ms ?? 0)}</td>
-              <td className="whitespace-nowrap">{pcTimestamp(row.ping_ts || row.ping?.at || '')}</td>
-              <td>{row.vendor || emptyCell}</td>
-              <td>{row.lldp_name || emptyCell}</td>
-              <td>{row.switch_name || emptyCell}</td>
-              <td>{navigate ? <button onClick={event => { event.stopPropagation(); navigate(); }} aria-label={`${t('rack.nav.monitor')} · ${row.switch_name} ${row.port}`}>{row.port || row.switch_name}</button> : row.port || emptyCell}</td>
-              <td>{row.vlan || emptyCell}</td>
-              <td>{decimal(row.poe_w)}</td>
-              <td className="whitespace-nowrap">{row.speed_mbps > 0 ? `${row.speed_mbps} Mbps` : emptyCell}</td>
-              <td className="whitespace-nowrap">{lastSeen(row.last_seen)}</td>
-              <td>
-                {row.source || emptyCell}
-                {row.via_uplink && (
-                  <span className="ml-2 whitespace-nowrap" title={t('ui.m222')}>
-                    <Badge text={t('ui.m223')} />
-                  </span>
-                )}
+              <td className="whitespace-nowrap">
+                {row.ping ? pingLabel(row.ping.status, row.ping.rtt_ms) :
+                  row.ping_ok == null ? emptyCell : pingLabel(row.ping_ok ? 'ok' : 'timeout', row.ping_rtt_ms ?? 0)}
+                {(row.ping_ts || row.ping?.at) && <small className="device-secondary block" title={t('operations.pingAt')}>{pcTimestamp(row.ping_ts || row.ping?.at || '')}</small>}
               </td>
+              <td>{row.vendor || emptyCell}</td>
+              <td className="whitespace-nowrap">{row.vlan || emptyCell} / {row.poe_w != null ? `${decimal(row.poe_w)} W` : emptyCell}</td>
+              <td className="whitespace-nowrap font-mono" title={[
+                row.lldp_name && row.label && `${t('ui.m213')} ${row.lldp_name}`,
+                row.speed_mbps > 0 && `${row.speed_mbps} Mbps`, row.source,
+                `${t('ui.m215')} ${lastSeen(row.last_seen)}`,
+              ].filter(Boolean).join(' · ')}>{row.mac}</td>
             </tr>;
           })}
         </tbody>
@@ -84,7 +80,6 @@ export function DeviceInventoryTable({ rows, alerts = [], onNavigate }: {
 export function Devices(p: ViewProps) {
   const [scope, setScope] = useState<DeviceScope>('all');
   const [q, setQuery] = useState('');
-  const [group, setGroup] = useState<string>();
   const [importOpen, setImportOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [revision, setRevision] = useState(0);
@@ -93,16 +88,15 @@ export function Devices(p: ViewProps) {
   const isReplay = p.replay !== null;
   const replay = p.replayRef;
   const enabled = !isReplay || Boolean(replay);
-  const groups = isReplay ? [...new Set(asArray(p.replay).map(sw => sw.group_tag))] :
-    asArray(p.operations?.groups).map(item => item.name);
-  const selectedGroup = group !== undefined && groups.includes(group) ? group : undefined;
-  const filters = { scope, q, vlans, group: selectedGroup };
+  const filters = { scope, q, vlans, group: p.group ?? (preset?.tags?.length === 1 ? preset.tags[0] : undefined) };
   const url = enabled ? deviceUrl(filters, replay) : '';
   const profileId = p.status?.profile.id;
   const key = JSON.stringify([url, profileId, revision]);
   const inventory = usePolling(async signal => ({ key, rows: await api<InventoryRow[]>(url, { signal }) }),
     isReplay ? 0 : STATE_REFRESH_MS, [key], enabled, 300);
-  const rows = inventory.data?.key === key ? asArray(inventory.data.rows) : [];
+  const rows = inventory.data?.key === key ? asArray(inventory.data.rows)
+    .filter(row => !preset?.tags?.length || preset.tags.includes(row.group_tag)) : [];
+  const phase = p.operations?.phase || p.status?.phase;
   const [manual, setManual] = useState('');
   const [manualResults, setManualResults] = useState<BulkPingResult[]>([]);
   const targets = pingTargets(rows);
@@ -132,11 +126,6 @@ export function Devices(p: ViewProps) {
           <button aria-pressed={scope === 'unnamed'} onClick={() => setScope('unnamed')}>{t('ui.m233')}</button>
         </div>
         <label>{t('ui.m234')}<input type="search" value={q} onChange={event => setQuery(event.target.value)} /></label>
-        <label>{t('operations.group')} <select value={selectedGroup === undefined ? '' : `g:${selectedGroup}`}
-          onChange={event => setGroup(event.target.value ? event.target.value.slice(2) : undefined)}>
-          <option value="">{t('rack.all')}</option>
-          {groups.map(name => <option key={name} value={`g:${name}`}>{name || t('rack.ungrouped')}</option>)}
-        </select></label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         {enabled && <>
@@ -150,9 +139,9 @@ export function Devices(p: ViewProps) {
         {importDisabledReason && <span className="text-sm text-slate-500 dark:text-slate-400">{importDisabledReason}</span>}
       </div>
       {!isReplay && (
-        <div className="flex flex-wrap items-center gap-3">
-          <button disabled={Boolean(pingDisabledReason) || p.busy} title={pingDisabledReason}
-            onClick={() => runPing({ ips: targets })}>{t('ui.m238')}{targets.length}{t('ui.m239')}</button>
+        <div className="operation-area" role="group" aria-label={t('rack.actions')}>
+          <button data-action="ping-visible" disabled={Boolean(pingDisabledReason) || p.busy} title={pingDisabledReason}
+            onClick={() => { if (confirmBulkPing(targets.length, phase)) runPing({ ips: targets }); }}>{t('ui.m238')}{targets.length}{t('ui.m239')}</button>
           <label>{t('ui.m240')}<input
             value={manual}
             placeholder="192.168.1.10, 192.168.1.20-40, 10.0.0.0/28"
@@ -160,7 +149,8 @@ export function Devices(p: ViewProps) {
             onChange={event => setManual(event.target.value)}
           /></label>
           <button disabled={Boolean(manualDisabledReason) || !manual.trim() || p.busy} title={manualDisabledReason} onClick={() => {
-            if (window.confirm(t('ui.m241', { p0: MAX_BULK_PING, p1: manual.trim() }))) runPing({ manual });
+            const summary = t('ui.m241', { p0: MAX_BULK_PING, p1: manual.trim() });
+            if (window.confirm(phase === 'show' ? `${t('pages.pingLoad')}\n${summary}` : summary)) runPing({ manual });
           }}>{t('ui.m242')}</button>
           {(pingDisabledReason || manualDisabledReason) && (
             <span className="text-sm text-slate-500 dark:text-slate-400">{manualDisabledReason || pingDisabledReason}</span>

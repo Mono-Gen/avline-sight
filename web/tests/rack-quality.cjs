@@ -79,17 +79,18 @@ test('ラックのランプは発生中を赤、復旧未確認を枠付きの�
   const input = { port: { if_index: 1, name: '1/0/1', oper: 'up', devices: [{ mac: 'AA' }] }, devices: [], alerts: [], reachable: true, wall: false, onSelect: noop };
   const css = fs.readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
   for (const [alerts, expected, symbol, color] of [
-    [[alert({ severity: 'WARNING', active: true, acked: true })], 'critical', 'error-symbol', '#7f1d1d'],
-    [[alert()], 'warning', '!', '#713f12'],
+    [[alert({ severity: 'WARNING', active: true, acked: true })], 'critical', '!', '#7f1d1d'],
+    [[alert()], 'warning', '▲', '#713f12'],
     [[alert({ acked: true })], 'healthy', '✓', '#154434'],
   ]) {
     const html = render(PortLamp, { ...input, alerts });
     assert.match(html, new RegExp(`lamp-${expected}`));
-    assert.ok(html.includes(symbol));
+    assert.match(html, new RegExp(`class="lamp-symbol" aria-hidden="true">${symbol}</span>`));
     assert.match(css, new RegExp(`\\.lamp-${expected}[^}]+background: ${color}`));
   }
   assert.match(css, /\.lamp-warning[^}]+box-shadow: inset/);
-  assert.match(render(PortLamp, { ...input, port: { ...input.port, oper: 'down', sfp: { los: true } } }), /lamp-unknown/);
+  assert.match(render(PortLamp, { ...input, port: { ...input.port, oper: 'down', sfp: { los: true } } }), /lamp-unused/);
+  assert.match(render(PortLamp, { ...input, reachable: false }), /lamp-unknown/);
   assert.match(render(PortLamp, { ...input, alerts: [alert({ active: true, suppressed: true })] }), /lamp-healthy/);
 });
 
@@ -99,7 +100,8 @@ test('壁表示にはラベル付き終了とアラート確認を置き、ラ�
   assert.match(header, /wall-exit/);
   assert.match(header, /phase-setup/);
   assert.match(header, /PC時刻/);
-  assert.doesNotMatch(header, /<select/);
+  assert.equal((header.match(/<select\b/g) || []).length, 1);
+  assert.match(header, /<select aria-label="グループ"/);
   assert.equal(render(GroupActions, { ...group, wall: true }), '');
   const band = render(AlertBand, { alerts: [alert()], wall: true, ack: noop });
   assert.match(band, /Switch A.*Mixer/);

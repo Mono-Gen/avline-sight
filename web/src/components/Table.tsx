@@ -23,13 +23,16 @@ function cellValue(key: string, value: unknown, row: Record<string, unknown>): R
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
-export function Table({ rows, labels = {} }: {
+export function Table({ rows, labels = {}, first = [], hide = [], values = {} }: {
   rows: object[];
   labels?: Record<string, string>;
+  first?: readonly string[];
+  hide?: readonly string[];
+  values?: Record<string, (value: unknown) => React.ReactNode>;
 }) {
-  const list = asArray(rows).filter(row => typeof row === 'object');
+  const list = asArray(rows).filter(row => row && typeof row === 'object');
   if (!list.length) return <p>{t('ui.m195')}</p>;
-  const keys = Array.from(new Set(asArray(list).flatMap(row => Object.keys(row))));
+  const keys = [...new Set([...first, ...list.flatMap(row => Object.keys(row))])].filter(key => !hide.includes(key));
   return (
     <div className="overflow-auto">
       <table className="w-full text-sm">
@@ -39,7 +42,11 @@ export function Table({ rows, labels = {} }: {
         <tbody>
           {asArray(list).map((row, index) => (
             <tr key={index}>
-              {asArray(keys).map(key => <td key={key}>{cellValue(key, (row as Record<string, unknown>)[key], row as Record<string, unknown>)}</td>)}
+              {keys.map(key => {
+                const record = row as Record<string, unknown>;
+                const formatValue = Object.prototype.hasOwnProperty.call(values, key) ? values[key] : undefined;
+                return <td key={key}>{formatValue?.(record[key]) ?? cellValue(key, record[key], record)}</td>;
+              })}
             </tr>
           ))}
         </tbody>

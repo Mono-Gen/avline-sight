@@ -53,12 +53,12 @@ test('接続機器一覧に未検出・経路上・記録なしを示す', () =>
     { mac: '00:00:00:00:00:01', label: '', ip: '192.0.2.5', ip_stale: true, seen: false, last_seen: '0001-01-01T00:00:00Z' },
     { mac: '00:00:00:00:00:02', label: '卓', seen: true, source: 'lldp', via_uplink: true, poe_w: 0 },
   ] });
-  assert.match(html, /（名前なし）/);
+  assert.doesNotMatch(html, /（名前なし）/);
   assert.match(html, /○ 未検出/);
   assert.match(html, /◷ 過去のIP/);
   assert.match(html, /記録なし/);
   assert.match(html, /スイッチ間リンク.*↪ 経路上/);
-  assert.match(html, />0\.0</);
+  assert.match(html, /0\.0 W/);
 });
 
 test('再生中の接続機器は再生時刻と担当VLAN付きの書出を表示し読込を無効にする', () => {

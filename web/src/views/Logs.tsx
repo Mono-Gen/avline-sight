@@ -12,6 +12,7 @@ import { pcTimestamp } from '../pcTime';
 import type { Event } from '../types';
 import { usePolling } from '../usePolling';
 import type { ViewProps } from './props';
+import { groupSwitches, hasGroupFilter } from './props';
 
 const categories = ['ANOMALY', 'CONNECT', 'TRAP', 'SYSLOG', 'BASELINE', 'MARKER', 'SYSTEM'];
 const severities = { CRITICAL: 'ui.m005', WARNING: 'ui.m006', INFO: 'ui.m007' } as const;
@@ -35,7 +36,7 @@ export function LogEventRow({ event, ackable, disabled, onAcknowledge }: {
 }
 
 export function Logs(props: ViewProps) {
-  const [filter, setFilter] = useState<EventFilters>({
+  const [localFilter, setFilter] = useState<EventFilters>({
     category: '',
     severity: '',
     switch_id: '',
@@ -43,6 +44,10 @@ export function Logs(props: ViewProps) {
     from: '',
     to: ''
   });
+  const groupFiltered = hasGroupFilter(props);
+  const groupMembers = groupSwitches(props);
+  const visibleIds = new Set(groupMembers.map(item => String(item.id)));
+  const filter = groupFiltered && !visibleIds.has(localFilter.switch_id) ? { ...localFilter, switch_id: '' } : localFilter;
   const ackable = acknowledgeableEventIds(asArray(props.operations?.alerts));
   const queryKey = JSON.stringify([filter, filter.unackedOnly ? [...ackable].sort((a, b) => a - b) : []]);
   const result = usePolling(signal => {
@@ -57,11 +62,12 @@ export function Logs(props: ViewProps) {
     if (unackedOnly) params.set('unacked_only', '1');
     return api<Event[]>(`/api/events?${params}`, { signal });
   }, 0, [queryKey], true, 300);
-  const rows = logRows(result.data || [], props.events, filter, ackable);
-  const switches = new Map(asArray(props.overview.switches).map(item => [String(item.id), item.name]));
+  const rows = logRows(result.data || [], props.events, filter, ackable)
+    .filter(event => !groupFiltered || visibleIds.has(String(event.switch_id)));
+  const switches = new Map(groupMembers.map(item => [String(item.id), item.name]));
   for (const event of [...asArray(result.data), ...asArray(props.events)]) {
     const id = String(event.switch_id);
-    if (event.switch_id > 0 && event.switch_name && !switches.has(id)) switches.set(id, event.switch_name);
+    if (!groupFiltered && event.switch_id > 0 && event.switch_name && !switches.has(id)) switches.set(id, event.switch_name);
   }
   const [selectedSwitchName, setSelectedSwitchName] = useState('');
   if (filter.switch_id && !switches.has(filter.switch_id)) switches.set(filter.switch_id, selectedSwitchName);
@@ -104,12 +110,12 @@ export function Logs(props: ViewProps) {
         <button aria-pressed={!!filter.issuesOnly} onClick={() => changeFilter('issuesOnly', !filter.issuesOnly)}>{t('logs.issuesOnly')}</button>
         <button aria-pressed={!!filter.unackedOnly} onClick={() => changeFilter('unackedOnly', !filter.unackedOnly)}>{t('logs.unackedOnly')}</button>
         <button aria-pressed={filter.category === 'MARKER'} onClick={() => changeFilter('category', filter.category === 'MARKER' ? '' : 'MARKER')}>{t('logs.marker')}</button>
-        <button
-          className="button-primary" data-action="ack-all" disabled={disabled || !ackIds.length}
-          onClick={() => confirmAck(undefined, props.run, () => acknowledge(ackIds))}
-        >{t('ui.m267')}</button>
         <a href="/api/export/csv?type=events">CSV</a>
         <a href="/api/export/json?type=events">JSON</a>
+      </div>
+      <div className="operation-area" role="group" aria-label={t('rack.actions')}>
+        <button className="button-primary" data-action="ack-all" disabled={disabled || !ackIds.length}
+          onClick={() => confirmAck(undefined, props.run, () => acknowledge(ackIds))}>{t('ui.m267')}</button>
       </div>
       <div className="overflow-auto">
         <table>

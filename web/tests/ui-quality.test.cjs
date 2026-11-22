@@ -41,10 +41,131 @@ const { summarizeAlerts, groupWallAlerts } = require('../src/wallAlerts.ts');
 const { acknowledgeableEventIds, logRows, syslogMessage } = require('../src/events.ts');
 const { LogEventRow } = require('../src/views/Logs.tsx');
 const { DeviceInventoryTable } = require('../src/views/Devices.tsx');
+const { VlanQuerierTable } = require('../src/views/MulticastView.tsx');
 const { PollingStatus } = require('../src/components/PollingStatus.tsx');
 const render = (component, props) => renderToStaticMarkup(React.createElement(component, props));
 const noop = () => {};
 const fault = (id, extra = {}) => ({ event_id: id, severity: 'WARNING', suppressed: false, acked: false, code: 'CUSTOM', title: 'Fault', ...extra });
+const headers = html => [...html.matchAll(/<th\b[^>]*>([^<]+)<\/th>/g)].map(match => match[1]);
+
+test('ラックの手前に5状態の凡例を置き、2桁ポートと状態記号を別にする', () => {
+  const { OverviewView } = sourceWith('../src/views/Overview.tsx', {
+    '../useRackData': { useRackData: () => ({ data: { ports: [
+      { switch_id: 1, port: { name: '1/0/11', if_index: 11, oper: 'up', type: 'rj45' } },
+    ] }, definitions: {}, refresh: noop }) },
+  });
+  const html = render(OverviewView, {
+    overview: { switches: [{ id: 1, name: 'West', group_tag: '', reachable: true, psu_ok: false, fans_ok: true }] }, replay: null, locked: true,
+    operations: { ready: true, alerts: [fault(1, { switch_id: 1, if_index: 11, active: true, code: 'PHY_ERRORS',
+      device_name: 'Mixer', port: '1/0/11' })] },
+  });
+  const legend = html.match(/<ul class="rack-legend"[^]*?<\/ul>/)[0];
+  for (const [tone, symbol, label] of [
+    ['critical', '!', '異常'], ['warning', '▲', '未確認'], ['healthy', '✓', '正常'],
+    ['unused', '·', '未使用'], ['unknown', '?', '不明'],
+  ]) {
+    assert.ok(legend.includes(`class="lamp-${tone}" aria-hidden="true">${symbol}</span>${label}`));
+  }
+  assert.ok(html.indexOf(legend) < html.indexOf('class="rack-groups"'));
+  assert.match(html, /class="lamp-number">11<\/span><span class="lamp-symbol" aria-hidden="true">!<\/span>/);
+  assert.match(html, /Mixer · 1\/0\/11 物理エラー/);
+  assert.match(html, /title="電源 · 異常"/);
+});
+
+test('接続機器の列順と登録名・LLDP名の表示', () => {
+  const html = render(DeviceInventoryTable, { rows: [
+    { mac: 'AA', label: 'Mixer', lldp_name: 'Registered LLDP', seen: true },
+    { mac: 'BB', lldp_name: 'Console', seen: true },
+    { mac: 'CC', seen: true },
+  ] });
+  assert.deepEqual(headers(html), ['状態', '機器名', 'スイッチ/ポート', 'IP/予定IP', 'Ping', 'メーカー', 'VLAN/PoE', 'MAC']);
+  assert.match(html, /<strong>Mixer<\/strong>/);
+  assert.match(html, /class="device-secondary">Console<\/span>/);
+  assert.doesNotMatch(html, /名前なし/);
+});
+
+test('VLAN表の列順とクエリア状態の翻訳、VLANごとの正常・要確認を検証する', () => {
+  const rows = [
+    { querier_oper: 'non-querier', switch_id: 2, switch_name: 'East', vlan: 10, name: 'Audio', snooping: false, last_querier: '0.0.0.0' },
+    { querier_oper: 'querier', switch_id: 1, switch_name: 'West', vlan: 10, name: 'Audio', snooping: true, querier_addr: '192.0.2.4' },
+    { querier_oper: 'non-querier', switch_id: 2, switch_name: 'East', vlan: 20, name: 'Video', snooping: true, last_querier: '192.0.2.6' },
+  ];
+  const html = render(VlanQuerierTable, { rows });
+  assert.deepEqual(headers(html).slice(0, 6), ['スイッチ', 'VLAN', '名前', 'Snooping', 'クエリア状態', 'クエリアIP']);
+  assert.doesNotMatch(html, /スイッチID|>non-querier<|>querier</);
+  assert.match(html, /<td>非クエリア<\/td>/);
+  assert.match(html, /VLAN 10 クエリア 正常 1 \/ 要確認 1、Snooping 正常 1 \/ 要確認 1[^]*VLAN 20 クエリア 正常 1 \/ 要確認 0/);
+  assert.doesNotMatch(render(VlanQuerierTable, { rows: [] }), /multicast-summary/);
+  setLang('en');
+  try {
+    assert.match(render(VlanQuerierTable, { rows }), /<td>Non-querier<\/td>/);
+  } finally {
+    setLang('ja');
+  }
+});
+
+test('本番の一括Pingとカウンタリセットは負荷を説明し、キャンセルで送信しない', () => {
+  const messages = [];
+  let started = 0;
+  let approved = false;
+  const { GroupActions, confirmBulkPing } = sourceWith('../src/components/GroupActions.tsx', {},
+    { window: { confirm: message => { messages.push(message); return approved; } } });
+  const props = { group: 'Audio', phase: 'show', devices: [{ group_tag: 'Audio', ip: '192.0.2.1' }],
+    run: () => { started++; }, notice: noop };
+  const click = (name, extra = {}) =>
+    elements(GroupActions({ ...props, ...extra }), node => node.props?.['data-action'] === name)[0].props.onClick();
+  click('ping');
+  click('reset');
+  assert.equal(started, 0);
+  assert.match(messages[0], /本番中に1件.*負荷/);
+  assert.match(messages[1], /カウンタをリセット[^]*本番中.*負荷/);
+  click('ping', { phase: 'rehearsal' });
+  assert.equal(messages.length, 2);
+  assert.equal(started, 1);
+  approved = true;
+  click('ping');
+  click('reset');
+  assert.equal(started, 3);
+
+  const { Devices } = sourceWith('../src/views/Devices.tsx', {
+    '../components/GroupActions': { confirmBulkPing },
+    '../usePolling': { usePolling: (_load, _interval, [key]) => ({ data: { key, rows: [{ ip: '192.0.2.1' }] } }) },
+    react: { useState: value => [value, noop] },
+  });
+  approved = false;
+  const tree = Devices({ ...props, replay: null, status: { phase: 'show', profile: { id: 1 } } });
+  elements(tree, node => node.props?.['data-action'] === 'ping-visible')[0].props.onClick();
+  assert.equal(started, 3);
+  assert.match(messages.at(-1), /本番中に1件.*負荷/);
+});
+
+test('グループ選択はヘッダーの1か所に置き、機器一覧と書出に同じ選択を渡す', () => {
+  const { Devices } = require('../src/views/Devices.tsx');
+  const header = render(AppHeader, { profiles: [], groupSelection: 'group:Audio', groupNames: ['Audio', 'Video', ''], locked: false,
+    status: { profile: { id: 1 } } });
+  const devices = render(Devices, { group: 'Audio', replay: null });
+  assert.equal(((header + devices).match(/<select aria-label="グループ"/g) || []).length, 1);
+  assert.match(header, /グループ: <select[^]*<option value="group:Audio" selected="">Audio/);
+  assert.match(header, /<option value="group:">未所属/);
+  assert.doesNotMatch(devices, /<select/);
+  assert.equal((devices.match(/group=Audio/g) || []).length, 2);
+  assert.match(render(Devices, { group: '', replay: null }), /group=&amp;lang=ja/);
+  assert.match(header, /編集可（ロックする）/);
+  assert.match(render(AppHeader, { locked: true, profiles: [] }), /🔒 ロック中/);
+  assert.match(header, /<form class="header-marker"><input[^]*aria-label="マーカー"[^]*<button type="submit">記録<\/button>/);
+  const { OverviewView } = sourceWith('../src/views/Overview.tsx', {
+    '../useRackData': { useRackData: () => ({ data: {}, definitions: {}, refresh: noop }) },
+  });
+  const alerts = [fault(1, { switch_id: 1, active: true, title: 'Audio fault' }),
+    fault(2, { switch_id: 2, active: true, title: 'Video fault' })];
+  const monitor = render(OverviewView, { group: 'Audio', replay: null, locked: false, operations: { alerts, ready: true, ack: noop, ackMany: noop }, overview: { switches: [
+    { id: 1, name: 'Audio SW', group_tag: 'Audio' }, { id: 2, name: 'Video SW', group_tag: 'Video' },
+  ] } });
+  assert.match(monitor, /Audio SW/);
+  assert.match(monitor, /Audio fault/);
+  assert.doesNotMatch(monitor, /Video SW|Video fault|<select/);
+  assert.match(monitor, /operation-area[^]*?data-action="ack-all"/);
+});
 
 test('壁の上部・未確認キュー・全タイルは発生中と未確認の同じ集合を集計する', () => {
   const alerts = [

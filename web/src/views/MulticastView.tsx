@@ -7,6 +7,28 @@ import { asArray } from '../format';
 import type { Multicast, SwitchState } from '../types';
 import { STATE_REFRESH_MS, usePolling } from '../usePolling';
 import type { ViewProps } from './props';
+import { hasGroupFilter } from './props';
+import { enabledStatus, findingColumns, localizedStatus, switchColumn } from './detailTables';
+
+export function VlanQuerierTable({ rows }: { rows: Multicast['vlans'] }) {
+  const byVlan = new Map<number, (typeof rows)[number][]>();
+  for (const row of rows) {
+    const items = byVlan.get(row.vlan);
+    if (items) items.push(row); else byVlan.set(row.vlan, [row]);
+  }
+  const summary = [...byVlan].sort(([a], [b]) => a - b).map(([vlan, members]) => {
+    const querierOK = members.filter(row => row.querier_oper === 'querier' ||
+      (row.last_querier && row.last_querier !== '0.0.0.0' && row.last_querier !== '::')).length;
+    const snoopingOK = members.filter(row => row.snooping).length;
+    return t('pages.vlanSummary', { vlan, querierOK, querierReview: members.length - querierOK,
+      snoopingOK, snoopingReview: members.length - snoopingOK });
+  });
+  return <>
+    {summary.length > 0 && <p className="multicast-summary">{summary.join(' · ')}</p>}
+    <Table rows={rows} first={['switch_name', 'vlan', 'name', 'snooping', 'querier_oper', 'querier_addr']}
+      hide={switchColumn.hide} values={{ snooping: enabledStatus, querier_admin: enabledStatus, querier_oper: localizedStatus }} />
+  </>;
+}
 
 function replayMulticast(states: SwitchState[]): Multicast {
   return {
@@ -34,28 +56,31 @@ export function MulticastView(props: ViewProps) {
   const preset = asArray(props.settings?.views).find(view => view.id === props.part);
   const vlans = asArray(preset?.vlans);
   const tags = asArray(preset?.tags);
-  const visibleStates = states.filter(state => !tags.length || tags.includes(state.group_tag));
+  const visibleStates = states.filter(state => (props.group === undefined || state.group_tag === props.group) &&
+    (!tags.length || tags.includes(state.group_tag)));
+  const filtered = hasGroupFilter(props);
   const visibleIds = new Set(visibleStates.map(state => state.id));
+  const visible = (row: { switch_id: number }) => !filtered || visibleIds.has(row.switch_id);
   const filter = <T extends {
     vlan: number;
     switch_id: number
   }>(rows: T[] | undefined) => asArray(rows).filter(row =>
-    (!vlans.length || vlans.includes(row.vlan)) && (!tags.length || visibleIds.has(row.switch_id)));
+    (!vlans.length || vlans.includes(row.vlan)) && visible(row));
   return (
     <div className="panel space-y-4">
       {!props.replay && <PollingStatus {...result} />}
       <h2>{t('ui.m270')}</h2>
-      <Table rows={filter(data?.vlans)} />
+      <VlanQuerierTable rows={filter(data?.vlans)} />
       <h2>{t('ui.m271')}</h2>
-      <Table rows={filter(data?.groups)} />
+      <Table {...switchColumn} rows={filter(data?.groups)} first={['switch_name', 'vlan', 'group']} />
       <h2>{t('ui.m272')}</h2>
-      <Table rows={filter(data?.mrouters)} />
+      <Table {...switchColumn} rows={filter(data?.mrouters)} first={['switch_name', 'vlan', 'port']} />
       <h2>gPTP</h2>
-      <Table rows={asArray(data?.gptp).filter(row => !tags.length || visibleIds.has(row.switch_id))} />
+      <Table {...switchColumn} rows={asArray(data?.gptp).filter(visible)} />
       <h2>{t('ui.m273')}</h2>
       {visibleStates.map(state => <AvStatus key={state.id} state={state} />)}
       <h2>{t('ui.m253')}</h2>
-      <Table rows={asArray(data?.findings).filter(row => !tags.length || visibleIds.has(row.switch_id))} />
+      <Table {...findingColumns} rows={asArray(data?.findings).filter(visible)} />
     </div>
   );
 }

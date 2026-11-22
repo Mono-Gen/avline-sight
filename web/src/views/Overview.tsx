@@ -5,7 +5,7 @@ import { GroupActions } from '../components/GroupActions';
 import { GroupEditDialog } from '../components/GroupEditDialog';
 import type { GroupEdit } from '../components/GroupEditDialog';
 import { PortDetail } from '../components/PortDetail';
-import { RackRow } from '../components/RackRow';
+import { PortLegend, RackRow } from '../components/RackRow';
 import { asArray } from '../format';
 import { t } from '../i18n';
 import { sortedAlerts, uplinkPorts } from '../rackModel';
@@ -13,6 +13,7 @@ import type { Alert, InventoryRow, Port, SwitchConfig, SwitchSummary } from '../
 import { useRackData } from '../useRackData';
 import { registeredSummary, replaySummary } from './rackSummaries';
 import type { PortMonitorTarget, ViewProps } from './props';
+import { hasGroupFilter } from './props';
 import type { Operations } from '../useOperations';
 import { PortMatrix } from './PortMatrix';
 import { WallSwitchTile } from '../components/WallSwitchTile';
@@ -90,7 +91,10 @@ export function OverviewView(props: OverviewProps) {
   const bySwitch = indexBySwitch(devices);
   const knownGroups = new Map(asArray(operations?.groups).map(group => [group.name, group]));
   const preset = asArray(props.settings?.views).find(view => view.id === props.part);
-  const visible = summary.filter(item => wall || item.id === target?.switchId || !preset?.tags?.length || preset.tags.includes(item.group_tag));
+  const groupFiltered = hasGroupFilter(props);
+  const visible = summary.filter(item => (props.group === undefined || item.group_tag === props.group) &&
+    (!preset?.tags?.length || preset.tags.includes(item.group_tag)));
+  const visibleIds = new Set(visible.map(item => item.id));
   const targetSwitch = visible.find(item => item.id === target?.switchId);
   const focusedTarget = useRef<PortMonitorTarget>();
   useEffect(() => {
@@ -111,7 +115,8 @@ export function OverviewView(props: OverviewProps) {
     });
   }, [targetSwitch?.id, targetSwitch?.group_tag]);
   const byId = new Map(summary.map(item => [item.id, item]));
-  const alerts = sortedAlerts((replay !== null ? noAlerts : asArray(operations?.alerts)).map(alert => {
+  const alerts = sortedAlerts((replay !== null ? noAlerts : asArray(operations?.alerts))
+    .filter(alert => !groupFiltered || visibleIds.has(alert.switch_id)).map(alert => {
       const portAlert = isPortAlert(alert);
       const port = portAlert ? ports.get(alert.switch_id)?.find(row => row.port.if_index === alert.if_index)?.port : undefined;
       const devices = bySwitch.get(alert.switch_id);
@@ -146,7 +151,8 @@ export function OverviewView(props: OverviewProps) {
   const selectedPort = selected && ports.get(selected.switchId)?.find(row =>
     selected.ifIndex ? row.port.if_index === selected.ifIndex : row.port.name === selected.portName)?.port;
   const profileId = props.status?.profile.id;
-  const actionProps = { locked, wall, busy, devices, run: props.run, refresh, notice: setNotice, replay: replay !== null, profileId };
+  const actionProps = { locked, wall, busy, devices, run: props.run, refresh, notice: setNotice, replay: replay !== null, profileId,
+    phase: operations?.phase || props.status?.phase };
   const wallSummary = summarizeAlerts(alerts);
   const wallTiles = [...visible];
   for (const alert of wallSummary.items) {
@@ -176,23 +182,27 @@ export function OverviewView(props: OverviewProps) {
     </div>
   </div>;
   return <div className="rack-overview">
-    {replay === null && <AlertBand alerts={alerts} wall={wall} busy={busy} locked={locked} ack={operations?.ack} pending={!operations?.ready && !operations?.alerts.length} />}
+    {replay === null && <AlertBand alerts={alerts} wall={wall} busy={busy} locked={locked} ack={operations?.ack}
+      ackMany={groupFiltered ? operations?.ackMany : undefined} undoCount={operations?.undoCount} undo={operations?.undoAck}
+      pending={!operations?.ready && !operations?.alerts.length} />}
     {!wall && operations?.toast && <div className="rack-toast" role="status">✓ {operations.toast}</div>}
     {!wall && <div className="rack-toolbar">
-      <strong>{t('rack.all')}</strong>
-      <GroupActions {...actionProps} group="*" all />
       <div role="group" aria-label={t('cleanup.layout')}>
         <button aria-pressed={layout === 'diagram'} onClick={() => setLayout('diagram')}>{t('cleanup.diagram')}</button>
         <button aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>{t('cleanup.list')}</button>
       </div>
-      {!locked && <>
-        <button disabled={busy} onClick={() => setEdit(null)}>{t('rack.add')}</button>
-        <button disabled={busy} onClick={() => setDiscover(true)}>{t('rack.discover')}</button>
+    </div>}
+    {!locked && <div className="operation-area" role="group" aria-label={t('rack.actions')}>
+      {props.group === undefined && !preset?.tags?.length && <>
+        <strong>{t('rack.all')}</strong><GroupActions {...actionProps} group="*" all />
       </>}
+      {props.group !== undefined && layout === 'list' && <GroupActions {...actionProps} group={props.group} />}
+      <button disabled={busy} onClick={() => setEdit(null)}>{t('rack.add')}</button>
+      <button disabled={busy} onClick={() => setDiscover(true)}>{t('rack.discover')}</button>
     </div>}
     {!wall && notice && <div role="status" className="panel flex items-center justify-between gap-2">{notice}<button onClick={() => setNotice('')}>{t('rack.close')}</button></div>}
     {rack.error && <p role="alert" className="rack-data-error">⚠ {rack.error}</p>}
-    {layout === 'list' ? <PortMatrix {...props} /> : <div className="rack-groups">
+    {layout === 'list' ? <PortMatrix {...props} /> : <><PortLegend /><div className="rack-groups">
       {!visible.length && <p>{rack.data ? t('rack.empty') : t('rack.loading')}</p>}
       {groups.map(name => {
         const rows = groupRows.get(name) || [];
@@ -211,9 +221,11 @@ export function OverviewView(props: OverviewProps) {
               <span className="rack-warning-count">! {counts.unacked}</span>
             </span>
             <button className="group-collapse" aria-label={t(isClosed ? 'rack.expand' : 'rack.collapse')} aria-expanded={!isClosed} onClick={collapse}>{isClosed ? '+' : '−'}</button>
-            <GroupActions {...actionProps} group={name} />
-            {!locked && <button disabled={busy} aria-label={t('operations.rename')} onClick={() => setGroupEdit({ name })}>✎</button> }
           </div>
+          {!locked && !isClosed && <div className="operation-area" role="group" aria-label={t('rack.actions')}>
+            <GroupActions {...actionProps} group={name} />
+            <button disabled={busy} aria-label={t('operations.rename')} onClick={() => setGroupEdit({ name })}>✎</button>
+          </div>}
           {!isClosed && rows.map(sw => <RackRow key={sw.id} summary={sw}
             ports={(ports.get(sw.id) || []).map(row => row.port)} devices={bySwitch.get(sw.id) || []} alerts={byAlert.get(sw.id) || []}
             definitions={rack.definitions}
@@ -221,7 +233,7 @@ export function OverviewView(props: OverviewProps) {
             onPort={port => setSelected({ switchId: sw.id, ifIndex: port.if_index })} onEdit={setEdit} onHelp={onTrapHelp} refresh={refresh} />)}
         </section>;
       })}
-    </div>}
+    </div></>}
     {!wall && selected && selectedSwitch && selectedPort && <PortDetail key={`${selected.switchId}/${selectedPort.if_index}`}
       switchId={selected.switchId} switchName={selectedSwitch.name} port={selectedPort}
       devices={(bySwitch.get(selected.switchId) || []).filter(device => device.if_index === selectedPort.if_index)}

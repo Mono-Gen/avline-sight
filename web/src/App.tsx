@@ -22,6 +22,7 @@ import { t, useLang } from './i18n';
 import { useOperations } from './useOperations';
 import { summarizeAlerts } from './wallAlerts';
 import type { PortMonitorTarget } from './views/props';
+import { groupSwitches, hasGroupFilter } from './views/props';
 const pages = ['monitor', 'topology', 'devices', 'details', 'logs'] as const;
 type Page = typeof pages[number] | 'switch';
 const replayPages: readonly string[] = ['monitor', 'switch', 'devices', 'details'];
@@ -61,7 +62,10 @@ export default function App() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [settings, setSettings] = useState<Settings>();
   const [settingsVersion, setSettingsVersion] = useState(0);
-  const [part, setPart] = useState('');
+  const [groupSelection, setGroupSelection] = useState('');
+  const part = groupSelection.startsWith('view:') ? groupSelection.slice(5) : '';
+  const group = groupSelection.startsWith('group:') ? groupSelection.slice(6) : undefined;
+  const markerInput = useRef<HTMLInputElement>(null);
   const [online, setOnline] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
   const [selected, setSelected] = useState(0);
@@ -163,22 +167,19 @@ export default function App() {
     const timer = setInterval(load, 5000);
     return () => clearInterval(timer);
   }, [online, replay]);
-  const marker = useCallback(() => {
-    const note = prompt(t('rack.marker'));
-    if (note !== null) run(async () => {
-      await api('/api/markers', json('POST', { note }));
-    });
-  }, [run]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setWall(false); return; }
-      if (wall || locked || dialog) return;
+      if (wall || locked || busy || dialog) return;
       const el = e.target as HTMLElement;
-      if (e.key.toLowerCase() === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey && !asArray(['INPUT', 'TEXTAREA', 'SELECT']).includes(el.tagName) && !el.isContentEditable && !terminal) marker();
+      if (e.key.toLowerCase() === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey && !asArray(['INPUT', 'TEXTAREA', 'SELECT']).includes(el.tagName) && !el.isContentEditable && !terminal) {
+        e.preventDefault();
+        markerInput.current?.focus();
+      }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [marker, terminal, wall, locked, dialog]);
+  }, [busy, terminal, wall, locked, dialog]);
   useEffect(() => {
     if (!replayId || !replayStart) return;
     const controller = new AbortController();
@@ -203,6 +204,12 @@ export default function App() {
     setPage('switch');
   };
   const operations = useOperations({ online, replay: !!replay, profileId, setStatus, run });
+  const groupNames = [...new Set(replay ? asArray(replay.states).map(sw => sw.group_tag) :
+    [...asArray(operations.groups).map(item => item.name), ...asArray(overview.switches).map(sw => sw.group_tag)])];
+  const hasGroup = group !== undefined && groupNames.includes(group);
+  useEffect(() => {
+    if (groupSelection && !hasGroup && !part && (replay ? replay.ts : operations.ready)) setGroupSelection('');
+  }, [groupSelection, hasGroup, part, replay, operations.ready]);
   const now = usePcTime();
   const stopped = !replay && monitoringStopped(online && live.fresh, live.updatedAt, now);
   const alertSummary = summarizeAlerts(operations.alerts);
@@ -215,22 +222,21 @@ export default function App() {
   const summary = <OverallStatus count={issueCount} critical={critical} ready={ready} stopped={stopped} replay={!!replay}
     active={!replay ? alertSummary.active : undefined} unacked={!replay ? alertSummary.unacked : undefined} />;
   const pageTitle = page === 'details' ? t('cleanup.details') : page === 'switch' ? t('cleanup.switchPorts') : t(`rack.nav.${page}`);
+  const viewScope = { overview, settings, part, group, replay: replay?.states || null };
   const props = {
-    overview,
+    ...viewScope,
     operations,
     wall,
     onTrapHelp: () => setDialog('trap'),
     status,
-    settings,
-    part,
     selected,
     select,
     openPortMonitor: (target: PortMonitorTarget) => {
+      if (hasGroupFilter(viewScope) && !groupSwitches(viewScope).some(sw => sw.id === target.switchId)) setGroupSelection('');
       setMonitorTarget(target);
       setPage('monitor');
     },
     state,
-    replay: replay?.states || null,
     replayRef: replay?.ts ? { id: replay.id, ts: replay.ts } : undefined,
     events,
     setEvents,
@@ -243,7 +249,7 @@ export default function App() {
   };
   return <div className={wall ? 'wall-shell' : 'min-h-screen'}>
     <AppHeader {...{ online, phase: operations.phase || status?.phase, onPhase: operations.setPhase, onTrapHelp: props.onTrapHelp,
-      wall, setWall, status, busy, locked, profiles, settings, part, setPart, replay, marker, run, refresh, setDialog, summary,
+      wall, setWall, status, busy, locked, profiles, settings, groupSelection, setGroupSelection, groupNames, replay, markerInput, run, refresh, setDialog, summary,
       updatedAt: replay ? replay.ts : live.updatedAt }} />
     {stopped && <MonitorStopped updatedAt={live.updatedAt} />}
     {replay && !wall && <ScrubBar
@@ -296,7 +302,7 @@ export default function App() {
             </div>
             <div role="tabpanel" id="detail-panel" aria-labelledby={`tab-${activeDetailTab}`}>
               {activeDetailTab === 'multicast' && <MulticastView {...props} />}
-              {activeDetailTab === 'dhcp' && <DhcpView />}
+              {activeDetailTab === 'dhcp' && <DhcpView {...props} />}
               {activeDetailTab === 'health' && <HealthAudit {...props} select={setSelected} />}
             </div>
           </>}
