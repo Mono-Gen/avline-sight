@@ -35,6 +35,31 @@ UDP 162 で待ち受けできない場合も、アプリは止まらず画面に
 | `--lab N` | `0` | 仮想スイッチをN台（1〜20）起動して監視します。ラボは本番とは別のDBを使います |
 | `--fast/--medium/--slow` | `3s/12s/45s` | ポーリング周期 |
 
+## SNMP Trap の受信を確認する
+
+Trapを受けると、障害にすぐ気づけて、スイッチへの問い合わせも減らせます。受信できていなくても監視は続きますが、一瞬のリンク断などは見逃しやすくなります。
+
+**1. アプリの表示を見る**: 画面上部のTrap受信の状態が「待受中」なら受信できる状態です。「待受できません」なら下の2へ進みます。スイッチごとの「最終Trap受信」が空のままなら、スイッチ側の送信設定を確認してください。
+
+**2. 162番を使っているものを調べる**（PowerShell）
+```powershell
+Get-NetUDPEndpoint -LocalPort 162 -ErrorAction SilentlyContinue | Select-Object LocalAddress, OwningProcess
+Get-Service SNMPTRAP -ErrorAction SilentlyContinue
+```
+- 何も表示されなければ、162番は空いています。管理者権限が必要な環境では、アプリを「管理者として実行」してください。
+- `SNMPTRAP`（Windows標準の「SNMP Trap」サービス）が Running なら、それが162番を使っています。
+
+**3. 使えないときの対処**（どれか1つ）
+- Windowsの「SNMP Trap」サービスを止める（管理者のPowerShell）: `Stop-Service SNMPTRAP; Set-Service SNMPTRAP -StartupType Disabled`
+- 別のポートで待ち受ける: `--trap 0.0.0.0:1162` で起動し、スイッチ側の送信先ポートも 1162 にする。
+- Windowsファイアウォールで受信を許可する（管理者）: `New-NetFirewallRule -DisplayName "AVLine-Sight Trap" -Direction Inbound -Protocol UDP -LocalPort 162 -Action Allow`（ポートを変えた場合はその番号）
+
+**4. スイッチ側の送信設定**: 例は `docs/api.md` を参照してください（実機での確認はまだです）。
+
+## 複数のPCで見る
+
+監視するアプリ（exe）は1台だけで動かし、ほかのPCはブラウザで `http://<そのPCのIP>:8080` を開いてください（`--listen 0.0.0.0:8080` で起動し、閲覧専用ロックを併用）。確認・運用フェーズ・作業中・ロックはすべてのPCにすぐ反映されます。アプリを複数台で動かすと、スイッチへの問い合わせが倍になり、確認状態も共有されないためおすすめしません。
+
 ## ビルド
 必要なもの: Go 1.26以上、Node.js 20以上。
 ```powershell
