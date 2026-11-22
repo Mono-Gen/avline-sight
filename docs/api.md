@@ -107,6 +107,11 @@ M4250でSNMPv2c Trapの送信先を設定するCLI例（要実機確認。リポ
 snmp-server host <PC IP> traps version snmpv2 <community>
 ```
 
+M4250（FW 13.0.4.7）の工場出荷時・各AVプロファイル適用後の設定（`show running-config` の全表示）で確認できた事実:
+- `snmp-server enable traps` と `linkmode`・`stpmode`・`multiusers` のTrapは既定で有効。各ポートも `snmp trap link-status` が既定で有効。
+- Trapの送信先は既定で未設定。必要なのは送信先（このPCのIPとコミュニティ）の追加だけ。送信先を設定する行の書式は、設定済みの例が無いため未確認。
+- 既定の設定にはSNMPv2cのコミュニティの行が無く、SNMPv3ユーザー `admin` のみが表示される。v2cで監視する場合は、コミュニティの設定が要るかを実機で確認する。
+
 待受・ファイアウォールでTrap用UDPポート（既定162）を確認し、設定後は `last_trap_ts` の更新で受信を確認する。
 
 ## ベースライン
