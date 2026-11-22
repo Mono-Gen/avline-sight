@@ -21,13 +21,14 @@ type Resolver func(ip string, labPort int) (id int64, name string, ok bool)
 
 // Receiver はTrap待受。
 type Receiver struct {
-	mu      sync.Mutex
-	tl      *gosnmp.TrapListener
-	addr    string
-	err     string
-	ok      bool
-	onEvent func(model.Event)
-	resolve Resolver
+	mu           sync.Mutex
+	tl           *gosnmp.TrapListener
+	addr         string
+	err          string
+	ok           bool
+	onEvent      func(model.Event)
+	onRegistered func(model.Event)
+	resolve      Resolver
 }
 
 // Status は待受状態（UI警告表示用）。
@@ -40,6 +41,9 @@ type Status struct {
 func New(onEvent func(model.Event), resolve Resolver) *Receiver {
 	return &Receiver{onEvent: onEvent, resolve: resolve}
 }
+
+// OnRegistered は待受開始前に、受信を状態収集につなぐコールバックを設定する。
+func (r *Receiver) OnRegistered(fn func(model.Event)) { r.onRegistered = fn }
 
 // Start は addr（例 "0.0.0.0:162"）で待受を開始する。失敗してもアプリは落とさず状態に記録する（仕様8.1）。
 func (r *Receiver) Start(addr string) Status {
@@ -98,6 +102,9 @@ func (r *Receiver) handle(p *gosnmp.SnmpPacket, addr *net.UDPAddr) {
 	}
 	if id, name, ok := r.resolve(ip, labPort); ok {
 		ev.SwitchID, ev.SwitchName = id, name
+		if r.onRegistered != nil {
+			r.onRegistered(ev)
+		}
 	} else {
 		ev.SwitchName = ip
 		ev.Detail["unregistered_source"] = ip
@@ -118,7 +125,13 @@ func Decode(p *gosnmp.SnmpPacket) model.Event {
 				trapOID = strings.TrimPrefix(s, ".")
 			}
 			continue
-		case "1.3.6.1.2.1.1.3.0", "1.3.6.1.4.1.99999.1.0":
+		case mib.SysUpTime:
+			if v.Type == gosnmp.TimeTicks {
+				uptime := sx.U64(v)
+				ev.TrapUptime = &uptime
+			}
+			continue
+		case "1.3.6.1.4.1.99999.1.0":
 			continue
 		}
 		var val any

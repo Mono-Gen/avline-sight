@@ -85,6 +85,8 @@ type Engine struct {
 	pingFails    map[string]int
 	missing      map[string]int
 	switchGroups map[int64]string
+	lastTraps    map[int64]time.Time
+	requestFDB   func(int64, time.Time)
 	baseline     map[string]float64 // SFP Rx 基準（ベースライン比較用）
 	hub          Broadcaster
 	lastSnap     time.Time
@@ -99,8 +101,8 @@ func New(st *store.Store, profileID int64, hub Broadcaster) *Engine {
 		portCfg: map[int64]map[int]store.PortSetting{}, aliases: map[string]string{}, active: map[string]*Alert{},
 		phase: "show", work: map[string]time.Time{}, phaseWake: make(chan struct{}, 1), pinger: systemPinger{},
 		pingResults: map[string]DevicePing{}, pingFails: map[string]int{}, missing: map[string]int{},
-		switchGroups: map[int64]string{},
-		baseline:     map[string]float64{}, prevQuerier: map[string]string{}, mediumFresh: map[int64]bool{}}
+		switchGroups: map[int64]string{}, lastTraps: map[int64]time.Time{},
+		baseline: map[string]float64{}, prevQuerier: map[string]string{}, mediumFresh: map[int64]bool{}}
 	e.Reload()
 	e.loadOperations()
 	e.restoreAlerts()
@@ -133,8 +135,16 @@ func (e *Engine) Reload() {
 	keep := map[int64]bool{}
 	e.order = e.order[:0]
 	e.switchGroups = map[int64]string{}
+	lastTraps := make(map[int64]time.Time, len(sws))
 	for _, s := range sws {
 		e.switchGroups[s.ID] = s.GroupTag
+		last := e.lastTraps[s.ID]
+		if s.LastTrapTS != nil && s.LastTrapTS.After(last) {
+			last = *s.LastTrapTS
+		}
+		if !last.IsZero() {
+			lastTraps[s.ID] = last
+		}
 		if !s.Enabled {
 			continue // 無効化スイッチはポーリングされないため状態集合に含めない
 		}
@@ -148,6 +158,7 @@ func (e *Engine) Reload() {
 			e.states[s.ID] = &copyState
 		}
 	}
+	e.lastTraps = lastTraps
 	for id := range e.states {
 		if !keep[id] {
 			delete(e.states, id)
@@ -290,11 +301,13 @@ func (e *Engine) OnState(st *model.SwitchState, tier string) {
 			}
 		}
 	}
-	if st.Reachable && tier != "error" {
+	if st.Reachable && tier != "error" && tier != "fdb" {
 		e.evaluate(st, tier, set)
 	}
 	e.evaluateDevices(st, tier)
-	e.reconcileStateAlerts(st)
+	if tier != "fdb" {
+		e.reconcileStateAlerts(st)
+	}
 	if tier == "slow" || tier == "medium" {
 		e.evaluateCross(set)
 	}
@@ -315,8 +328,22 @@ func (e *Engine) OnEvent(ev model.Event) {
 			return
 		}
 	}
+	if ev.Category == "TRAP" {
+		if ev.SwitchID != 0 {
+			e.recordTrap(ev)
+		}
+		e.persistEvent(&ev)
+		return
+	}
+	if ev.Code == "LINK_FLAP" {
+		e.recordLinkFlap(ev)
+		return
+	}
 	if ev.Code == "LINK_DOWN" || ev.Code == "SWITCH_UNREACHABLE" {
 		e.raise(map[string]bool{}, eventKey(ev)+"|edge", ev)
+		if ev.Code == "LINK_DOWN" {
+			e.requestFDBForLinkDown(ev.SwitchID, ev.IfIndex)
+		}
 		return
 	}
 	if ev.Code == "LINK_UP" {
@@ -498,6 +525,7 @@ type Summary struct {
 	GroupTag    string         `json:"group_tag"`
 	Reachable   bool           `json:"reachable"`
 	LastError   string         `json:"last_error"`
+	LastTrapTS  *time.Time     `json:"last_trap_ts"`
 	Model       string         `json:"model"`
 	FW          string         `json:"fw"`
 	UptimeSec   int64          `json:"uptime_sec"`
@@ -556,6 +584,11 @@ func (e *Engine) Overview(withEvents bool) Overview {
 			UptimeSec: s.UptimeSec, CPU5s: s.Health.CPU5s, MemFreePct: s.Health.MemFreePct, MbufUsedPct: s.Health.MbufUsedPct,
 			TempMaxC: s.Health.TempMaxC, TempState: s.Health.TempState, FansOK: true, PSUOK: true,
 			PoEBudgetW: s.Health.PoEBudgetW, PoEUsedW: s.Health.PoEUsedW, Alerts: map[string]int{model.SevCritical: 0, model.SevWarning: 0}}
+		e.mu.RLock()
+		if ts := e.lastTraps[s.ID]; !ts.IsZero() {
+			sm.LastTrapTS = &ts
+		}
+		e.mu.RUnlock()
 		for _, f := range s.Health.Fans {
 			if f.State != "operational" && f.State != "notpresent" {
 				sm.FansOK = false

@@ -85,7 +85,8 @@ func (e *Engine) evaluateDevices(st *model.SwitchState, tier string) {
 	for _, r := range rows {
 		byMAC[r.MAC] = r
 	}
-	if tier == "slow" || !st.Reachable {
+	if tier == "slow" || tier == "fdb" || !st.Reachable {
+		confirm := false
 		valid := st.FDBValid == nil || *st.FDBValid
 		present := map[string]bool{}
 		for _, p := range st.Ports {
@@ -120,7 +121,16 @@ func (e *Engine) evaluateDevices(st *model.SwitchState, tier string) {
 				e.raise(map[string]bool{}, key, e.deviceEvent("DEVICE_MISSING", byMAC[mac]))
 			} else if present[mac] {
 				e.clearPrefix(key, map[string]bool{})
+			} else if n == 1 {
+				confirm = true
 			}
+		}
+		if confirm {
+			at := st.LastPoll
+			if at.IsZero() {
+				at = time.Now()
+			}
+			e.scheduleFDB(st.ID, at.Add(missingFDBDelay))
 		}
 	}
 	phase := e.Phase()

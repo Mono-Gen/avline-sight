@@ -99,6 +99,11 @@ func (e *Engine) restoreAlerts() {
 		if deviceAlertCode(a.Code) && a.MAC != "" {
 			identity = deviceKey(a.Code, a.MAC)
 		}
+		key := eventKey(ev) + "|" + a.MAC + "|restored"
+		if a.Code == "LINK_FLAP" {
+			key = linkFlapKey(ev)
+			identity = key
+		}
 		if seen[identity] {
 			continue
 		}
@@ -108,7 +113,7 @@ func (e *Engine) restoreAlerts() {
 		}
 		cleared := ev.TS
 		a.ClearedAt = &cleared
-		e.active[eventKey(ev)+"|"+a.MAC+"|restored"] = a
+		e.active[key] = a
 	}
 }
 

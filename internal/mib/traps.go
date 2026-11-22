@@ -16,6 +16,7 @@ var Traps = map[string]TrapDef{
 	"1.3.6.1.6.3.1.1.5.2": {"warmStart", "WARNING", "スイッチ再起動（ウォームスタート）"},
 	"1.3.6.1.6.3.1.1.5.3": {"linkDown", "WARNING", "ポート リンクダウン"},
 	"1.3.6.1.6.3.1.1.5.4": {"linkUp", "INFO", "ポート リンクアップ"},
+	"1.3.6.1.6.3.1.1.5.5": {"authenticationFailure", "INFO", "SNMP認証失敗"}, // SNMPv2-MIB
 
 	"1.0.8802.1.1.2.0.0.1": {"lldpRemTablesChange", "INFO", "LLDP隣接機器の変化"},
 
@@ -33,8 +34,11 @@ var Traps = map[string]TrapDef{
 	"1.3.6.1.4.1.4526.10.1.0.2":  {"broadcastStormStartTrap", "CRITICAL", "ブロードキャストストーム開始"},
 	"1.3.6.1.4.1.4526.10.1.0.3":  {"broadcastStormEndTrap", "INFO", "ブロードキャストストーム終了"},
 	"1.3.6.1.4.1.4526.10.1.0.4":  {"linkFailureTrap", "WARNING", "リンク障害"},
+	"1.3.6.1.4.1.4526.10.1.0.9":  {"fanFailureTrap", "CRITICAL", "ファン障害"}, // FASTPATH-SWITCHING-MIB の旧通知
 	"1.3.6.1.4.1.4526.10.1.0.10": {"stpInstanceNewRootTrap", "WARNING", "STPルートブリッジ変更"},
 	"1.3.6.1.4.1.4526.10.1.0.11": {"stpInstanceTopologyChangeTrap", "WARNING", "STPトポロジー変更"},
+	"1.3.6.1.4.1.4526.10.1.0.12": {"powerSupplyStatusChangeTrap", "CRITICAL", "電源ユニット状態の変化"}, // FASTPATH-SWITCHING-MIB の旧通知
+	"1.3.6.1.4.1.4526.10.1.0.13": {"failedUserLoginTrap", "INFO", "スイッチへのログイン認証失敗"},
 	"1.3.6.1.4.1.4526.10.1.0.15": {"daiIntfErrorDisabledTrap", "CRITICAL", "DAIによるポートErrDisable"},
 	"1.3.6.1.4.1.4526.10.1.0.16": {"stpInstanceLoopInconsistentStartTrap", "CRITICAL", "STPループ不整合検知"},
 	"1.3.6.1.4.1.4526.10.1.0.17": {"stpInstanceLoopInconsistentEndTrap", "INFO", "STPループ不整合解消"},
@@ -45,6 +49,18 @@ var Traps = map[string]TrapDef{
 	"1.3.6.1.4.1.4526.10.1.0.23": {"agentSwitchCpuFreeMemBelowThresholdTrap", "WARNING", "空きメモリ低下"},
 	"1.3.6.1.4.1.4526.10.1.0.27": {"agentSwitchMbufRisingThresholdTrap", "WARNING", "Mbuf使用率上昇"},
 	"1.3.6.1.4.1.4526.10.1.0.28": {"agentSwitchMbufFallingThresholdTrap", "INFO", "Mbuf使用率回復"},
+}
+
+// TrapNeedsSlow はポートやトポロジーの変化を判定するためFDB・LLDPも再取得すべき通知を選ぶ。
+func TrapNeedsSlow(code string) bool {
+	switch code {
+	case "coldStart", "warmStart", "linkDown", "linkUp", "linkFailureTrap", "lldpRemTablesChange",
+		"pethPsePortOnOffNotification", "pethMainPowerUsageOnNotification", "pethMainPowerUsageOffNotification",
+		"broadcastStormStartTrap", "broadcastStormEndTrap", "stpInstanceNewRootTrap", "stpInstanceTopologyChangeTrap",
+		"stpInstanceLoopInconsistentStartTrap", "stpInstanceLoopInconsistentEndTrap", "daiIntfErrorDisabledTrap", "dhcpSnoopingIntfErrorDisabledTrap":
+		return true
+	}
+	return false
 }
 
 // 名前→OIDの逆引き（シミュレータのTrap送信で使用）

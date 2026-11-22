@@ -29,6 +29,7 @@ const (
 	IfPhysAddress = "1.3.6.1.2.1.2.2.1.6"
 	IfAdminStatus = "1.3.6.1.2.1.2.2.1.7"
 	IfOperStatus  = "1.3.6.1.2.1.2.2.1.8"
+	IfLastChange  = "1.3.6.1.2.1.2.2.1.9" // IF-MIB
 	IfInDiscards  = "1.3.6.1.2.1.2.2.1.13"
 	IfInErrors    = "1.3.6.1.2.1.2.2.1.14"
 	IfOutDiscards = "1.3.6.1.2.1.2.2.1.19"

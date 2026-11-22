@@ -16,6 +16,8 @@
 
 設営（`setup`）は `if_index>0` のポートアラートと `DEVICE_MISSING` / `PING_FAIL` / `IP_MISMATCH` を抑止。撤収（`teardown`）は全件抑止。リハ（`rehearsal`）と本番（`show`）は抑止なし。抑止中もイベントは保存するが、件数に含めず、抑止中の復旧はラッチしない。フェーズによる抑止を作業中より優先して `suppressed_by` に示す。
 
+設営・撤収ではFastとMediumの間隔を設定値の3倍、Slowを2倍にする。リハ・本番は設定値どおり。ポーラーを再起動せずフェーズ変更を反映する。
+
 ## グループ・作業中
 
 グループは既存の `switches.group_tag`（1台1グループ、空文字は未所属）。
@@ -43,7 +45,7 @@
 ## スイッチ
 | メソッド | パス | 説明 |
 |---|---|---|
-| GET | `/api/switches` | `[SwitchConfig]`（communityは `"****"` でマスク） |
+| GET | `/api/switches` | `[SwitchConfig]`（communityは `"****"` でマスク、`last_trap_ts:RFC3339|null` は最終Trap受信時刻） |
 | POST | `/api/switches` | `SwitchConfig`（id無し）→ 作成結果 |
 | PUT/DELETE | `/api/switches/:id` | 更新/削除 |
 | GET | `/api/switches/:id/state` | `SwitchState`（全詳細） |
@@ -62,13 +64,13 @@
 
 機器名CSVは第4列に `予定IP`（英語見出し `planned_ip`）を追加。旧3列CSV・旧書出CSV（第4列が観測IP）も読込可能。見出しがあれば列名で判定し、なければ先頭4列を使う。不正IPv4・IPv6は行エラーとなり、確定は422。予定IPも変更件数・プレビューの比較対象。`device_aliases.planned_ip` は起動時に既存DBへ自動追加し、旧再生DBの列欠落は空文字として読む。
 
-登録機器は最終観測したスイッチが到達可能なとき、FDBを更新するSlow周期で2回連続不在ならWARNING `DEVICE_MISSING`。未観測・到達不能・FDB取得失敗では発報せず、連続回数をリセットする。詳細は `mac,name,port,last_ip`。復帰で解消。ポートリンク断は既存 `LINK_DOWN` を即時反映する。予定IPが空でなく最終IPが判明し異なる場合は `ip_mismatch:true`、リハ・本番でWARNING `IP_MISMATCH`。
+登録機器は最終観測したスイッチが到達可能なとき、FDBの取得で2回連続不在ならWARNING `DEVICE_MISSING`。最初の不在から10秒後にFDBだけを再取得する（同じスイッチへの要求は集約し、その前にSlowでFDBを取得した場合は兼用）。登録機器の最終ポートでポーリングが `LINK_DOWN` を検知した場合はFDBの即時取得も要求する。未観測・到達不能・FDB取得失敗では発報せず、連続回数をリセットする。詳細は `mac,name,port,last_ip`。復帰で解消。予定IPが空でなく最終IPが判明し異なる場合は `ip_mismatch:true`、リハ・本番でWARNING `IP_MISMATCH`。
 
 設営・リハのみ60秒ごとに登録MACを最大16並列でPingする。宛先は最後に観測したIP、なければ予定IP。定期Pingの2回連続失敗はMACごとにWARNING `PING_FAIL`、成功で解消。フェーズ変更時に進行中の処理を中断し失敗回数をリセットする。本番・撤収では定期送信なし。手動の1台・一括PingもIPからMACへ照合して表示結果を更新するが、定期失敗回数は変更しない。
 
 ## 監視ビュー
 - `GET /api/overview` → `{switches:[SwitchSummary], alerts:{CRITICAL,WARNING,INFO}, recent_events:[Event]}`。件数は抑止されていない「発生中または未確認」のエントリ数（スイッチ別件数も同条件）
-  - `SwitchSummary`: `{id,name,ip,group_tag,reachable,last_error,model,fw,uptime_sec,cpu_5s,mem_free_pct,mbuf_used_pct,temp_max_c,temp_state,fans_ok,psu_ok,poe_budget_w,poe_used_w,ports_up,ports_total,rx_bps,tx_bps,alerts:{CRITICAL,WARNING,INFO?}}`
+  - `SwitchSummary`: `{id,name,ip,group_tag,reachable,last_error,last_trap_ts:RFC3339|null,model,fw,uptime_sec,cpu_5s,mem_free_pct,mbuf_used_pct,temp_max_c,temp_state,fans_ok,psu_ok,poe_budget_w,poe_used_w,ports_up,ports_total,rx_bps,tx_bps,alerts:{CRITICAL,WARNING,INFO?}}`
 - `GET /api/ports/search?q=&switch_id=&sort=err|poe|bw` → `[{switch_id, switch_name, port: Port}]`
 - `GET /api/metrics/port?switch_id=&if_index=&from=&to=` → `{resolution:"raw"|"1m", points:[{ts, rx_bps, tx_bps, rx_mc_pps, tx_mc_pps, err_delta, fcs_delta, discard_delta, cos_drop_delta, pause_delta, poe_w, sfp_rx_dbm}]}`（from/to省略時は直近30分）
 - `GET /api/metrics/switch?switch_id=&from=&to=` → `{resolution, points:[{ts, cpu_5s, mem_free_pct, mbuf_used_pct, temp_max_c, poe_used_w}]}`
@@ -92,6 +94,20 @@
 発生時にイベントIDを持つエントリを作成し、未確認の復旧は `active:false,state:"latched"` と復旧時刻を保持する。同じキーが未確認の間に再発生したら同じイベントIDを再使用する。発生中の確認は `acked:true` として残り、確認済みで復旧すると削除。復旧後の確認は直ちに削除。DBの `acked_at` を更新するが確認者は記録しない。確認後は `alerts_changed` を全ブラウザへ配信する。
 
 起動・プロファイル切替で、対象現場の過去36時間の未確認CRITICAL/WARNINGイベントを復旧済みとして復元し、再評価で発生中に戻す。通常はスイッチID・コード・ポートごとに新しいものを優先する。機器の3コード（DEVICE_MISSING/PING_FAIL/IP_MISMATCH）は所在が変わってもコード・MACごとに最新1件を復元し、最終観測した所在のグループで抑止を判定する（履歴イベントの発生場所は保持）。重要度が変化した場合は別の発生イベントとして記録し、古い未確認ラッチも確認まで残す。抑止中の復旧は再起動してもラッチしない。対象現場を特定できない旧横断イベントは復元対象外。
+
+## SNMP Trap
+
+- `/api/status` の `trap:{addr,ok,error}` で受信待受を確認する。登録スイッチの `last_trap_ts` は受信時刻を保持し、未受信は `null`。再起動後も保持する。
+- 登録スイッチのTrapはFast取得を要求し、リンク・PoE・STP・ストーム・ErrDisable・再起動・LLDPではSlow取得も要求する。同じスイッチのTrapが続く場合は5秒に1回までに集約する。到達不能時は既存のバックオフに従う。未登録送信元はイベント履歴に記録する。
+- Trapは状態を直接変更しない。`linkDown` Trap後の最初のFast取得でリンクが既に復帰していた場合、または連続するFast取得の間に両方でリンクがupのまま `ifLastChange` が進んだ場合、WARNING `LINK_FLAP` を履歴に残す。新規発生は未確認の `state:"latched"` で、抑止中は履歴にだけ記録する。ポートごとに最初の発生から60秒未満のフラップは同じイベントの `detail.count` に加える。1回のFast取得までに複数の断復帰通知が届いた場合も、`linkUp` を挟む断は個別に数え、先に `ifLastChange` で検知した断のTrapは送信元の `sysUpTime` があれば二重計上を防ぐ。通常のTrapイベントは再起動時のラッチ復元対象外。
+
+M4250でSNMPv2c Trapの送信先を設定するCLI例（要実機確認。リポジトリ内のCLI資料では構文を確認できない）:
+
+```text
+snmp-server host <PC IP> traps version snmpv2 <community>
+```
+
+待受・ファイアウォールでTrap用UDPポート（既定162）を確認し、設定後は `last_trap_ts` の更新で受信を確認する。
 
 ## ベースライン
 `GET /api/baselines` → `[{id,name,captured_ts}]` / `POST /api/baselines {name}` / `GET /api/baselines/:id/diff` → `{diffs:[{switch_name, item, before, after, severity}]}` / `DELETE /api/baselines/:id`

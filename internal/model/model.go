@@ -5,15 +5,16 @@ import "time"
 
 // SwitchConfig は登録スイッチ（プロファイル配下）。
 type SwitchConfig struct {
-	ID        int64  `json:"id"`
-	ProfileID int64  `json:"profile_id"`
-	Name      string `json:"name"`
-	GroupTag  string `json:"group_tag"`
-	IP        string `json:"ip"`
-	SNMPPort  int    `json:"snmp_port"`
-	Community string `json:"community,omitempty"`
-	Enabled   bool   `json:"enabled"`
-	WebURL    string `json:"web_url,omitempty"` // 手動上書き
+	ID         int64      `json:"id"`
+	ProfileID  int64      `json:"profile_id"`
+	Name       string     `json:"name"`
+	GroupTag   string     `json:"group_tag"`
+	IP         string     `json:"ip"`
+	SNMPPort   int        `json:"snmp_port"`
+	Community  string     `json:"community,omitempty"`
+	Enabled    bool       `json:"enabled"`
+	WebURL     string     `json:"web_url,omitempty"` // 手動上書き
+	LastTrapTS *time.Time `json:"last_trap_ts"`
 }
 
 // Severity 定数
@@ -322,4 +323,5 @@ type Event struct {
 	Acked      bool           `json:"acked"`
 	SwitchName string         `json:"switch_name,omitempty"`
 	Dedupe     string         `json:"-"` // 重複排除キー（内部ログ等）
+	TrapUptime *uint64        `json:"-"` // Trap送信元のTimeTicks。ifLastChangeとの照合に使う
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/Mono-Gen/avline-sight/internal/engine"
 	"github.com/Mono-Gen/avline-sight/internal/model"
@@ -148,4 +149,37 @@ func TestPlannedIPAPIAndEscapedGroup(t *testing.T) {
 	if err != nil || groups[0].WorkUntil != nil {
 		t.Fatalf("解除なし %+v %v", groups, err)
 	}
+}
+
+func TestLastTrapTimestampAPI(t *testing.T) {
+	s, h := newDevicesServer(t)
+	assert := func(path string, before bool) {
+		t.Helper()
+		w := do(h, "GET", path, "")
+		if w.Code != 200 {
+			t.Fatal(w.Body)
+		}
+		var list []struct {
+			LastTrap *time.Time `json:"last_trap_ts"`
+		}
+		if path == "/api/overview" {
+			var overview struct{ Switches json.RawMessage }
+			if err := json.Unmarshal(w.Body.Bytes(), &overview); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(overview.Switches, &list); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+			t.Fatal(err)
+		}
+		if len(list) != 1 || (list[0].LastTrap == nil) != before {
+			t.Fatalf("%s: %s", path, w.Body)
+		}
+	}
+	assert("/api/switches", true)
+	assert("/api/overview", true)
+	s.Engine.OnEvent(model.Event{SwitchID: 1, Category: "TRAP", Severity: model.SevInfo, Code: "authenticationFailure"})
+	assert("/api/switches", false)
+	assert("/api/overview", false)
 }

@@ -68,6 +68,8 @@ func (w *worker) collectSystem() error {
 			Title: "スイッチ再起動（sysUpTime巻き戻り）を検知", Hint: "電源瞬断・クラッシュ・手動再起動の可能性。電源系統と内部ログを確認してください",
 			Detail: map[string]any{"prev_ticks": w.lastUptime, "cur_ticks": ticks}})
 		w.cnt.vals = map[string]uint64{} // カウンタ基準をリセット
+		w.ifLastChange = nil
+		w.flapChange = nil
 	}
 	w.lastUptime = ticks
 	st.UptimeSec = up
@@ -79,10 +81,12 @@ func (w *worker) collectFast() error {
 	now := time.Now()
 	dt := now.Sub(w.cnt.ts).Seconds()
 	first := w.cnt.ts.IsZero()
-	rows, err := w.c.WalkColumns([]string{mib.IfName, mib.IfType, mib.IfOperStatus, mib.IfHighSpeed, mib.IfAlias,
+	trapLinks := w.requests.takeLinkSignals()
+	rows, err := w.c.WalkColumns([]string{mib.IfName, mib.IfType, mib.IfOperStatus, mib.IfLastChange, mib.IfHighSpeed, mib.IfAlias,
 		mib.IfHCInOctets, mib.IfHCOutOctets, mib.IfHCInMulticastPkts, mib.IfHCOutMulticastPkts, mib.IfHCInBroadcastPkts,
 		mib.IfInErrors, mib.IfOutErrors, mib.IfInDiscards, mib.IfOutDiscards})
 	if err != nil {
+		w.requests.restoreLinkSignals(trapLinks)
 		return err
 	}
 	ports := map[int]*model.Port{}
@@ -90,6 +94,7 @@ func (w *worker) collectFast() error {
 		ports[p.IfIndex] = p
 	}
 	var list []*model.Port
+	lastChanges := make(map[int]uint64, len(rows))
 	for _, r := range rows {
 		ix := ifIdx(r)
 		name := sx.Str(r.Cols[mib.IfName])
@@ -110,6 +115,11 @@ func (w *worker) collectFast() error {
 			p.Type = "rj45" // SFP判定はMedium（DOM応答有無）で上書き
 		}
 		oper := mib.IfOperStatusEnum.Name(int(sx.Int(r.Cols[mib.IfOperStatus])))
+		change := r.Cols[mib.IfLastChange]
+		if change.Type == gosnmp.TimeTicks {
+			lastChanges[ix] = sx.U64(change)
+		}
+		w.observeLinkFlap(p, oper, trapLinks[ix], lastChanges)
 		spd := int(sx.Int(r.Cols[mib.IfHighSpeed]))
 		if !first && p.Oper != "" && (p.Oper != oper || (oper == "up" && p.SpeedMbps != spd && p.SpeedMbps != 0)) {
 			w.onLinkChange(p, oper, spd)
@@ -148,6 +158,7 @@ func (w *worker) collectFast() error {
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].IfIndex < list[j].IfIndex })
 	w.st.Ports = list
+	w.ifLastChange = lastChanges
 	w.cnt.ts = now
 
 	// PoE（ポートINDEX=group,port。M4250はport番号=ifIndexの単一グループ）
@@ -617,23 +628,13 @@ func (w *worker) collectSlow() error {
 		return d
 	}
 	ipByMAC := map[string]string{}
-	// FDB
-	fdbValid := false
-	w.st.FDBValid = &fdbValid
-	w.st.FDBMACs = nil
-	if rows, err := w.c.WalkColumns([]string{mib.Dot1qTpFdbPort, mib.Dot1qTpFdbStatus}); err == nil {
-		fdbValid = true
-		for _, r := range rows {
-			if len(r.Index) < 7 || sx.Int(r.Cols[mib.Dot1qTpFdbStatus]) != 3 { // learnedのみ
-				continue
-			}
-			ix := w.basePortToIf(int(sx.Int(r.Cols[mib.Dot1qTpFdbPort])))
+	if entries, err := w.collectFDB(); err == nil {
+		for _, entry := range entries {
+			ix := w.basePortToIf(entry.port)
 			if p := pm[ix]; p == nil || p.Type == "lag" {
 				continue
 			}
-			d := add(ix, sx.IndexMAC(r.Index[1:7]))
-			w.st.FDBMACs = append(w.st.FDBMACs, d.MAC)
-			d.VLAN = int(r.Index[0])
+			add(ix, entry.mac).VLAN = entry.vlan
 		}
 	}
 	// ARP（ipNetToPhysical → フォールバック ipNetToMedia）

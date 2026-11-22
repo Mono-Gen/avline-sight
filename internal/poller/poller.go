@@ -40,12 +40,16 @@ type Manager struct {
 	sink    Sink
 	alias   AliasFunc
 	workers map[int64]*worker
+	phase   func() string
 }
 
 // NewManager を作る。
 func NewManager(iv Intervals, sink Sink, alias AliasFunc) *Manager {
 	return &Manager{iv: iv, sink: sink, alias: alias, workers: map[int64]*worker{}}
 }
+
+// WithPhase はワーカー起動前に運用フェーズの読取元を設定する。
+func (m *Manager) WithPhase(phase func() string) *Manager { m.phase = phase; return m }
 
 // Sync は登録スイッチ一覧に合わせてワーカーを起動・停止する。
 func (m *Manager) Sync(ctx context.Context, sws []model.SwitchConfig) {
@@ -74,6 +78,7 @@ func (m *Manager) Sync(ctx context.Context, sws []model.SwitchConfig) {
 		}
 		wctx, cancel := context.WithCancel(ctx)
 		w := newWorker(cfg, m.iv, m.sink, m.alias, cancel)
+		w.phase = m.phase
 		m.workers[id] = w
 		go w.run(wctx)
 	}
@@ -124,13 +129,18 @@ func (m *Manager) StopAll() {
 }
 
 type worker struct {
-	mu       sync.Mutex
-	cfg      model.SwitchConfig
-	iv       Intervals
-	sink     Sink
-	alias    AliasFunc
-	cancel   context.CancelFunc
-	probeNow chan struct{}
+	mu           sync.Mutex
+	cfg          model.SwitchConfig
+	iv           Intervals
+	sink         Sink
+	alias        AliasFunc
+	cancel       context.CancelFunc
+	probeNow     chan struct{}
+	requests     requests
+	phase        func() string
+	events       []model.Event
+	ifLastChange map[int]uint64
+	flapChange   map[int]uint64
 
 	c           *sx.Client
 	st          *model.SwitchState
@@ -149,7 +159,7 @@ type worker struct {
 const reprobeEverySlow = 10
 
 func newWorker(cfg model.SwitchConfig, iv Intervals, sink Sink, alias AliasFunc, cancel context.CancelFunc) *worker {
-	return &worker{cfg: cfg, iv: iv, sink: sink, alias: alias, cancel: cancel, probeNow: make(chan struct{}, 1),
+	return &worker{cfg: cfg, iv: iv, sink: sink, alias: alias, cancel: cancel, probeNow: make(chan struct{}, 1), requests: requests{wake: make(chan struct{}, 1)},
 		st:  &model.SwitchState{ID: cfg.ID, Name: cfg.Name, IP: cfg.IP, GroupTag: cfg.GroupTag, Caps: map[string]string{}},
 		cnt: counters{vals: map[string]uint64{}}, basePort: map[int]int{}, vlanNames: map[int]string{}, devSeen: map[int]string{}, lastUpSpeed: map[int]int{}}
 }
@@ -160,7 +170,7 @@ func (w *worker) emit(ev model.Event) {
 	if ev.TS.IsZero() {
 		ev.TS = time.Now().UTC()
 	}
-	w.sink.OnEvent(ev)
+	w.events = append(w.events, ev)
 }
 
 func (w *worker) supported(group string) bool { return w.st.Caps[group] != "UNSUPPORTED" }
@@ -202,16 +212,23 @@ func (w *worker) snapshot() *model.SwitchState {
 }
 
 func (w *worker) run(ctx context.Context) {
-	host, port := w.cfg.IP, uint16(w.cfg.SNMPPort)
+	w.mu.Lock()
+	cfg := w.cfg
+	w.mu.Unlock()
+	port := uint16(cfg.SNMPPort)
 	if port == 0 {
 		port = 161
 	}
-	c, err := sx.Dial(host, port, w.cfg.Community, w.iv.Timeout, w.iv.Retries)
+	c, err := sx.DialContext(ctx, cfg.IP, port, cfg.Community, w.iv.Timeout, w.iv.Retries)
 	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		w.mu.Lock()
 		w.st.Reachable, w.st.LastError = false, err.Error()
+		snap := w.snapshot()
 		w.mu.Unlock()
-		w.sink.OnState(w.snapshot(), "error")
+		w.sink.OnState(snap, "error")
 		return
 	}
 	defer c.Close()
@@ -221,13 +238,14 @@ func (w *worker) run(ctx context.Context) {
 		name string
 		iv   time.Duration
 		fn   func() error
-		next time.Time
+		last time.Time
 	}{
-		{"slow", w.iv.Slow, w.collectSlow, time.Time{}},
-		{"fast", w.iv.Fast, w.collectFast, time.Time{}},
-		{"medium", w.iv.Medium, w.collectMedium, time.Time{}},
+		{name: "fast", iv: w.iv.Fast, fn: w.collectFast},
+		{name: "slow", iv: w.iv.Slow, fn: w.collectSlow},
+		{name: "medium", iv: w.iv.Medium, fn: w.collectMedium},
 	}
 	backoff := []time.Duration{5 * time.Second, 15 * time.Second, 30 * time.Second}
+	var retryAt time.Time
 	tick := time.NewTicker(250 * time.Millisecond)
 	defer tick.Stop()
 	for {
@@ -235,60 +253,102 @@ func (w *worker) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-w.probeNow:
+			retryAt = time.Time{}
 			for i := range tiers {
-				tiers[i].next = time.Time{}
+				tiers[i].last = time.Time{}
 			}
+		case <-w.requests.wake:
 		case <-tick.C:
 		}
 		now := time.Now()
+		if now.Before(retryAt) {
+			continue
+		}
+		phase := "show"
+		if w.phase != nil {
+			phase = w.phase()
+		}
+		retry := !retryAt.IsZero()
+		trapFast, trapSlow := false, false
+		if !retry {
+			trapFast, trapSlow = w.requests.takeTrap(now)
+		}
 		for i := range tiers {
+			if ctx.Err() != nil {
+				return
+			}
 			t := &tiers[i]
-			if now.Before(t.next) {
+			if retry && t.name != "slow" {
 				continue
 			}
-			w.mu.Lock()
-			err := t.fn()
-			w.st.LastPoll = time.Now().UTC()
-			if err == nil {
-				w.st.LastOK = w.st.LastPoll
+			if t.name == "medium" && w.requests.takeFDB(time.Now(), false) {
+				w.poll(ctx, "fdb", w.collectFDBOnly)
+				if ctx.Err() != nil {
+					return
+				}
 			}
-			wasUp := w.st.Reachable
-			if err != nil {
-				w.failures++
-				w.st.Reachable = false
-				w.st.LastError = friendlyErr(err)
-				if wasUp || w.failures == 1 {
-					w.emit(model.Event{Category: "ANOMALY", Severity: model.SevCritical, Code: "SWITCH_UNREACHABLE",
-						Title: "スイッチからSNMP応答がありません", Hint: "電源断・LAN切断・IP/コミュニティ設定誤り・SNMP無効化を確認してください",
-						Detail: map[string]any{"error": w.st.LastError}})
+			due := !now.Before(t.last.Add(intervalForPhase(t.iv, t.name, phase)))
+			if !due && !(t.name == "fast" && trapFast) && !(t.name == "slow" && (trapSlow || retry)) {
+				continue
+			}
+			if t.name == "slow" {
+				w.requests.takeFDB(time.Now(), true)
+			}
+			t.last = time.Now()
+			if !w.poll(ctx, t.name, t.fn) {
+				if ctx.Err() != nil {
+					return
 				}
-				// 指数バックオフで死活確認へ移行（他スイッチはブロックしない）
-				b := backoff[min(w.failures-1, len(backoff)-1)]
-				for j := range tiers {
-					tiers[j].next = now.Add(b)
-				}
-				tiers[0].next = now.Add(b) // 復帰確認はslow（system取得込み）から
-				for j := 1; j < len(tiers); j++ {
-					tiers[j].next = now.Add(b + time.Second)
-				}
-				snap := w.snapshot()
-				w.mu.Unlock()
-				w.sink.OnState(snap, "error")
+				retryAt = time.Now().Add(backoff[min(w.failures-1, len(backoff)-1)])
 				break
 			}
-			if !wasUp {
-				if w.failures > 0 {
-					w.emit(model.Event{Category: "ANOMALY", Severity: model.SevInfo, Code: "SWITCH_RECOVERED", Title: "スイッチのSNMP応答が復帰しました"})
-				}
-				w.failures = 0
-			}
-			w.st.Reachable, w.st.LastError = true, ""
-			t.next = now.Add(t.iv)
-			snap := w.snapshot()
-			w.mu.Unlock()
-			w.sink.OnState(snap, t.name)
+			retryAt = time.Time{}
 		}
 	}
+}
+
+func (w *worker) poll(ctx context.Context, tier string, collect func() error) bool {
+	w.mu.Lock()
+	err := collect()
+	if ctx.Err() != nil {
+		w.events = nil
+		w.mu.Unlock()
+		return false
+	}
+	w.st.LastPoll = time.Now().UTC()
+	// FDB単独の失敗は不在判定を中断するが、スイッチ全体の死活は通常取得で判定する。
+	if tier != "fdb" {
+		if err != nil {
+			wasUp := w.st.Reachable
+			w.failures++
+			w.st.Reachable = false
+			w.st.LastError = friendlyErr(err)
+			if wasUp || w.failures == 1 {
+				w.emit(model.Event{Category: "ANOMALY", Severity: model.SevCritical, Code: "SWITCH_UNREACHABLE",
+					Title: "スイッチからSNMP応答がありません", Hint: "電源断・LAN切断・IP/コミュニティ設定誤り・SNMP無効化を確認してください",
+					Detail: map[string]any{"error": w.st.LastError}})
+			}
+			tier = "error"
+		} else {
+			if w.failures > 0 {
+				w.emit(model.Event{Category: "ANOMALY", Severity: model.SevInfo, Code: "SWITCH_RECOVERED", Title: "スイッチのSNMP応答が復帰しました"})
+			}
+			w.failures = 0
+			w.st.Reachable, w.st.LastError = true, ""
+		}
+	}
+	if err == nil {
+		w.st.LastOK = w.st.LastPoll
+	}
+	snap, events := w.snapshot(), w.events
+	w.events = nil
+	w.mu.Unlock()
+	// コールバックから同じワーカーへ追加取得を要求できるよう、ロック外で通知する。
+	for _, ev := range events {
+		w.sink.OnEvent(ev)
+	}
+	w.sink.OnState(snap, tier)
+	return err == nil
 }
 
 func friendlyErr(err error) string {
@@ -300,6 +360,45 @@ func friendlyErr(err error) string {
 }
 
 // ---- 状態変化イベント ----
+
+func (w *worker) observeLinkFlap(p *model.Port, oper string, signals linkSignals, changes map[int]uint64) {
+	if oper != "up" {
+		return
+	}
+	prev, havePrev := w.ifLastChange[p.IfIndex]
+	cur, haveCur := changes[p.IfIndex]
+	advanced := p.Oper == "up" && havePrev && haveCur && cur > prev
+	var count int
+	if p.Oper == "" || p.Oper == "up" {
+		covered, haveCovered := w.flapChange[p.IfIndex]
+		for _, tick := range signals.downs {
+			// 同じ変化をifLastChangeで先に確認した場合、遅れて受け取ったTrapを重ねない。
+			if tick != nil && haveCovered && havePrev && haveCur && cur >= prev && covered == prev && *tick <= covered {
+				continue
+			}
+			count++
+		}
+	}
+	var source string
+	switch {
+	case count > 0:
+		source = "trap"
+	case advanced:
+		source = "ifLastChange"
+		count = 1
+	default:
+		return
+	}
+	if advanced {
+		if w.flapChange == nil {
+			w.flapChange = map[int]uint64{}
+		}
+		w.flapChange[p.IfIndex] = cur
+	}
+	w.emit(model.Event{Category: "ANOMALY", Severity: model.SevWarning, Code: "LINK_FLAP", IfIndex: p.IfIndex,
+		Title: p.Name + " 短時間のリンク断を検知", Hint: "LANケーブルやコネクタの接触、対向機器の電源を確認してください",
+		Detail: map[string]any{"port": p.Name, "source": source, "count": count}})
+}
 
 func (w *worker) onLinkChange(p *model.Port, oper string, spd int) {
 	p.LastChange = time.Now().UTC()

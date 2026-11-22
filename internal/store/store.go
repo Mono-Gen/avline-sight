@@ -307,7 +307,8 @@ func (s *Store) Background(id int64) ([]byte, string, error) {
 // ---- スイッチ ----
 
 func (s *Store) Switches(profileID int64) ([]model.SwitchConfig, error) {
-	rows, err := s.DB.Query(`SELECT id,profile_id,name,group_tag,ip,snmp_port,community_ro,enabled,web_url FROM switches WHERE profile_id=? ORDER BY id`, profileID)
+	rows, err := s.DB.Query(`SELECT sw.id,sw.profile_id,sw.name,sw.group_tag,sw.ip,sw.snmp_port,sw.community_ro,sw.enabled,sw.web_url,CAST(m.v AS INTEGER)
+		FROM switches sw LEFT JOIN meta m ON m.k='last_trap:' || sw.id WHERE sw.profile_id=? ORDER BY sw.id`, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -315,12 +316,24 @@ func (s *Store) Switches(profileID int64) ([]model.SwitchConfig, error) {
 	var out []model.SwitchConfig
 	for rows.Next() {
 		var c model.SwitchConfig
-		if err := rows.Scan(&c.ID, &c.ProfileID, &c.Name, &c.GroupTag, &c.IP, &c.SNMPPort, &c.Community, &c.Enabled, &c.WebURL); err != nil {
+		var lastTrap sql.NullInt64
+		if err := rows.Scan(&c.ID, &c.ProfileID, &c.Name, &c.GroupTag, &c.IP, &c.SNMPPort, &c.Community, &c.Enabled, &c.WebURL, &lastTrap); err != nil {
 			return nil, err
+		}
+		if lastTrap.Valid {
+			ts := fromMS(lastTrap.Int64)
+			c.LastTrapTS = &ts
 		}
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// RecordTrap はポーリングで上書きされないよう受信時刻を独立して保持する。
+func (s *Store) RecordTrap(id int64, at time.Time) error {
+	_, err := s.DB.Exec(`INSERT INTO meta(k,v) SELECT 'last_trap:' || id, ? FROM switches WHERE id=?
+		ON CONFLICT(k) DO UPDATE SET v=excluded.v WHERE CAST(excluded.v AS INTEGER)>CAST(meta.v AS INTEGER)`, ms(at), id)
+	return err
 }
 
 func (s *Store) SaveSwitch(c *model.SwitchConfig) error {
@@ -790,7 +803,7 @@ func (s *Store) Events(f EventFilter) ([]model.Event, error) {
 	var conds []string
 	var args []any
 	if f.RestoreProfileID != 0 {
-		conds = append(conds, `acked=0 AND severity IN ('CRITICAL','WARNING') AND (switch_id IN (SELECT id FROM switches WHERE profile_id=?) OR (switch_id=0 AND json_extract(detail_json,'$._profile_id')=?))`)
+		conds = append(conds, `acked=0 AND category<>'TRAP' AND severity IN ('CRITICAL','WARNING') AND (switch_id IN (SELECT id FROM switches WHERE profile_id=?) OR (switch_id=0 AND json_extract(detail_json,'$._profile_id')=?))`)
 		args = append(args, f.RestoreProfileID, f.RestoreProfileID)
 	}
 	if f.Category != "" {
@@ -850,6 +863,17 @@ func (s *Store) Ack(id int64) error {
 func (s *Store) AckAll() error {
 	_, err := s.DB.Exec(`UPDATE events SET acked=1, acked_at=? WHERE acked=0`, ms(time.Now()))
 	return err
+}
+
+// CountRecentLinkFlap はイベントの発生時刻を基準とした重複排除窓の件数を増やす。
+func (s *Store) CountRecentLinkFlap(id int64, ifIndex, count int, after, through time.Time) (bool, error) {
+	res, err := s.DB.Exec(`UPDATE events SET detail_json=json_set(detail_json,'$.count',COALESCE(json_extract(detail_json,'$.count'),1)+?)
+		WHERE id=(SELECT id FROM events WHERE switch_id=? AND if_index=? AND code='LINK_FLAP' AND ts>? AND ts<=? ORDER BY ts DESC,id DESC LIMIT 1)`, count, id, ifIndex, ms(after), ms(through))
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // ---- スナップショット・ベースライン ----

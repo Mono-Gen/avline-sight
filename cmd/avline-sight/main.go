@@ -126,23 +126,16 @@ func run() error {
 	}
 
 	iv := poller.Intervals{Fast: *fast, Medium: *medium, Slow: *slow, Timeout: poller.DefaultIntervals.Timeout, Retries: poller.DefaultIntervals.Retries}
-	pm := poller.NewManager(iv, eng, eng.Alias)
+	pm := poller.NewManager(iv, eng, eng.Alias).WithPhase(eng.Phase)
+	eng.SetFDBRequester(pm.RequestFDB)
 	defer pm.StopAll()
 
 	sws, _ := st.Switches(pid)
 	tr := trap.New(eng.OnEvent, func(ip string, labPort int) (int64, string, bool) {
 		list, _ := st.Switches(eng.ProfileID())
-		for _, c := range list {
-			if labPort > 0 && c.IP == "127.0.0.1" && c.SNMPPort == labPort {
-				return c.ID, c.Name, true
-			}
-			if labPort == 0 && c.IP == ip {
-				return c.ID, c.Name, true
-			}
-		}
-		return 0, "", false
+		return resolveTrapSource(list, ip, labPort, simLab != nil)
 	})
-	tr.Start(ta)
+	tr.OnRegistered(pm.TriggerTrap)
 	defer tr.Stop()
 
 	ln, addr, err := listenWithFallback(*listen)
@@ -153,6 +146,7 @@ func run() error {
 		Static: web.Dist(), WebAddr: addr, Ctx: ctx}
 	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	pm.Sync(ctx, sws)
+	tr.Start(ta)
 	engineDone := make(chan struct{})
 	go func() { defer close(engineDone); eng.Run(ctx, store.DefaultRetention) }()
 	// 定期Pingを含むエンジンの終了を待ってからDBを閉じる。
@@ -177,6 +171,20 @@ func run() error {
 		return err
 	}
 	return nil
+}
+
+func resolveTrapSource(switches []model.SwitchConfig, ip string, labPort int, lab bool) (int64, string, bool) {
+	for _, sw := range switches {
+		if sw.IP != ip {
+			continue
+		}
+		// ラボのポート番号はローカルホスト上の複数の仮想スイッチを区別するためだけに使う。
+		if lab && ip == "127.0.0.1" && labPort > 0 && sw.SNMPPort != labPort {
+			continue
+		}
+		return sw.ID, sw.Name, true
+	}
+	return 0, "", false
 }
 
 // listenWithFallback は指定ポートが使用中なら +1〜+20 を試す（仕様8.1）。

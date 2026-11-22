@@ -1,6 +1,7 @@
 package snmpx
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"strings"
@@ -18,8 +19,13 @@ type Client struct {
 
 // Dial はUDPソケットを開く（SNMPはコネクションレスのため到達確認ではない）。
 func Dial(host string, port uint16, community string, timeout time.Duration, retries int) (*Client, error) {
+	return DialContext(context.Background(), host, port, community, timeout, retries)
+}
+
+// DialContext はポーラー停止後に追加のSNMP要求が続かないようワーカーのコンテキストを使う。
+func DialContext(ctx context.Context, host string, port uint16, community string, timeout time.Duration, retries int) (*Client, error) {
 	g := &gosnmp.GoSNMP{Target: host, Port: port, Community: community, Version: gosnmp.Version2c,
-		Timeout: timeout, Retries: retries, MaxOids: 60}
+		Context: ctx, Timeout: timeout, Retries: retries, MaxOids: 60}
 	if err := g.Connect(); err != nil {
 		return nil, fmt.Errorf("SNMP接続準備に失敗 %s:%d: %w", host, port, err)
 	}
