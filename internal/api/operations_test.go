@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"net/url"
 	"testing"
 	"time"
 
@@ -35,24 +34,6 @@ func TestOperationEndpointsLocksAndSync(t *testing.T) {
 			t.Fatalf("status: %s %v", w.Body, err)
 		}
 	}
-	if w := do(h, "POST", "/api/work", `{"group":"*","minutes":15}`); w.Code != 200 {
-		t.Fatal(w.Body)
-	}
-	if w := do(h, "POST", "/api/work", `{"group":"*","minutes":5}`); w.Code != 400 {
-		t.Fatal(w.Body)
-	}
-	if w := do(h, "POST", "/api/work", `{"group":"unknown","minutes":15}`); w.Code != 404 {
-		t.Fatal(w.Body)
-	}
-	if w := do(h, "DELETE", "/api/work/*", ""); w.Code != 200 {
-		t.Fatal(w.Body)
-	}
-	if w := do(h, "POST", "/api/work", `{"group":"","minutes":30}`); w.Code != 200 {
-		t.Fatal(w.Body)
-	}
-	if w := do(h, "DELETE", "/api/work/", ""); w.Code != 200 {
-		t.Fatal(w.Body)
-	}
 	if w := do(h, "POST", "/api/counters/reset", `{"group":"*"}`); w.Code != 200 {
 		t.Fatal(w.Body)
 	} else {
@@ -71,8 +52,8 @@ func TestOperationEndpointsLocksAndSync(t *testing.T) {
 		t.Fatal(w.Body)
 	}
 	for _, tc := range []struct{ method, path, body string }{
-		{"PUT", "/api/phase", `{"phase":"show"}`}, {"POST", "/api/work", `{"group":"*","minutes":15}`},
-		{"DELETE", "/api/work/*", ""}, {"POST", "/api/counters/reset", `{"group":"*"}`},
+		{"PUT", "/api/phase", `{"phase":"show"}`},
+		{"POST", "/api/counters/reset", `{"group":"*"}`},
 	} {
 		if w := do(h, tc.method, tc.path, tc.body); w.Code != 423 {
 			t.Fatalf("ロック %s: %d", tc.path, w.Code)
@@ -100,7 +81,7 @@ func TestOperationEndpointsLocksAndSync(t *testing.T) {
 		}
 		types[msg.Type] = true
 	}
-	for _, kind := range []string{"phase_changed", "work_changed", "lock_changed", "alerts_changed"} {
+	for _, kind := range []string{"phase_changed", "lock_changed", "alerts_changed"} {
 		if !types[kind] {
 			t.Fatalf("WS通知なし %s", kind)
 		}
@@ -139,16 +120,7 @@ func TestPlannedIPAPIAndEscapedGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Engine.Reload()
-	if err := s.Engine.SetWork(sw.GroupTag, 15); err != nil {
-		t.Fatal(err)
-	}
-	if w := do(h, "DELETE", "/api/work/"+url.PathEscape(sw.GroupTag), ""); w.Code != 200 {
-		t.Fatalf("エスケープ解除: %d %s", w.Code, w.Body)
-	}
-	groups, err := s.Engine.Groups()
-	if err != nil || groups[0].WorkUntil != nil {
-		t.Fatalf("解除なし %+v %v", groups, err)
-	}
+
 }
 
 func TestLastTrapTimestampAPI(t *testing.T) {

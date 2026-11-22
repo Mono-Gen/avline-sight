@@ -51,9 +51,6 @@ func TestRenameAndOrderGroups(t *testing.T) {
 	if got := names(check("GET", "/api/groups", "", 200)); !reflect.DeepEqual(got, []string{"Z", "Audio / Main", "Video", "order", ""}) {
 		t.Fatalf("表示順: %v", got)
 	}
-	check("POST", "/api/work", `{"group":"Audio / Main","minutes":15}`, 200)
-	check("PUT", groupPath, `{"new_name":"Video"}`, 409)
-	check("DELETE", "/api/work/Audio%20%2F%20Main", "", 200)
 	groups := check("PUT", groupPath, `{"new_name":" Video "}`, 200)
 	if got := names(groups); !reflect.DeepEqual(got, []string{"Z", "Video", "order", ""}) || len(groups[1].SwitchIDs) != 4 {
 		t.Fatalf("統合後: %+v", groups)
@@ -84,8 +81,6 @@ func TestGroupChangesRejectStaleProfile(t *testing.T) {
 	for _, request := range []struct{ method, path, body string }{
 		{"PUT", "/api/groups/Audio", `{"new_name":"Changed"}`},
 		{"PUT", "/api/groups/order", `{"names":["Audio"]}`},
-		{"POST", "/api/work", `{"group":"Audio","minutes":15}`},
-		{"DELETE", "/api/work/Audio", ""},
 		{"POST", "/api/counters/reset", `{"group":"*"}`},
 	} {
 		req := httptest.NewRequest(request.method, request.path, strings.NewReader(request.body))
@@ -116,14 +111,10 @@ func TestLegacyReservedGroupCanBeRenamedWithoutTouchingAll(t *testing.T) {
 	if err := s.Store.SaveSwitch(sw); err != nil {
 		t.Fatal(err)
 	}
-	if w := do(h, "POST", "/api/work", `{"group":"*","minutes":15}`); w.Code != 200 {
-		t.Fatal(w.Body)
-	}
 	w := do(h, "PUT", "/api/groups/*", `{"new_name":"Audio"}`)
 	var groups []engine.Group
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &groups) != nil ||
-		len(groups) != 2 || groups[0].Name != "Audio" || len(groups[0].SwitchIDs) != 1 ||
-		groups[0].WorkUntil == nil || groups[1].WorkUntil == nil {
+		len(groups) != 2 || groups[0].Name != "Audio" || len(groups[0].SwitchIDs) != 1 {
 		t.Fatal(w.Body)
 	}
 }

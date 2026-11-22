@@ -36,16 +36,18 @@ type View struct {
 
 // Settings はプロファイル設定（settings_json）。
 type Settings struct {
-	Thresholds Thresholds `json:"thresholds"`
-	AlertSound bool       `json:"alert_sound"`
-	Views      []View     `json:"views"`
+	Thresholds               Thresholds `json:"thresholds"`
+	SetupPingIntervalSec     int        `json:"setup_ping_interval_sec"`
+	RehearsalPingIntervalSec int        `json:"rehearsal_ping_interval_sec"`
+	Views                    []View     `json:"views"`
 }
 
 // DefaultSettings は仕様の既定値（SFP -10dBm は公式の過剰減衰基準、物理エラーは+1で要確認）。
 func DefaultSettings() Settings {
 	return Settings{
-		Thresholds: Thresholds{CPUPct: 80, MemFreePct: 15, TempC: 65, PoEPct: 80, UtilPct: 80, SFPRxDBm: -10, SFPDropDB: 3, ErrDelta: 1},
-		AlertSound: true,
+		Thresholds:               Thresholds{CPUPct: 80, MemFreePct: 15, TempC: 65, PoEPct: 80, UtilPct: 80, SFPRxDBm: -10, SFPDropDB: 3, ErrDelta: 1},
+		SetupPingIntervalSec:     DefaultPingIntervalSec,
+		RehearsalPingIntervalSec: DefaultPingIntervalSec,
 		Views: []View{
 			{ID: "all", Name: "全体"},
 			{ID: "audio", Name: "音響", VLANs: []int{10}},
@@ -75,7 +77,6 @@ type Engine struct {
 	aliases      map[string]string // "mac|<MAC>" / "port|<swid>:<ifIndex>" → ラベル
 	active       map[string]*Alert
 	phase        string
-	work         map[string]time.Time
 	operationMu  sync.Mutex
 	deviceMu     sync.Mutex
 	pingCancel   context.CancelFunc
@@ -99,7 +100,7 @@ type Engine struct {
 func New(st *store.Store, profileID int64, hub Broadcaster) *Engine {
 	e := &Engine{st: st, profileID: profileID, hub: hub, states: map[int64]*model.SwitchState{},
 		portCfg: map[int64]map[int]store.PortSetting{}, aliases: map[string]string{}, active: map[string]*Alert{},
-		phase: "show", work: map[string]time.Time{}, phaseWake: make(chan struct{}, 1), pinger: systemPinger{},
+		phase: "show", phaseWake: make(chan struct{}, 1), pinger: systemPinger{},
 		pingResults: map[string]DevicePing{}, pingFails: map[string]int{}, missing: map[string]missingCheck{},
 		switchGroups: map[int64]string{}, lastTraps: map[int64]time.Time{},
 		baseline: map[string]float64{}, prevQuerier: map[string]string{}, mediumFresh: map[int64]bool{}}
@@ -126,6 +127,7 @@ func (e *Engine) reload() {
 	if set.Thresholds.ErrDelta == 0 && set.Thresholds.CPUPct == 0 {
 		set = DefaultSettings()
 	}
+	set.normalizePingIntervals()
 	sws, err := e.st.Switches(e.profileID)
 	if err != nil {
 		slog.Warn("監視対象の読込に失敗", "err", err)
@@ -220,6 +222,10 @@ func (e *Engine) SetProfile(id int64) {
 	e.reload()
 	e.restoreAlerts()
 	e.broadcastAlerts()
+	select {
+	case e.phaseWake <- struct{}{}:
+	default:
+	}
 }
 
 func (e *Engine) ProfileID() int64 {
@@ -235,12 +241,22 @@ func (e *Engine) Settings() Settings {
 }
 
 func (e *Engine) SaveSettings(s Settings) error {
+	if err := s.Validate(); err != nil {
+		return err
+	}
 	if err := e.st.SetProfileJSON(e.ProfileID(), "settings_json", s); err != nil {
 		return err
 	}
 	e.mu.Lock()
 	e.settings = s
+	if e.pingCancel != nil {
+		e.pingCancel()
+	}
 	e.mu.Unlock()
+	select {
+	case e.phaseWake <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -524,8 +540,16 @@ func (e *Engine) State(id int64) *model.SwitchState {
 
 // Run は定期処理（ロールアップ・パージ・スナップショット）を回す。
 func (e *Engine) Run(ctx context.Context, ret store.Retention) {
+	awakeDone := make(chan struct{})
+	go func() {
+		defer close(awakeDone)
+		if err := preventSleep(ctx); err != nil {
+			slog.Warn("スリープ抑止に失敗", "err", err)
+		}
+	}()
+	defer func() { <-awakeDone }()
 	pingDone := make(chan struct{})
-	go func() { defer close(pingDone); e.runPeriodicPing(ctx, periodicPingInterval) }()
+	go func() { defer close(pingDone); e.runPeriodicPing(ctx, e.pingInterval) }()
 	defer func() { <-pingDone }()
 	snapT := time.NewTicker(5 * time.Second)
 	rollT := time.NewTicker(time.Minute)
@@ -538,9 +562,6 @@ func (e *Engine) Run(ctx context.Context, ret store.Retention) {
 		case <-ctx.Done():
 			return
 		case <-snapT.C:
-			if err := e.ExpireWork(time.Now().UTC()); err != nil {
-				slog.Warn("作業期限の解除に失敗", "err", err)
-			}
 			e.mu.Lock()
 			due := time.Since(e.lastSnap) >= 30*time.Second || (e.snapDirty && time.Since(e.lastSnap) >= 5*time.Second)
 			trig := "periodic"

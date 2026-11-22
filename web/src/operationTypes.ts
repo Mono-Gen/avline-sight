@@ -1,4 +1,4 @@
-export type Phase = 'setup' | 'rehearsal' | 'show' | 'teardown';
+export type Phase = 'setup' | 'rehearsal' | 'show';
 export interface Alert {
   event_id: number;
   switch_id: number;
@@ -17,12 +17,11 @@ export interface Alert {
   device_name?: string;
   state: 'active' | 'latched';
   suppressed: boolean;
-  suppressed_by: 'phase' | 'work' | '';
+  suppressed_by: 'phase' | '';
   hint?: string;
   detail?: Record<string, unknown>;
 }
 export interface SwitchGroup {
   name: string;
   switch_ids: number[];
-  work_until: string | null;
 }

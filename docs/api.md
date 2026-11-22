@@ -2,7 +2,7 @@
 
 バックエンド（Go）とWebUI（React）の間の契約。型の正は `internal/model/model.go` のJSONタグ。
 時刻はすべて RFC3339（UTC）。エラー時は HTTP 4xx/5xx と `{"error": "日本語メッセージ"}`。
-閲覧専用ロック中は変更系（POST/PUT/DELETE）が `423 Locked`。例外は `/api/mode/lock`、`/api/markers`、イベント確認（個別・一括）、再生関連、`/api/export/pack`。手動Ping・フェーズ変更・作業中変更・カウンタリセットはロック中に実行不可。
+閲覧専用ロック中は変更系（POST/PUT/DELETE）が `423 Locked`。例外は `/api/mode/lock`、`/api/markers`、イベント確認（個別・一括）、再生関連、`/api/export/pack`。手動Ping・フェーズ変更・カウンタリセットはロック中に実行不可。
 
 ## 状態・システム
 | メソッド | パス | 応答 |
@@ -11,36 +11,42 @@
 | POST | `/api/mode/lock` | 入力 `{locked:bool, pin?:string}` → `{locked}`（解除時、PIN設定済みならPIN必須） |
 | GET | `/api/system/nics` | `[{name, addrs:[string]}]` |
 | GET/PUT | `/api/settings` | `Settings`（下記） |
-| GET | `/api/phase` | `{phase:"setup"|"rehearsal"|"show"|"teardown"}`。既定 `show`、metaの `op_phase` に保存 |
+| GET | `/api/phase` | `{phase:"setup"|"rehearsal"|"show"}`。既定 `show`、metaの `op_phase` に保存。保存済みの旧値 `teardown` は起動時に `setup` として扱い、新規指定は400 |
 | PUT | `/api/phase` | 入力 `{phase}` → `{phase}`。実際の変更時にINFO `PHASE_CHANGED` とWS `phase_changed` |
 
-設営（`setup`）は `if_index>0` のポートアラートと `DEVICE_MISSING` / `PING_FAIL` / `IP_MISMATCH` を抑止。撤収（`teardown`）は全件抑止。リハ（`rehearsal`）と本番（`show`）は抑止なし。抑止中もイベントは保存する。抑止開始前に復旧していた未確認ラッチは保持し、抑止中の件数から除く。フェーズによる抑止を作業中より優先して `suppressed_by` に示す。
+設営（`setup`）は `if_index>0` のポートアラートと `DEVICE_MISSING` / `PING_FAIL` / `IP_MISMATCH` を抑止。リハ（`rehearsal`）と本番（`show`）は抑止なし。抑止中もイベントは保存する。抑止開始前に復旧していた未確認ラッチは保持し、抑止中の件数から除く。フェーズによる抑止は `suppressed_by:"phase"` に示す。
 
-設営・撤収ではFastとMediumの間隔を設定値の3倍、Slowを2倍にする。リハ・本番は設定値どおり。ポーラーを再起動せずフェーズ変更を反映する。
+設営ではFastとMediumの間隔を設定値の3倍、Slowを2倍にする。リハ・本番は設定値どおり。ポーラーを再起動せずフェーズ変更を反映する。
 
-## グループ・作業中
+## グループ
 
 グループは既存の `switches.group_tag`（1台1グループ、空文字は未所属）。スイッチの作成・更新時は前後の空白を取り除き、空文字または有効なグループ名を保存する。予約名 `*`、`.`、`..` と制御文字を含む名前は400。
 
 | メソッド | パス | 入出力 |
 |---|---|---|
-| GET | `/api/groups` | `[{name, switch_ids:[id], work_until:RFC3339|null}]`。設定順、未指定のグループは名前順、未所属は最後。全体とグループ両方の作業中があれば遅い期限を表示 |
-| PUT | `/api/groups/{name}` | `{new_name}` → グループ一覧。対象プロファイルの全スイッチを一括変更し、同名のグループがあれば統合。旧名はURLエスケープし、未所属は `/api/groups/`。空の新名と予約名 `*`、`.`、`..` は400、旧グループ独自の作業中は409 |
+| GET | `/api/groups` | `[{name, switch_ids:[id]}]`。設定順、未指定のグループは名前順、未所属は最後 |
+| PUT | `/api/groups/{name}` | `{new_name}` → グループ一覧。対象プロファイルの全スイッチを一括変更し、同名のグループがあれば統合。旧名はURLエスケープし、未所属は `/api/groups/`。空の新名と予約名 `*`、`.`、`..` は400 |
 | PUT | `/api/groups/order` | `{names:[...]}` → グループ一覧。順序はプロファイルごとにmetaに保存。重複名・空名は400。`{new_name}` を送ると名前が `order` のグループを改名 |
-| POST | `/api/work` | `{group, minutes:15|30|60|120}` → グループ一覧。`group:"*"` は全スイッチ。存在しないグループは404 |
-| DELETE | `/api/work/{group}` | グループ名をURLエスケープして指定、`*` も可。未所属は `/api/work/`。解除済みの再解除も成功 → グループ一覧 |
 | POST | `/api/counters/reset` | `{group}`（`"*"` は全台）→ `{results:[{switch_id,ok,reset_at?,error?}]}`。既存ソフトリセットを呼び、停止中・無効なスイッチは `ok:false` |
 
-作業中はmetaの `work_mode` にグループ名→期限のJSONとして保存し、再起動で復元。プロファイルを切り替えても同名グループは期限を共有する。対象スイッチのアラートを抑止する。横断アラート（switch_id=0）は対象外。開始時INFO `WORK_STARTED`、手動解除・期限到達時INFO `WORK_ENDED`。期限切れは5秒周期と起動時に削除し、`work_changed`・`alerts_changed` を配信する。`*` の解除は全体指定のみを解除し、別途指定したグループの作業中は残す。
+作業中APIと `work_changed` は廃止。旧metaの作業期限は読み込まず、抑止しない。未登録APIは404を返す。
 
-改名・順序保存・作業中の開始と解除・一括リセットで `X-AVLine-Profile` を指定すると、表示していたプロファイルIDが現在のIDと異なる場合に409を返す。旧データに `*` という名前のグループがある場合、改名だけが可能。旧名が `.` または `..` の場合は `/api/groups/?legacy_name=.` または `?legacy_name=..` で指定する。
+改名・順序保存・一括リセットで `X-AVLine-Profile` を指定すると、表示していたプロファイルIDが現在のIDと異なる場合に409を返す。旧データに `*` という名前のグループがある場合、改名だけが可能。旧名が `.` または `..` の場合は `/api/groups/?legacy_name=.` または `?legacy_name=..` で指定する。
 
 `Settings`:
 ```json
 {"thresholds":{"cpu_pct":80,"mem_free_pct":15,"temp_c":65,"poe_pct":80,"util_pct":80,"sfp_rx_dbm":-10,"sfp_drop_db":3,"err_delta":1},
- "alert_sound":true,
+ "setup_ping_interval_sec":60, "rehearsal_ping_interval_sec":60,
  "views":[{"id":"audio","name":"音響","vlans":[10],"tags":[],"categories":[]}]}
 ```
+
+Ping間隔はそれぞれ30〜3600秒の整数。30秒の下限で登録機器への定期送信を毎分2回以下に抑える。省略時は既定60秒を使用し、0・範囲外・小数は400。保存時に進行中の定期Pingを中断し、次の周期から適用する。旧設定の音声項目は読み込まない。
+
+監視中のWindowsサーバーは [SetThreadExecutionState](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadexecutionstate) により自動スリープを抑止し、終了時に解除する。画面消灯は妨げない。他OSは何もしない。
+
+WebUIはポートモニターを起動画面とし、図/一覧を切り替える。更新停止はWebSocket切断時、または2秒周期の `overview_tick` が15秒以上届かないときに検知する。再接続だけでは解除せず、新しい配信を待つ。最終受信時刻は切断後も保持する。オフライン再生には適用しない。
+
+PC通知はブラウザー単位の設定で既定OFF。許可を得た場合のみ、新しい未確認のCRITICAL/WARNINGを無音で通知する（抑止中・再生中・監視停止中は通知しない）。既存履歴、復旧・確認で同じイベントを再通知しない。言語・テーマ・通知はブラウザー単位で保存し、サーバーのSettingsには含めない。
 
 ## プロファイル
 `GET /api/profiles` → `[{id,name,active}]` / `POST /api/profiles {name}` / `PUT /api/profiles/:id/activate` /
@@ -72,7 +78,7 @@
 
 登録機器は最終観測したスイッチが到達可能なとき、FDBの取得で2回連続不在ならWARNING `DEVICE_MISSING`。最初の不在から10秒後にFDBだけを再取得する（同じスイッチへの要求は集約し、その前にSlowでFDBを取得した場合は兼用）。登録機器の最終ポートでポーリングが `LINK_DOWN` を検知した場合はFDBの即時取得も要求する。未観測・到達不能・FDB取得失敗では発報せず、連続回数をリセットする。詳細は `mac,name,port,last_ip`。復帰で解消。予定IPが空でなく最終IPが判明し異なる場合は `ip_mismatch:true`、リハ・本番でWARNING `IP_MISMATCH`。
 
-設営・リハのみ60秒ごとに登録MACを最大16並列でPingする。宛先は最後に観測したIP、なければ予定IP。定期Pingの2回連続失敗はMACごとにWARNING `PING_FAIL`、成功で解消。フェーズ変更時に進行中の処理を中断し失敗回数をリセットする。本番・撤収では定期送信なし。手動の1台・一括PingもIPからMACへ照合して表示結果を更新するが、定期失敗回数は変更しない。
+設営・リハのみ各フェーズの設定間隔（既定60秒）ごとに登録MACを最大16並列でPingする。宛先は最後に観測したIP、なければ予定IP。定期Pingの2回連続失敗はMACごとにWARNING `PING_FAIL`、成功で解消。フェーズ変更時に進行中の処理を中断し失敗回数をリセットする。本番では定期送信なし。手動の1台・一括PingもIPからMACへ照合して表示結果を更新するが、定期失敗回数は変更しない。
 
 ## 監視ビュー
 - `GET /api/overview` → `{switches:[SwitchSummary], alerts:{CRITICAL,WARNING,INFO}, recent_events:[Event]}`。件数は抑止されていない「発生中または未確認」のエントリ数（スイッチ別件数も同条件）
@@ -94,13 +100,13 @@
 ## イベント・マーカー
 - `GET /api/events?category=&severity=&switch_id=&q=&from=&to=&limit=500` → `[Event]`（新しい順）
 - `POST /api/events/:id/ack`、`POST /api/events/ack-all`
-- `GET /api/alerts` → `[{event_id,switch_id,switch_name,if_index,severity,code,title,ts,active,acked,cleared_at:RFC3339|null,port,mac?,device_name?,state:"active"|"latched",suppressed,suppressed_by:"phase"|"work"|""}]`。抑止中の発生条件も含む。CRITICAL→WARNING→INFO、同重要度はts降順（同時刻はevent_id降順）
+- `GET /api/alerts` → `[{event_id,switch_id,switch_name,if_index,severity,code,title,ts,active,acked,cleared_at:RFC3339|null,port,mac?,device_name?,state:"active"|"latched",suppressed,suppressed_by:"phase"|""}]`。抑止中の発生条件も含む。CRITICAL→WARNING→INFO、同重要度はts降順（同時刻はevent_id降順）
   - REST応答は保存イベント由来の翻訳引数 `detail`、対処文 `hint`、確認時刻 `acked_at` を取得できる場合に補う。WebSocket通知では省略する。
 - `POST /api/markers` 入力 `{note}` → `Event`（category=MARKER）
 
 発生時にイベントIDを持つエントリを作成し、未確認の復旧は `active:false,state:"latched"` と復旧時刻を保持する。復旧時刻はDBのnullable `cleared_at` 列（Unixミリ秒）へ永続化し、再発生時はnullへ戻す。旧データや再評価前など復旧時刻が不明な場合は `cleared_at:null` とし、画面には不明と表示する。同じキーが未確認の間に再発生したら同じイベントIDを再使用する。発生中の確認は `acked:true` として残り、確認済みで復旧すると削除。復旧後の確認は直ちに削除。DBの `acked_at` を更新するが確認者は記録しない。確認後は `alerts_changed` を全ブラウザへ配信する。
 
-ポーラー由来の一過性CRITICAL/WARNING（SWITCH_REBOOT、POE_FAULT、RELINK_SLOWER、速度低下など）は発生ごとに独立した未確認ラッチとして保持する。継続条件がないため `active:false`、`cleared_at` は検知時刻とする。抑止中は履歴だけに保存する。通常のTrapとSYSLOGはラッチを作らない。重大イベントの配信には履歴・ラッチのどちらにも `detail._suppressed` を付け、音声通知もこの抑止に従う。手動Ping成功は該当MACの連続失敗回数とPING_FAILの発生条件を解除し、未確認分だけラッチとして残す。
+ポーラー由来の一過性CRITICAL/WARNING（SWITCH_REBOOT、POE_FAULT、RELINK_SLOWER、速度低下など）は発生ごとに独立した未確認ラッチとして保持する。継続条件がないため `active:false`、`cleared_at` は検知時刻とする。抑止中は履歴だけに保存する。通常のTrapとSYSLOGはラッチを作らない。重大イベントの配信には履歴・ラッチのどちらにも `detail._suppressed` を付け、PC通知もこの抑止に従う。手動Ping成功は該当MACの連続失敗回数とPING_FAILの発生条件を解除し、未確認分だけラッチとして残す。
 
 起動・プロファイル切替で、対象現場の過去36時間の未確認CRITICAL/WARNINGイベント（通常のTrapを除く）を復旧済みとして復元し、再評価で発生中に戻す。復旧時刻は保存値を使い、不明な場合はnullのまま保持する。通常はスイッチID・コード・ポートごとに新しいものを優先するが、一過性ラッチは個々の発生を保持する。機器の3コード（DEVICE_MISSING/PING_FAIL/IP_MISMATCH）は所在が変わってもコード・MACごとに最新1件を復元し、最終観測した所在のグループで抑止を判定する（履歴イベントの発生場所は保持）。重要度が変化した場合は別の発生イベントとして記録し、古い未確認ラッチも確認まで残す。抑止中の復旧は再起動してもラッチしない。対象現場を特定できない旧横断イベントは復元対象外。
 
@@ -147,8 +153,7 @@ M4250（FW 13.0.4.7）の工場出荷時・各AVプロファイル適用後の�
 - `{"type":"overview_tick","data":Overview}`（2秒毎）
 - `{"type":"event_pushed","data":Event}`
 - `{"type":"alerts_changed","data":[Alert]}`（発生・復旧ラッチ・削除・確認・抑止変更時。GET `/api/alerts` と同形式）
-- `{"type":"phase_changed","data":{"phase":"setup"|"rehearsal"|"show"|"teardown"}}`
-- `{"type":"work_changed","data":[{name,switch_ids,work_until}]}`（GET `/api/groups` と同形式）
+- `{"type":"phase_changed","data":{"phase":"setup"|"rehearsal"|"show"}}`
 - `{"type":"groups_changed","data":null}`（グループの名前・表示順の更新、スイッチの作成・更新・削除、またはプロファイルの切替。GET `/api/groups` で再取得）
 - `{"type":"lock_changed","data":{"locked":bool,"pin_set":bool}}`
 - `{"type":"switch_state","data":SwitchState}`（購読中スイッチの更新時）

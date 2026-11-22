@@ -14,7 +14,6 @@ import (
 )
 
 // 周期と失敗回数はバックエンド仕様の定期Ping・機器消失条件による。
-const periodicPingInterval = 60 * time.Second
 const failureThreshold = 2
 
 type missingCheck struct {
@@ -308,8 +307,8 @@ func (e *Engine) clearDeviceMissing(mac string, elsewhere bool) {
 	e.clearKeysWithPolicy(match, func(a *Alert, _ time.Time) bool { return a.Active && a.eventSuppressed })
 }
 
-func (e *Engine) runPeriodicPing(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
+func (e *Engine) runPeriodicPing(ctx context.Context, interval func() time.Duration) {
+	ticker := time.NewTicker(interval())
 	defer ticker.Stop()
 	defer func() {
 		e.mu.Lock()
@@ -324,9 +323,10 @@ func (e *Engine) runPeriodicPing(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-e.phaseWake:
-			ticker.Reset(interval)
+			ticker.Reset(interval())
 		case <-ticker.C:
 			e.periodicPing(ctx)
+			ticker.Reset(interval())
 		}
 	}
 }

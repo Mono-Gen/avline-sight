@@ -1,10 +1,9 @@
 import { wsUrl } from './api';
-import type { Alert, Event, Overview, Phase, SwitchGroup, SwitchState } from './types';
+import type { Alert, Event, Overview, Phase, SwitchState } from './types';
 
 export type LiveMessage =
   | { type: 'alerts_changed'; data: Alert[] }
   | { type: 'phase_changed'; data: { phase: Phase } }
-  | { type: 'work_changed'; data: SwitchGroup[] }
   | { type: 'groups_changed'; data: null }
   | { type: 'lock_changed'; data: { locked: boolean; pin_set: boolean } }
   | {
@@ -46,8 +45,10 @@ export class LiveSocket {
         this.onMessage(JSON.parse(String(event.data)) as LiveMessage);
       } catch {
         this.onStatus(false);
+        socket.close();
       }
     };
+    socket.onerror = () => { this.onStatus(false); socket.close(); };
     socket.onclose = () => {
       this.onStatus(false);
       if (!this.closed) this.timer = window.setTimeout(() => this.connect(), 3000);

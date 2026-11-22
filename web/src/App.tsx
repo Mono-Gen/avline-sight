@@ -8,17 +8,21 @@ import { TrapHelp } from './components/TrapHelp';
 import { asArray } from './format';
 import type { Event, Overview, Profile, ReplaySession, ReplaySnapshot, Settings, Status, SwitchState, WatchItem } from './types';
 import { Devices } from './views/Devices';
-import { DhcpView, HealthAudit, Logs, MulticastView, PortMatrix } from './views/Monitoring';
-import { OverviewView } from './views/Overview';
+import { DhcpView, HealthAudit, Logs, MulticastView } from './views/Monitoring';
+import { SwitchPorts } from './views/SwitchPorts';
+import { SettingsTools } from './components/SettingsTools';
+import { MonitorStopped, OverallStatus } from './components/MonitorStatus';
+import { issueAlerts, monitoringStopped } from './monitorHealth';
+import { usePcTime } from './pcTime';
+import { useDesktopNotifications } from './useDesktopNotifications';
 import { PortMonitor } from './views/PortMonitor';
 import { Topology } from './views/Topology';
 import { useLiveFeed } from './useLiveFeed';
 import { t, useLang } from './i18n';
 import { useOperations } from './useOperations';
-const pages = ['overview', 'topology', 'monitor', 'ports', 'devices', 'multicast', 'dhcp', 'health', 'logs'] as const;
-type Page = typeof pages[number];
-const isPage = (value: string): value is Page => (pages as readonly string[]).includes(value);
-const replayPages: readonly string[] = ['overview', 'monitor', 'devices', 'multicast', 'health'];
+const pages = ['monitor', 'topology', 'devices', 'details', 'logs'] as const;
+type Page = typeof pages[number] | 'switch';
+const replayPages: readonly string[] = ['monitor', 'switch', 'devices', 'details'];
 const empty: Overview = {
   switches: [],
   alerts: {
@@ -45,12 +49,10 @@ function put(key: string, value: string) {
 export default function App() {
   const [language] = useLang();
   useEffect(() => { document.documentElement.lang = language; }, [language]);
-  const [page, setPage] = useState(() => {
-    const v = get('view', 'overview');
-    return isPage(v) ? v : 'overview';
-  });
+  const [page, setPage] = useState<Page>('monitor');
+  const [detailTab, setDetailTab] = useState<'multicast' | 'dhcp' | 'health'>('multicast');
   const [theme, setTheme] = useState(() => get('theme', 'dark'));
-  const [muted, setMuted] = useState(() => get('muted', 'false') === 'true');
+  const [notifications, setNotifications] = useState(() => get('desktop-notifications', 'false') === 'true');
   const [overview, setOverview] = useState(empty);
   const [status, setStatus] = useState<Status>();
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -95,7 +97,8 @@ export default function App() {
     }
     if (!shown) setDialog('trap');
   }, [wall, dialog, trapFailed]);
-  const socket = useLiveFeed({ muted, replay: !!replay, settings, setOverview, setState, setEvents, setOnline });
+  const live = useLiveFeed({ setOverview, setState, setEvents, setOnline });
+  const socket = live.socket;
   const run = useCallback((f: () => Promise<void>) => {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -144,7 +147,7 @@ export default function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     put('theme', theme);
   }, [theme]);
-  useEffect(() => put('muted', String(muted)), [muted]);
+  useEffect(() => put('desktop-notifications', String(notifications)), [notifications]);
   useEffect(() => put('view', page), [page]);
   useEffect(() => {
     socket.current?.subscribe(replay ? 0 : selected);
@@ -194,9 +197,20 @@ export default function App() {
   });
   const select = (id: number) => {
     setSelected(id);
-    setPage('monitor');
+    setPage('switch');
   };
   const operations = useOperations({ online, replay: !!replay, profileId, setStatus, run });
+  const now = usePcTime();
+  const stopped = !replay && monitoringStopped(online && live.fresh, live.updatedAt, now);
+  const issues = issueAlerts(operations.alerts);
+  const issueCount = replay ? asArray(replay.states).reduce((count, state) => count + (state.alert_counts?.CRITICAL || 0) + (state.alert_counts?.WARNING || 0), 0) : issues.length;
+  const critical = replay ? asArray(replay.states).some(state => (state.alert_counts?.CRITICAL || 0) > 0) : issues.some(alert => alert.severity === 'CRITICAL');
+  const ready = replay ? !!replay.ts : operations.ready;
+  const activeDetailTab = replay && detailTab === 'dhcp' ? 'multicast' : detailTab;
+  useDesktopNotifications({ enabled: notifications, alerts: operations.alerts, profileId, ready, paused: !!replay || stopped });
+  useEffect(() => { document.title = `(${issueCount}) AVLine-Sight`; }, [issueCount]);
+  const summary = <OverallStatus count={issueCount} critical={critical} ready={ready} stopped={stopped} replay={!!replay} />;
+  const pageTitle = page === 'details' ? t('cleanup.details') : page === 'switch' ? t('cleanup.switchPorts') : t(`rack.nav.${page}`);
   const props = {
     overview,
     operations,
@@ -220,35 +234,9 @@ export default function App() {
     setWatch
   };
   return <div className={wall ? 'wall-shell' : 'min-h-screen'}>
-    <AppHeader
-      {...{
-        online,
-        phase: operations.phase || status?.phase,
-        onPhase: operations.setPhase,
-        onTrapHelp: props.onTrapHelp,
-        wall,
-        setWall,
-        theme,
-        setTheme,
-        muted,
-        setMuted,
-        status,
-        busy,
-        locked,
-        profiles,
-        settings,
-        part,
-        setPart,
-        replay,
-        overview,
-        marker,
-        run,
-        refresh,
-        setDialog,
-        setPage,
-        setReplay
-      }}
-    />
+    <AppHeader {...{ online, phase: operations.phase || status?.phase, onPhase: operations.setPhase, onTrapHelp: props.onTrapHelp,
+      wall, setWall, status, busy, locked, profiles, settings, part, setPart, replay, marker, run, refresh, setDialog, summary }} />
+    {stopped && <MonitorStopped updatedAt={live.updatedAt} />}
     {replay && !wall && <ScrubBar
       key={replay.id}
       sid={replay.id}
@@ -270,34 +258,39 @@ export default function App() {
     {!wall && busy && <div role="status" className="bg-amber-100 text-black">{t('rack.busy')}
     </div>}
     <div className={wall ? 'wall-content' : 'flex flex-col md:flex-row'}>
-      {!wall && <nav className="flex flex-wrap gap-1 bg-slate-200 p-3 dark:bg-slate-900 md:w-52 md:flex-col">
+      {!wall && <nav className="app-nav">
         {asArray(pages).map(v => <button
           key={v}
           disabled={!!replay && !replayPages.includes(v)}
-          aria-current={page === v ? 'page' : undefined}
+          aria-current={page === v || page === 'switch' && v === 'monitor' ? 'page' : undefined}
           onClick={() => setPage(v)}
         >
-          {t(`rack.nav.${v}`)}
+          {v === 'details' ? t('cleanup.details') : t(`rack.nav.${v}`)}
         </button>)}
       </nav>}
       <main className={wall ? 'wall-main' : 'min-w-0 flex-1 space-y-4 p-4'}>
-        {!wall && <h1 className="text-2xl font-bold">{t(`rack.nav.${page}`)}</h1>}
-        <ErrorBoundary key={wall ? 'wall' : page} name={wall ? t('rack.wall') : t(`rack.nav.${page}`)}>
-          {(wall || page === 'overview') && <OverviewView key={status?.profile.id || 0} {...props} />}
+        {!wall && <h1 className="text-2xl font-bold">{pageTitle}</h1>}
+        <ErrorBoundary key={wall ? 'wall' : page} name={wall ? t('rack.wall') : pageTitle}>
+          {(wall || page === 'monitor') && <PortMonitor key={status?.profile.id || 0} {...props} />}
 
           {!wall && page === 'topology' && <Topology {...props} />}
 
-          {!wall && page === 'monitor' && <PortMonitor {...props} />}
+          {!wall && page === 'switch' && <SwitchPorts {...props} />}
 
-          {!wall && page === 'ports' && <PortMatrix {...props} />}
 
           {!wall && page === 'devices' && <Devices {...props} />}
 
-          {!wall && page === 'multicast' && <MulticastView {...props} />}
-
-          {!wall && page === 'dhcp' && <DhcpView />}
-
-          {!wall && page === 'health' && <HealthAudit {...props} select={setSelected} />}
+          {!wall && page === 'details' && <>
+            <div role="tablist" aria-label={t('cleanup.details')} className="detail-tabs">
+              {(['multicast', 'dhcp', 'health'] as const).map(tab => <button key={tab} role="tab" id={`tab-${tab}`}
+                aria-controls="detail-panel" aria-selected={activeDetailTab === tab} disabled={!!replay && tab === 'dhcp'} onClick={() => setDetailTab(tab)}>{t(`rack.nav.${tab}`)}</button>)}
+            </div>
+            <div role="tabpanel" id="detail-panel" aria-labelledby={`tab-${activeDetailTab}`}>
+              {activeDetailTab === 'multicast' && <MulticastView {...props} />}
+              {activeDetailTab === 'dhcp' && <DhcpView />}
+              {activeDetailTab === 'health' && <HealthAudit {...props} select={setSelected} />}
+            </div>
+          </>}
 
           {!wall && page === 'logs' && <Logs {...props} />}
         </ErrorBoundary>
@@ -308,7 +301,11 @@ export default function App() {
     {!wall && !locked && dialog === 'export' && <ExportDialog close={() => setDialog('')} busy={busy} run={run} />}
 
     {!wall && dialog === 'trap' && <TrapHelp close={() => setDialog('')} error={status?.trap.error} />}
-    {!wall && !locked && dialog === 'settings' && settings && <SettingsDialog
+    {!wall && dialog === 'settings' && settings && <SettingsDialog
+      key={profileId}
+      locked={locked}
+      tools={<SettingsTools {...{ theme, setTheme, notifications, setNotifications, busy, locked, groups: operations.groups, profileId, run, setDialog }}
+        replay={!!replay} refresh={operations.refresh} setReplay={next => { setPage('monitor'); setReplay(next); }} />}
       value={settings}
       webAddr={status?.web_addr}
       close={() => {

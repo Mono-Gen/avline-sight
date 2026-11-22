@@ -59,6 +59,7 @@ func run() error {
 		slow     = flag.Duration("slow", poller.DefaultIntervals.Slow, "Slow周期")
 		debug    = flag.Bool("debug", false, "デバッグログ")
 	)
+	flag.Usage = func() { printUsage(flag.CommandLine) }
 	flag.Parse()
 	lvl := slog.LevelInfo
 	if *debug {

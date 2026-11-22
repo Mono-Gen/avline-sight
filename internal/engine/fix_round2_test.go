@@ -51,7 +51,7 @@ func TestRegisteredSwitchNameSurvivesStalePoll(t *testing.T) {
 }
 
 func TestRemovedSwitchClearsActiveAlerts(t *testing.T) {
-	for _, remove := range []string{"disable", "disable in work", "delete"} {
+	for _, remove := range []string{"disable", "disable in setup", "delete"} {
 		t.Run(remove, func(t *testing.T) {
 			e, st := newTestEngine(t)
 			switches, err := st.Switches(e.ProfileID())
@@ -65,8 +65,8 @@ func TestRemovedSwitchClearsActiveAlerts(t *testing.T) {
 			if err := e.Ack(e.Alerts()[0].EventID, false); err != nil {
 				t.Fatal(err)
 			}
-			if remove == "disable in work" {
-				if err := e.SetWork("*", 15); err != nil {
+			if remove == "disable in setup" {
+				if err := e.SetPhase("setup"); err != nil {
 					t.Fatal(err)
 				}
 			}

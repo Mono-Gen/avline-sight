@@ -88,6 +88,7 @@ func englishMessage(value string) string {
 }
 
 var errorFragments = [][2]string{
+	{"Ping間隔は30〜3600秒の整数で指定してください", "Enter an integer ping interval between 30 and 3600 seconds"},
 	{"JSONの形式が不正です: ", "Invalid JSON: "},
 	{"行にエラーがあります", " rows contain errors"},
 	{"1回の上限は", "The limit per request is "},
@@ -197,7 +198,7 @@ var errorEnglish = map[string]string{
 	"障害を注入できません":                                                  "Unable to inject the fault",
 	"運用フェーズを変更できません":                                              "Unable to change the operating phase",
 	"運用フェーズが不正です":                                                 "The operating phase is invalid",
-	"setup/rehearsal/show/teardown から指定してください":                    "Choose setup, rehearsal, show or teardown",
+	"setup/rehearsal/show から指定してください":                             "Choose setup, rehearsal or show",
 	"運用フェーズを保存できません":                                              "Unable to save the operating phase",
 	"グループ一覧を取得できません":                                              "Unable to load groups",
 	"作業中を開始できません":                                                 "Unable to start work mode",

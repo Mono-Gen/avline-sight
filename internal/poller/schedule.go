@@ -120,7 +120,7 @@ func (q *requests) takeFDB(now time.Time, slow bool) bool {
 }
 
 func intervalForPhase(base time.Duration, tier, phase string) time.Duration {
-	if phase != "setup" && phase != "teardown" {
+	if phase != "setup" {
 		return base
 	}
 	if tier == "slow" {

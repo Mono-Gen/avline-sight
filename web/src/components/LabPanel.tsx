@@ -30,7 +30,7 @@ export function LabPanel({ run, busy, switches }: {
   const current = asArray(options).find(item => String(item.id) === selected) || options[0];
   return (
     <section className="panel space-y-2">
-      <h2>{t('ui.m141')}</h2>
+      <h2>{t('cleanup.lab')}</h2>
       <label>{t('ui.m018')}<select
         value={current?.id || ''}
         disabled={busy || !options.length}

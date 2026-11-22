@@ -3,7 +3,7 @@ import { t } from '../i18n';
 import { pcTimestamp, usePcTime } from '../pcTime';
 import type { Phase } from '../types';
 
-const phases: Phase[] = ['setup', 'rehearsal', 'show', 'teardown'];
+const phases: Phase[] = ['setup', 'rehearsal', 'show'];
 
 export function changePhase(phase: Phase, run: (action: () => Promise<void>) => void, onPhase: (phase: Phase) => void) {
   if (!window.confirm(t('rack.phaseConfirm', { phase: t(`rack.${phase}`), effect: t(`rack.${phase}Effect`) }))) return;

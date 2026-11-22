@@ -63,7 +63,7 @@ func TestLocalizedErrorsAndLock(t *testing.T) {
 	r.Header.Set("Accept-Language", "en")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
-	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "Choose setup, rehearsal, show or teardown") {
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "Choose setup, rehearsal or show") {
 		t.Fatalf("handler error was not translated: %d %s", w.Code, w.Body)
 	}
 }

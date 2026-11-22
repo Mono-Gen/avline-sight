@@ -17,8 +17,8 @@ func (s *Server) putPhase(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "運用フェーズを変更できません", err.Error(), "")
 		return
 	}
-	if in.Phase != "setup" && in.Phase != "rehearsal" && in.Phase != "show" && in.Phase != "teardown" {
-		writeErr(w, 400, "運用フェーズが不正です", "setup/rehearsal/show/teardown から指定してください", "")
+	if in.Phase != "setup" && in.Phase != "rehearsal" && in.Phase != "show" {
+		writeErr(w, 400, "運用フェーズが不正です", "setup/rehearsal/show から指定してください", "")
 		return
 	}
 	if err := s.Engine.SetPhase(in.Phase); err != nil {
@@ -57,54 +57,6 @@ func (s *Server) knownGroup(group string) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-func (s *Server) startWork(w http.ResponseWriter, r *http.Request) {
-	s.groupMu.Lock()
-	defer s.groupMu.Unlock()
-	if !s.checkGroupProfile(w, r) {
-		return
-	}
-	var in struct {
-		Group   *string `json:"group"`
-		Minutes int     `json:"minutes"`
-	}
-	if err := readJSON(r, &in); err != nil || in.Group == nil {
-		writeErr(w, 400, "作業中を開始できません", "group と minutes が必要です", "")
-		return
-	}
-	if in.Minutes != 15 && in.Minutes != 30 && in.Minutes != 60 && in.Minutes != 120 {
-		writeErr(w, 400, "作業時間が不正です", "15/30/60/120 分から指定してください", "")
-		return
-	}
-	ok, err := s.knownGroup(*in.Group)
-	if err != nil {
-		writeErr(w, 500, "グループを確認できません", err.Error(), "")
-		return
-	}
-	if !ok {
-		writeErr(w, 404, "グループが見つかりません", "", "")
-		return
-	}
-	if err := s.Engine.SetWork(*in.Group, in.Minutes); err != nil {
-		writeErr(w, 500, "作業中を保存できません", err.Error(), "")
-		return
-	}
-	s.groups(w, r)
-}
-
-func (s *Server) endWork(w http.ResponseWriter, r *http.Request) {
-	s.groupMu.Lock()
-	defer s.groupMu.Unlock()
-	if !s.checkGroupProfile(w, r) {
-		return
-	}
-	group := r.PathValue("group")
-	if err := s.Engine.EndWork(group); err != nil {
-		writeErr(w, 500, "作業中を解除できません", err.Error(), "")
-		return
-	}
-	s.groups(w, r)
 }
 
 func (s *Server) resetGroupCounters(w http.ResponseWriter, r *http.Request) {

@@ -1,5 +1,6 @@
 import { t } from '../i18n';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { api, json } from '../api';
 import { asArray } from '../format';
 import type { Settings } from '../types';
@@ -24,15 +25,18 @@ const thresholdLabels: Record<string, string> = {
 };
 const commaList = (value: string) => asArray(value.split(',')).map(item => item.trim()).filter(Boolean);
 
-export function SettingsDialog({ value, close, run, busy, webAddr }: {
+export function SettingsDialog({ value, close, run, busy, webAddr, locked = false, tools }: {
   value: Settings;
+  locked?: boolean;
+  tools?: ReactNode;
   webAddr?: string;
   close: () => void;
   run: (action: () => Promise<void>) => void;
   busy: boolean;
 }) {
   const [thresholds, setThresholds] = useState({ ...value.thresholds });
-  const [sound, setSound] = useState(value.alert_sound);
+  const [setupPing, setSetupPing] = useState(value.setup_ping_interval_sec ?? 60);
+  const [rehearsalPing, setRehearsalPing] = useState(value.rehearsal_ping_interval_sec ?? 60);
   const [views, setViews] = useState<ViewDraft[]>(() => asArray(value.views).map(view => ({
     id: view.id,
     name: view.name,
@@ -58,11 +62,15 @@ export function SettingsDialog({ value, close, run, busy, webAddr }: {
       setValidation(t('ui.m178'));
       return;
     }
+    if ([setupPing, rehearsalPing].some(seconds => !Number.isInteger(seconds) || seconds < 30 || seconds > 3600)) {
+      setValidation(t('cleanup.pingInvalid')); return;
+    }
     setValidation('');
     run(async () => {
       await api('/api/settings', json('PUT', {
         thresholds,
-        alert_sound: sound,
+        setup_ping_interval_sec: setupPing,
+        rehearsal_ping_interval_sec: rehearsalPing,
         views: parsed
       }));
       close();
@@ -72,7 +80,8 @@ export function SettingsDialog({ value, close, run, busy, webAddr }: {
   return (
     <Dialog title={t('ui.m179')} close={close}>
       {webAddr?.startsWith('127.0.0.1:') && <p role="status">ⓘ {t('rack.loopback')}</p>}
-      <fieldset disabled={busy} className="space-y-4">
+      {tools}
+      <fieldset disabled={busy || locked} className="space-y-4">
         <legend className="font-bold">{t('ui.m180')}</legend>
         <div className="grid gap-2 sm:grid-cols-2">
           {asArray(Object.entries(thresholds)).map(([key, number]) => (
@@ -91,7 +100,9 @@ export function SettingsDialog({ value, close, run, busy, webAddr }: {
             </label>
           ))}
         </div>
-        <label className="block"><input type="checkbox" checked={sound} onChange={event => setSound(event.target.checked)} /> {t('ui.m181')}</label>
+        <label className="block">{t('cleanup.setupPing')} <input type="number" min="30" max="3600" step="1" value={Number.isFinite(setupPing) ? setupPing : ''} onChange={event => setSetupPing(event.target.value === '' ? NaN : Number(event.target.value))} /></label>
+        <label className="block">{t('cleanup.rehearsalPing')} <input type="number" min="30" max="3600" step="1" value={Number.isFinite(rehearsalPing) ? rehearsalPing : ''} onChange={event => setRehearsalPing(event.target.value === '' ? NaN : Number(event.target.value))} /></label>
+        <p>{t('cleanup.pingBounds')}</p>
         <h3 className="font-bold">{t('ui.m182')}</h3>
         {asArray(views).map((view, index) => (
           <div key={view.id} className="grid gap-2 rounded border p-2">

@@ -8,13 +8,15 @@ import { PortDetail } from '../components/PortDetail';
 import { RackRow } from '../components/RackRow';
 import { asArray } from '../format';
 import { t } from '../i18n';
-import { pcTimestamp, usePcTime } from '../pcTime';
+import { pcTimestamp } from '../pcTime';
 import { criticalLink, isPortAlert, phaseSuppressesPorts, sortedAlerts, uplinkPorts } from '../rackModel';
 import type { Alert, InventoryRow, Port, SwitchConfig, SwitchSummary } from '../types';
 import { useRackData } from '../useRackData';
 import { registeredSummary, replaySummary } from './rackSummaries';
 import type { ViewProps } from './props';
 import type { Operations } from '../useOperations';
+import { PortMatrix } from './PortMatrix';
+import { WallSwitchTile } from '../components/WallSwitchTile';
 
 const collapseKey = 'rack-collapsed';
 function readCollapsed() {
@@ -23,12 +25,6 @@ function readCollapsed() {
   } catch {
     return new Set<string>();
   }
-}
-
-function WorkBadge({ until }: { until?: string | null }) {
-  const clock = usePcTime();
-  const minutes = until ? Math.ceil((Date.parse(until) - clock) / 60000) : 0;
-  return minutes > 0 ? <span className="work-badge">{t('rack.work', { minutes })}</span> : null;
 }
 
 type Sample = { rx: number; tx: number };
@@ -69,6 +65,7 @@ const noDevices: InventoryRow[] = [];
 
 export function OverviewView(props: OverviewProps) {
   const { wall = false, operations, onTrapHelp = () => undefined, replay, locked, busy } = props;
+  const [layout, setLayout] = useState<'diagram' | 'list'>('diagram');
   const [edit, setEdit] = useState<SwitchConfig | null>();
   const [discover, setDiscover] = useState(false);
   const [groupEdit, setGroupEdit] = useState<GroupEdit>();
@@ -124,20 +121,29 @@ export function OverviewView(props: OverviewProps) {
   const refresh = async () => {
     await Promise.all([rack.refresh(), operations?.refresh()]);
   };
-  const allCollapsed = groups.length > 0 && groups.every(name => collapsed.has(name));
   const phase = operations?.phase || props.status?.phase;
   const selectedSwitch = selected && visible.find(item => item.id === selected.switchId);
   const selectedPort = selected && ports.get(selected.switchId)?.find(row => row.port.if_index === selected.ifIndex)?.port;
   const profileId = props.status?.profile.id;
   const actionProps = { locked, wall, busy, devices, run: props.run, refresh, notice: setNotice, replay: replay !== null, profileId };
-  const dense = wall && visible.length > 10;
-  return <div className={`rack-overview ${dense ? 'rack-dense' : ''}`}>
+  if (wall) return <div className="wall-monitor">
+    {replay === null && <AlertBand alerts={alerts} wall pending={!operations?.ready} />}
+    <div className="wall-switches" style={{ '--switch-count': visible.length } as React.CSSProperties}>
+      {!visible.length && <p>{rack.data ? t('rack.empty') : t('rack.loading')}</p>}
+      {visible.map(sw => <WallSwitchTile key={sw.id} summary={sw} alerts={byAlert.get(sw.id) || []}
+        ports={(ports.get(sw.id) || []).map(row => row.port)} devices={bySwitch.get(sw.id) || []} stale={!!rack.error} suppressed={!!phase && phaseSuppressesPorts(phase) && replay === null} />)}
+    </div>
+  </div>;
+  return <div className="rack-overview">
     {replay === null && <AlertBand alerts={alerts} wall={wall} busy={busy} ack={operations?.ack} pending={!operations?.ready && !operations?.alerts.length} />}
     {!wall && operations?.toast && <div className="rack-toast" role="status">✓ {operations.toast}</div>}
     {!wall && <div className="rack-toolbar">
       <strong>{t('rack.all')}</strong>
-      <GroupActions {...actionProps} group="*" all collapse={() => saveCollapsed(allCollapsed ? new Set() : new Set(groups))}
-        collapseLabel={t(allCollapsed ? 'operations.expandAll' : 'operations.collapseAll')} onEdit={() => setGroupEdit('order')} />
+      <GroupActions {...actionProps} group="*" all />
+      <div role="group" aria-label={t('cleanup.layout')}>
+        <button aria-pressed={layout === 'diagram'} onClick={() => setLayout('diagram')}>{t('cleanup.diagram')}</button>
+        <button aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>{t('cleanup.list')}</button>
+      </div>
       {!locked && <>
         <button disabled={busy} onClick={() => setEdit(null)}>{t('rack.add')}</button>
         <button disabled={busy} onClick={() => setDiscover(true)}>{t('rack.discover')}</button>
@@ -146,12 +152,10 @@ export function OverviewView(props: OverviewProps) {
     </div>}
     {!wall && notice && <div role="status" className="panel flex items-center justify-between gap-2">{notice}<button onClick={() => setNotice('')}>{t('rack.close')}</button></div>}
     {rack.error && <p role="alert" className="rack-data-error">⚠ {rack.error}</p>}
-    <div className="rack-groups">
+    {layout === 'list' ? <PortMatrix {...props} /> : <div className="rack-groups">
       {!visible.length && <p>{rack.data ? t('rack.empty') : t('rack.loading')}</p>}
       {groups.map(name => {
         const rows = groupRows.get(name) || [];
-        const until = knownGroups.get(name)?.work_until;
-        const working = !!until && Date.parse(until) > Date.now();
         const isClosed = !wall && collapsed.has(name);
         const shown = rows.flatMap(sw => byAlert.get(sw.id) || []).filter(alert => !alert.suppressed);
         const critical = shown.filter(alert => alert.severity === 'CRITICAL').length;
@@ -166,17 +170,18 @@ export function OverviewView(props: OverviewProps) {
             <h2>{name || t('rack.ungrouped')}</h2>
             <span className="rack-critical-count" aria-label={t('rack.critical')}>✖ {critical}</span>
             <span className="rack-warning-count" aria-label={t('rack.warning')}>▲ {warning}</span>
-            {until && <WorkBadge until={until} />}
-            <GroupActions {...actionProps} group={name} collapse={collapse} collapseLabel={t(isClosed ? 'rack.expand' : 'rack.collapse')} onEdit={() => setGroupEdit({ name })} />
+            <button className="group-collapse" aria-label={t(isClosed ? 'rack.expand' : 'rack.collapse')} aria-expanded={!isClosed} onClick={collapse}>{isClosed ? '+' : '−'}</button>
+            <GroupActions {...actionProps} group={name} />
+            {!locked && <button disabled={busy} aria-label={t('operations.rename')} onClick={() => setGroupEdit({ name })}>✎</button> }
           </div>
           {!isClosed && rows.map(sw => <RackRow key={sw.id} summary={sw}
             ports={(ports.get(sw.id) || []).map(row => row.port)} devices={bySwitch.get(sw.id) || []} alerts={byAlert.get(sw.id) || []}
-            definitions={rack.definitions} suppressed={working || (!!phase && phaseSuppressesPorts(phase) && replay === null)}
+            definitions={rack.definitions} suppressed={!!phase && phaseSuppressesPorts(phase) && replay === null}
             wall={wall} stale={!!rack.error} uplinks={uplinks} samples={samples} actions={props}
             onPort={port => setSelected({ switchId: sw.id, ifIndex: port.if_index })} onEdit={setEdit} onHelp={onTrapHelp} refresh={refresh} />)}
         </section>;
       })}
-    </div>
+    </div>}
     {!wall && selected && selectedSwitch && selectedPort && <PortDetail key={`${selected.switchId}/${selected.ifIndex}`}
       switchId={selected.switchId} switchName={selectedSwitch.name} port={selectedPort}
       devices={(bySwitch.get(selected.switchId) || []).filter(device => device.if_index === selected.ifIndex)}

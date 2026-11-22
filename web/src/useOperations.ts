@@ -78,15 +78,8 @@ export function useOperations({ online, replay, profileId, setStatus, run }: {
         const old = new Map(asArray(previous.current).map(alert => [alert.event_id, alert]));
         hydrate(asArray(item.data).map(alert => ({ ...old.get(alert.event_id), ...alert })));
       }
-      if (item.type === 'work_changed') {
-        revision.current.groups++;
-        setGroups(old => {
-          const rank = new Map(old.map((group, index) => [group.name, index]));
-          return asArray(item.data).sort((a, b) => Number(a.name === '') - Number(b.name === '') ||
-            (rank.get(a.name) ?? Infinity) - (rank.get(b.name) ?? Infinity) || a.name.localeCompare(b.name));
-        });
-      }
       if (item.type === 'groups_changed') {
+        revision.current.groups++;
         void feed.refresh().catch(() => undefined);
       }
       if (item.type === 'phase_changed') {

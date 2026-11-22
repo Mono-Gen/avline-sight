@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -9,7 +8,6 @@ import (
 	"unicode"
 
 	"github.com/Mono-Gen/avline-sight/internal/engine"
-	"github.com/Mono-Gen/avline-sight/internal/store"
 )
 
 func validGroupName(name string) bool {
@@ -81,9 +79,6 @@ func (s *Server) renameGroupTo(w http.ResponseWriter, r *http.Request, oldName, 
 	}
 	found, err := s.Store.RenameGroup(r.Context(), s.Engine.ProfileID(), oldName, newName)
 	switch {
-	case errors.Is(err, store.ErrGroupWorking):
-		writeErr(w, 409, "作業中のグループは名前を変更できません", "", "作業中を終了してから名前を変更してください")
-		return
 	case err != nil:
 		writeErr(w, 500, "グループ名を保存できません", err.Error(), "")
 		return

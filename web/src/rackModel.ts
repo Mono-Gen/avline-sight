@@ -31,7 +31,7 @@ export function sortedAlerts(alerts: Alert[]): Alert[] {
     severity(left.severity) - severity(right.severity) || Date.parse(right.ts) - Date.parse(left.ts) || right.event_id - left.event_id);
 }
 
-export function phaseSuppressesPorts(phase: Phase) { return phase === 'setup' || phase === 'teardown'; }
+export function phaseSuppressesPorts(phase: Phase) { return phase === 'setup'; }
 
 export function uplinkPorts(topology: Topology | undefined, switches: SwitchSummary[]): Set<string> {
   const ids = new Set(asArray(topology?.nodes).filter(node => node.kind === 'switch' &&

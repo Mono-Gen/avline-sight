@@ -53,7 +53,7 @@ func TestLinkFlapOneShotDedupeAndSuppression(t *testing.T) {
 	if err := e.SetPhase("show"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.SetWork("*", 15); err != nil {
+	if err := e.SetPhase("setup"); err != nil {
 		t.Fatal(err)
 	}
 	flap(4, time.Now())

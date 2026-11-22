@@ -61,7 +61,8 @@ export interface Profile {
 }
 export interface Settings {
   thresholds: Record<string, number>;
-  alert_sound: boolean;
+  setup_ping_interval_sec: number;
+  rehearsal_ping_interval_sec: number;
   views: ViewPreset[];
 }
 export interface ViewPreset {

@@ -3,6 +3,19 @@ import { eventEn } from './eventEn';
 import type { Dictionary } from './index';
 import { rackEn } from './rack';
 export const en: Dictionary = {
+  cleanup: {
+    details: 'Details', diagram: 'Diagram', list: 'List', layout: 'Layout',
+    normal: 'All normal', issues: '{count} issues', pending: 'Checking status', unknown: 'Status unknown',
+    stopped: 'Monitoring stopped', lastUpdate: 'Last update {at}', stoppedHelp: 'The connection or updates have stopped. Check the server and network.',
+    setupPing: 'Setup ping interval (seconds)', rehearsalPing: 'Rehearsal ping interval (seconds)',
+    pingBounds: '30–3600 seconds; default 60. The 30-second minimum limits device load. Periodic ping stops during Show.',
+    pingInvalid: 'Enter an integer ping interval between 30 and 3600 seconds.',
+    notifications: 'Desktop notifications in this browser (off by default)', notificationDenied: 'Cannot enable desktop notifications. Check browser notification permission and a secure connection.',
+    notificationBody: '{count} new issues. Check the screen for locations and suggested actions.',
+    localSettings: 'Display and notifications in this browser', transfers: 'Data and groups', csvGroup: 'CSV export scope',
+    switchPorts: 'Switch port details', lab: 'Test only: virtual switches (hidden in production)',
+    allAlerts: '{count} unacknowledged', switchOK: '✓ Normal', switchUnknown: '— Status unknown',
+  },
   operations: operationsEn,
   ui: {
   "m001": "No data",
@@ -185,7 +198,6 @@ export const en: Dictionary = {
   "m178": "Cannot save settings: invalid name, number or VLAN. Enter VLANs from 1 to 4094.",
   "m179": "Settings",
   "m180": "Warning thresholds",
-  "m181": "Critical alert sound",
   "m182": "View preset",
   "m183": "VLANs (comma separated)",
   "m184": "Tags (comma separated)",

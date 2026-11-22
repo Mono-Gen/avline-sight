@@ -88,9 +88,6 @@ func (s *Server) Handler() http.Handler {
 	h("PUT /api/groups/{name}", s.renameGroup)
 	h("PUT /api/groups/{$}", s.renameGroup)
 	h("PUT /api/groups/order", s.setGroupOrder)
-	h("POST /api/work", s.startWork)
-	h("DELETE /api/work/{group}", s.endWork)
-	h("DELETE /api/work/{$}", s.endWork)
 	h("POST /api/counters/reset", s.resetGroupCounters)
 	h("POST /api/mode/lock", s.lock)
 	h("GET /api/system/nics", s.nics)
@@ -166,6 +163,7 @@ func (s *Server) Handler() http.Handler {
 	h("GET /ws/live", s.wsLive)
 	h("GET /ws/terminal/{id}", s.wsTerminal)
 
+	m.HandleFunc("/api/", http.NotFound)
 	if s.Static != nil {
 		fileServer := http.FileServer(http.FS(s.Static))
 		m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -312,9 +310,13 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
-	var in engine.Settings
+	in := engine.DefaultSettings()
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, 400, "設定を保存できません", err.Error(), "")
+		return
+	}
+	if err := in.Validate(); err != nil {
+		writeErr(w, 400, "設定を保存できません", "Ping間隔は30〜3600秒の整数で指定してください", "")
 		return
 	}
 	if err := s.Engine.SaveSettings(in); err != nil {

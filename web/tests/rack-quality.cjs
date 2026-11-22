@@ -124,20 +124,20 @@ test('CPU・温度・PoEの無効なしきい値では数値を異常扱いし�
   assert.match(render(RackRow, { ...props, summary: { ...props.summary, temp_state: 'critical' } }), /health-abnormal/);
 });
 
-test('閲覧専用ロックではフェーズ・作業・Ping・リセット・グループ編集を隠し、CSVと確認は許可する', () => {
+test('閲覧専用ロックではフェーズ変更を隠し、Pingとリセットを無効にして確認は許可する', () => {
   assert.doesNotMatch(render(PhaseControls, { ...controls, locked: true }), /<select/);
   const html = render(GroupActions, { ...group, locked: true });
-  assert.doesNotMatch(html, /data-action="(?:work|ping|reset|edit-group)"/);
-  assert.match(html, /export\.csv/);
+  assert.equal((html.match(/disabled=""/g) || []).length, 2);
+  assert.doesNotMatch(html, /data-action="work"|group-menu|export\.csv/);
   const band = render(AlertBand, { alerts: [alert()], ack: noop });
   assert.match(band, /data-action="ack"/);
   assert.match(band, /data-action="ack-all"/);
 });
 
-test('旧データの * グループでは全台操作を表示せず改名できる', () => {
+test('旧データの * グループでは全台へのPingとリセットを無効にする', () => {
   const legacy = render(GroupActions, { ...group, group: '*' });
-  assert.doesNotMatch(legacy, /data-action="(?:work|ping|reset)"|export\.csv/);
-  assert.match(legacy, /data-action="edit-group"/);
+  assert.equal((legacy.match(/disabled=""/g) || []).length, 2);
+  assert.doesNotMatch(legacy, /export\.csv/);
   assert.match(render(GroupActions, { ...group, group: '*', all: true }), /data-action="reset"/);
 });
 

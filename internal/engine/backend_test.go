@@ -139,80 +139,45 @@ func TestAlertRestoreScopeAgeNewest(t *testing.T) {
 	}
 }
 
-func TestPhaseAndWorkSuppression(t *testing.T) {
+func TestPhaseSuppressionAndLegacyMigration(t *testing.T) {
 	e, st := newTestEngine(t)
 	h := &recordingHub{}
 	e.hub = h
-	for _, phase := range []string{"setup", "rehearsal", "show", "teardown"} {
+	for _, phase := range []string{"setup", "rehearsal", "show"} {
 		if err := e.SetPhase(phase); err != nil {
 			t.Fatal(err)
 		}
 		e.raise(map[string]bool{}, "port", alertEvent("PORT", 1))
 		e.raise(map[string]bool{}, "chassis", alertEvent("CPU_HIGH", 0))
-		ev := alertEvent("PING_FAIL", 0)
-		ev.Detail = map[string]any{"mac": "00:11:22:33:44:55"}
-		e.raise(map[string]bool{}, "device", ev)
-		want := 3
+		want := 2
 		if phase == "setup" {
 			want = 1
 		}
-		if phase == "teardown" {
-			want = 0
-		}
 		if got := e.Overview(false).Alerts[model.SevWarning]; got != want {
-			t.Fatalf("%s count=%d want=%d", phase, got, want)
+			t.Fatalf("%s: got %d want %d", phase, got, want)
 		}
 	}
-	if err := e.SetPhase("show"); err != nil {
+	if !h.has("phase_changed") || h.has("work_changed") {
+		t.Fatal("運用変更通知が不正")
+	}
+	if e.SetPhase("teardown") == nil || e.SetPhase("invalid") == nil {
+		t.Fatal("廃止・不正フェーズを受理")
+	}
+	if _, err := st.DB.Exec(`INSERT OR REPLACE INTO meta(k,v) VALUES('op_phase','teardown'),('work_mode',?)`, fmt.Sprintf(`{"*":%q}`, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))); err != nil {
 		t.Fatal(err)
-	}
-	if err := e.SetWork("", 15); err != nil {
-		t.Fatal(err)
-	}
-	for _, a := range e.Alerts() {
-		if !a.Suppressed || a.SuppressedBy != "work" {
-			t.Fatalf("作業中: %+v", a)
-		}
-	}
-	if got := e.Overview(false).Alerts[model.SevWarning]; got != 0 {
-		t.Fatal(got)
-	}
-	groups, err := e.Groups()
-	if err != nil || len(groups) != 1 || groups[0].WorkUntil == nil {
-		t.Fatalf("groups=%+v err=%v", groups, err)
 	}
 	restored := New(st, e.ProfileID(), nil)
-	if restored.Phase() != "show" {
-		t.Fatal("フェーズ永続化なし")
+	if restored.Phase() != "setup" {
+		t.Fatal("撤収は設営へ移行")
 	}
-	gs, _ := restored.Groups()
-	if len(gs) != 1 || gs[0].WorkUntil == nil {
-		t.Fatal("作業状態永続化なし")
-	}
-	e.clearPrefix("port", map[string]bool{})
-	if len(e.Alerts()) != 2 {
-		t.Fatal("抑止中にラッチした")
-	}
-	if err := e.ExpireWork(time.Now().Add(16 * time.Minute)); err != nil {
+	if err := restored.SetPhase("show"); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.Overview(false).Alerts[model.SevWarning]; got != 2 {
-		t.Fatal(got)
-	}
-	if err := e.ExpireWork(time.Now().Add(17 * time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if codes(t, st)["WORK_ENDED"] != 1 {
-		t.Fatal("期限切れイベントが重複")
-	}
-	if a := New(st, e.ProfileID(), nil).Alerts(); len(a) != 2 {
-		t.Fatalf("抑止復旧が再起動で復活: %+v", a)
-	}
-	if !h.has("phase_changed") || !h.has("work_changed") {
-		t.Fatal("運用変更通知なし")
-	}
-	if e.SetPhase("invalid") == nil || e.SetWork("*", 1) == nil {
-		t.Fatal("不正値を受理")
+	restored.raise(map[string]bool{}, "chassis", alertEvent("CPU_HIGH", 0))
+	for _, alert := range restored.Alerts() {
+		if alert.Suppressed {
+			t.Fatal("旧作業状態で抑止された")
+		}
 	}
 }
 
@@ -352,13 +317,13 @@ func TestPeriodicPingPhasesFailuresRecovery(t *testing.T) {
 	if hasAlert(e, "PING_FAIL") || len(e.Alerts()) != 1 || e.Alerts()[0].State != "latched" {
 		t.Fatal("Ping復旧時のラッチ")
 	}
-	if err := e.SetPhase("teardown"); err != nil {
+	if err := e.SetPhase("show"); err != nil {
 		t.Fatal(err)
 	}
 	before := p.count()
 	e.periodicPing(context.Background())
 	if p.count() != before {
-		t.Fatal("撤収で送信")
+		t.Fatal("本番で送信")
 	}
 	if err := e.SetPhase("setup"); err != nil {
 		t.Fatal(err)
@@ -397,7 +362,7 @@ func TestPeriodicPingCancellationAndParallelBound(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			done := make(chan struct{})
-			go func() { defer close(done); e.runPeriodicPing(ctx, time.Millisecond) }()
+			go func() { defer close(done); e.runPeriodicPing(ctx, func() time.Duration { return time.Millisecond }) }()
 			for i := 0; i < ping.MaxParallel; i++ {
 				select {
 				case <-p.started:
@@ -554,7 +519,7 @@ func TestDeviceRestoreUsesLatestGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Reload()
-	if err := e.SetWork("作業班", 15); err != nil {
+	if err := e.SetPhase("setup"); err != nil {
 		t.Fatal(err)
 	}
 	// DBのミリ秒精度に依存せず、移動前後の順序を固定する。

@@ -169,11 +169,12 @@ test('監視表は日本語見出しと文字付き重要度を表示する', ()
 
 test('設定編集はJSONではなく数値・チェック・パートのフォームを使う', () => {
   const html = render(SettingsDialog, { value: {
-    thresholds: { cpu_pct: 80 }, alert_sound: true,
+    thresholds: { cpu_pct: 80 }, setup_ping_interval_sec: 60, rehearsal_ping_interval_sec: 60,
     views: [{ id: 'audio', name: '音響', vlans: [10], tags: ['audio'], categories: [] }],
   }, close() {}, run() {}, busy: false });
   assert.match(html, /type="number"/);
-  assert.match(html, /type="checkbox"/);
+  assert.match(html, /min="30" max="3600"/);
+  assert.doesNotMatch(html, /重大アラート音/);
   assert.match(html, /VLAN（カンマ区切り）/);
   assert.match(html, /パートを追加/);
   assert.doesNotMatch(html, /textarea/);

@@ -50,9 +50,9 @@ func TestTrapRequestDebounceAndFDBCoalescing(t *testing.T) {
 }
 
 func TestPhaseIntervals(t *testing.T) {
-	for _, phase := range []string{"setup", "teardown", "show", "rehearsal"} {
+	for _, phase := range []string{"setup", "show", "rehearsal"} {
 		want := []time.Duration{3 * time.Second, 12 * time.Second, 45 * time.Second}
-		if phase == "setup" || phase == "teardown" {
+		if phase == "setup" {
 			want = []time.Duration{9 * time.Second, 36 * time.Second, 90 * time.Second}
 		}
 		for i, tier := range []string{"fast", "medium", "slow"} {

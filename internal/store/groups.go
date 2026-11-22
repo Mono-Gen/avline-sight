@@ -6,10 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
-	"time"
 )
-
-var ErrGroupWorking = errors.New("group is in work mode")
 
 func groupOrderKey(profileID int64) string {
 	return "group_order:" + strconv.FormatInt(profileID, 10)
@@ -61,14 +58,6 @@ func (s *Store) RenameGroup(ctx context.Context, profileID int64, oldName, newNa
 		return false, err
 	}
 	defer tx.Rollback()
-	// 期限を保持する監視エンジンとDBの間で作業モードが失われる変更を防ぐ。
-	var work map[string]time.Time
-	if err := readGroupMeta(ctx, tx, "work_mode", &work); err != nil {
-		return false, err
-	}
-	if oldName != "*" && oldName != newName && work[oldName].After(time.Now()) {
-		return false, ErrGroupWorking
-	}
 	result, err := tx.ExecContext(ctx, "UPDATE switches SET group_tag=? WHERE profile_id=? AND group_tag=?", newName, profileID, oldName)
 	if err != nil {
 		return false, err

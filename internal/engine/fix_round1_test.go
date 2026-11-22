@@ -34,15 +34,11 @@ func TestTransientFaultsLatchUntilAck(t *testing.T) {
 	}
 }
 
-func TestTransientFaultSuppressionAndRawTrapSoundFlag(t *testing.T) {
-	for _, mode := range []string{"setup", "teardown", "work"} {
+func TestTransientFaultSuppressionAndRawTrapFlag(t *testing.T) {
+	for _, mode := range []string{"setup"} {
 		t.Run(mode, func(t *testing.T) {
 			e, st := newTestEngine(t)
-			if mode == "work" {
-				if err := e.SetWork("*", 15); err != nil {
-					t.Fatal(err)
-				}
-			} else if err := e.SetPhase(mode); err != nil {
+			if err := e.SetPhase(mode); err != nil {
 				t.Fatal(err)
 			}
 			for _, category := range []string{"ANOMALY", "TRAP"} {
@@ -59,10 +55,10 @@ func TestTransientFaultSuppressionAndRawTrapSoundFlag(t *testing.T) {
 			}
 			for _, ev := range list {
 				if ev.Detail["_suppressed"] != true {
-					t.Fatalf("通知音向けの抑止フラグなし: %+v", ev)
+					t.Fatalf("通知向けの抑止フラグなし: %+v", ev)
 				}
 			}
-			if err := e.EndWork("*"); err != nil {
+			if err := e.SetPhase("show"); err != nil {
 				t.Fatal(err)
 			}
 			if err := e.SetPhase("show"); err != nil {
@@ -76,24 +72,16 @@ func TestTransientFaultSuppressionAndRawTrapSoundFlag(t *testing.T) {
 }
 
 func TestLinkFlapAfterSuppressionEndsLatches(t *testing.T) {
-	for _, mode := range []string{"work", "phase"} {
+	for _, mode := range []string{"phase"} {
 		t.Run(mode, func(t *testing.T) {
 			e, st := newTestEngine(t)
-			if mode == "work" {
-				if err := e.SetWork("*", 15); err != nil {
-					t.Fatal(err)
-				}
-			} else if err := e.SetPhase("teardown"); err != nil {
+			if err := e.SetPhase("setup"); err != nil {
 				t.Fatal(err)
 			}
 			ev := alertEvent("LINK_FLAP", 1)
 			ev.TS = time.Now().UTC().Add(-time.Second).Truncate(time.Millisecond)
 			e.OnEvent(ev)
-			if mode == "work" {
-				if err := e.EndWork("*"); err != nil {
-					t.Fatal(err)
-				}
-			} else if err := e.SetPhase("show"); err != nil {
+			if err := e.SetPhase("show"); err != nil {
 				t.Fatal(err)
 			}
 			ev.TS = ev.TS.Add(time.Second)

@@ -2,6 +2,19 @@ import { operationsJa } from './operations';
 import { eventJa } from './eventJa';
 import { rackJa } from './rack';
 export const ja = {
+  cleanup: {
+    details: '詳細', diagram: '図', list: '一覧', layout: '表示方法',
+    normal: 'すべて正常', issues: '異常 {count}件', pending: '状態を確認中', unknown: '状態不明',
+    stopped: '監視停止中', lastUpdate: '最終更新 {at}', stoppedHelp: '接続または更新が止まっています。サーバーとネットワークを確認してください。',
+    setupPing: '設営のPing間隔（秒）', rehearsalPing: 'リハのPing間隔（秒）',
+    pingBounds: '30〜3600秒。既定60秒。機器への負荷を抑えるため30秒未満にはできません。本番では定期Pingを停止します。',
+    pingInvalid: 'Ping間隔は30〜3600秒の整数で指定してください。',
+    notifications: 'このブラウザーのPC通知（既定OFF）', notificationDenied: 'PC通知を有効にできません。ブラウザーの通知許可と安全な接続を確認してください。',
+    notificationBody: '新しい異常 {count}件。画面で発生箇所と対処を確認してください。',
+    localSettings: 'このブラウザーの表示・通知', transfers: 'データとグループ', csvGroup: 'CSV書出の対象',
+    switchPorts: 'スイッチのポート詳細', lab: '試験用：仮想スイッチ（本番では表示されません）',
+    allAlerts: '未確認 {count}件', switchOK: '✓ 正常', switchUnknown: '— 状態不明',
+  },
   operations: operationsJa,
   ui: {
   "m001": "（データなし）",
@@ -184,7 +197,6 @@ export const ja = {
   "m178": "設定を保存できません（名前・数値・VLAN番号が不正です）。VLANは1〜4094で入力してください。",
   "m179": "設定",
   "m180": "警告しきい値",
-  "m181": "重大警告の通知音",
   "m182": "担当パート",
   "m183": "VLAN（カンマ区切り）",
   "m184": "タグ（カンマ区切り）",
