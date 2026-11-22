@@ -1,5 +1,9 @@
 import { issueAlerts } from './monitorHealth';
-import type { Alert, InventoryRow } from './types';
+import type { Alert, InventoryRow, SwitchState } from './types';
+
+export function replayIssueCount(states: SwitchState[]) {
+  return states.reduce((count, state) => count + (state.alert_counts?.CRITICAL || 0) + (state.alert_counts?.WARNING || 0), 0);
+}
 
 export function summarizeAlerts(alerts: Alert[]) {
   const items = issueAlerts(alerts).filter(alert => alert.active || !alert.acked);

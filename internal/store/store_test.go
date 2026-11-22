@@ -68,7 +68,16 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 
 	st := []*model.SwitchState{{ID: sw.ID, Name: "SW1", Ports: []*model.Port{{IfIndex: 1, Name: "1/0/1"}}}}
-	if err := s.InsertSnapshot(time.Now(), "periodic", st); err != nil {
+	legacyAt := time.Now().Add(-time.Second).Truncate(time.Millisecond)
+	legacy, err := gz(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`INSERT INTO state_snapshots(ts,trigger,state_gz) VALUES(?,?,?)`, ms(legacyAt), "periodic", legacy); err != nil {
+		t.Fatal(err)
+	}
+	snapshotAlerts := `[{"event_id":1,"switch_id":0,"severity":"WARNING"}]`
+	if err := s.InsertSnapshot(time.Now(), "periodic", Snapshot{States: st, Alerts: []byte(snapshotAlerts)}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,6 +101,14 @@ func TestStoreRoundTrip(t *testing.T) {
 	_, snap, err := r.SnapshotAt(time.Now())
 	if err != nil || len(snap) != 1 || snap[0].Ports[0].Name != "1/0/1" {
 		t.Fatalf("snapshot: %v %v", snap, err)
+	}
+	_, recorded, err := r.SnapshotWithAlertsAt(time.Now())
+	if err != nil || string(recorded.Alerts) != snapshotAlerts {
+		t.Fatalf("snapshot alerts: %s (%v)", recorded.Alerts, err)
+	}
+	_, old, err := r.SnapshotWithAlertsAt(legacyAt)
+	if err != nil || len(old.States) != 1 || old.States[0].ID != sw.ID || old.Alerts != nil {
+		t.Fatalf("legacy snapshot: %+v (%v)", old, err)
 	}
 	var comm string
 	r.DB.QueryRow(`SELECT community_ro FROM switches`).Scan(&comm)

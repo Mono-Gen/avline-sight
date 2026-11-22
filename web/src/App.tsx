@@ -21,12 +21,13 @@ import { Topology } from './views/Topology';
 import { useLiveFeed } from './useLiveFeed';
 import { t, useLang } from './i18n';
 import { useOperations } from './useOperations';
-import { summarizeAlerts } from './wallAlerts';
+import { replayIssueCount, summarizeAlerts } from './wallAlerts';
 import type { PortMonitorTarget } from './views/props';
 import { groupSwitches, hasGroupFilter } from './views/props';
 const pages = ['monitor', 'topology', 'devices', 'details', 'logs'] as const;
 type Page = typeof pages[number] | 'switch';
 const replayPages: readonly string[] = ['monitor', 'switch', 'devices', 'details'];
+const emptyReplay: SwitchState[] = [];
 const empty: Overview = {
   switches: [],
   alerts: {
@@ -187,7 +188,7 @@ export default function App() {
     const url = `/api/replay/${encodeURIComponent(replayId)}/snapshot?ts=${encodeURIComponent(replayStart)}`;
     void api<ReplaySnapshot>(url, { signal: controller.signal }).then(result => {
       if (controller.signal.aborted) return;      setReplay(old => old?.id === replayId && !old.ts
-        ? { ...old, ts: result.ts, requestedTs: replayStart, states: asArray(result.switches) }
+        ? { ...old, ts: result.ts, requestedTs: replayStart, states: asArray(result.switches), alerts: result.alerts }
         : old);
     }).catch(reason => {
       if (!controller.signal.aborted) setError(message(reason));
@@ -197,7 +198,7 @@ export default function App() {
   const snapshot = (id: string, ts: string) => run(async () => {
     const result = await api<ReplaySnapshot>(`/api/replay/${encodeURIComponent(id)}/snapshot?ts=${encodeURIComponent(ts)}`);
     setReplay(old => old?.id === id
-      ? { ...old, ts: result.ts, requestedTs: ts, states: asArray(result.switches) }
+      ? { ...old, ts: result.ts, requestedTs: ts, states: asArray(result.switches), alerts: result.alerts }
       : old);
   });
   const select = (id: number) => {
@@ -213,17 +214,22 @@ export default function App() {
   }, [groupSelection, hasGroup, part, replay, operations.ready]);
   const now = usePcTime();
   const stopped = !replay && monitoringStopped(online && live.fresh, live.updatedAt, now);
-  const alertSummary = summarizeAlerts(operations.alerts);
-  const issueCount = replay ? asArray(replay.states).reduce((count, state) => count + (state.alert_counts?.CRITICAL || 0) + (state.alert_counts?.WARNING || 0), 0) : alertSummary.count;
-  const critical = replay ? asArray(replay.states).some(state => (state.alert_counts?.CRITICAL || 0) > 0) : alertSummary.active > 0;
+  const legacyReplay = replay && replay.alerts === undefined;
+  const alertSummary = summarizeAlerts(replay ? asArray(replay.alerts) : operations.alerts);
+  const issueCount = legacyReplay ? replayIssueCount(asArray(replay.states)) : alertSummary.count;
+  const critical = legacyReplay ? asArray(replay.states).some(state => (state.alert_counts?.CRITICAL || 0) > 0) : alertSummary.active > 0;
   const ready = replay ? !!replay.ts : operations.ready;
+  const replaySummaryUnavailable = !!legacyReplay && ready && !asArray(replay.states).some(state => state.alert_counts != null);
   const activeDetailTab = replay && (detailTab === 'dhcp' || detailTab === 'config') ? 'multicast' : detailTab;
   useDesktopNotifications({ enabled: notifications, alerts: operations.alerts, profileId, ready, paused: !!replay || stopped });
-  useEffect(() => { document.title = `(${issueCount}) AVLine-Sight`; }, [issueCount]);
-  const summary = <OverallStatus count={issueCount} critical={critical} ready={ready} stopped={stopped} replay={!!replay}
-    active={!replay ? alertSummary.active : undefined} unacked={!replay ? alertSummary.unacked : undefined} />;
+  const viewScope = { overview, settings, part, group, replay: replay ? replay.states ?? emptyReplay : null };
+  const overallLabel = hasGroupFilter(viewScope) ? t('cleanup.overall') : '';
+  useEffect(() => {
+    document.title = `(${replaySummaryUnavailable ? '—' : issueCount}) AVLine-Sight${overallLabel ? ` · ${overallLabel}` : ''}`;
+  }, [issueCount, overallLabel, replaySummaryUnavailable]);
+  const summary = <OverallStatus count={issueCount} critical={critical} ready={ready} stopped={stopped || replaySummaryUnavailable} replay={!!replay}
+    label={overallLabel} active={legacyReplay ? undefined : alertSummary.active} unacked={legacyReplay ? undefined : alertSummary.unacked} />;
   const pageTitle = page === 'details' ? t('cleanup.details') : page === 'switch' ? t('cleanup.switchPorts') : t(`rack.nav.${page}`);
-  const viewScope = { overview, settings, part, group, replay: replay?.states || null };
   const props = {
     ...viewScope,
     operations,
@@ -239,6 +245,7 @@ export default function App() {
     },
     state,
     replayRef: replay?.ts ? { id: replay.id, ts: replay.ts } : undefined,
+    replayAlerts: replay?.alerts,
     events,
     setEvents,
     run,

@@ -48,6 +48,192 @@ const noop = () => {};
 const fault = (id, extra = {}) => ({ event_id: id, severity: 'WARNING', suppressed: false, acked: false, code: 'CUSTOM', title: 'Fault', ...extra });
 const headers = html => [...html.matchAll(/<th\b[^>]*>([^<]+)<\/th>/g)].map(match => match[1]);
 
+const groupedSwitches = [
+  { id: 1, name: 'West', group_tag: 'west', reachable: true },
+  { id: 2, name: 'East', group_tag: 'east', reachable: true },
+];
+const groupView = { overview: { switches: groupedSwitches }, group: 'west', replay: null, locked: true };
+const groupFaults = [
+  fault(1, { switch_id: 0, title: 'Network zero' }),
+  fault(2, { title: 'Network absent' }),
+  fault(3, { switch_id: 1, title: 'West fault' }),
+  fault(4, { switch_id: 2, title: 'East fault' }),
+].map(alert => ({ ...alert, active: true, ts: '2026-01-01T00:00:00Z' }));
+
+test('Group scope retains zero and absent switch IDs across monitoring views', () => {
+  const { OverviewView } = require('../src/views/Overview.tsx');
+  const findings = groupFaults;
+  const check = html => {
+    for (const title of ['Network zero', 'Network absent', 'West fault']) assert.ok(html.includes(title), title);
+    assert.doesNotMatch(html, /East fault/);
+  };
+  const props = { ...groupView, operations: { ready: true, alerts: findings } };
+  check(render(OverviewView, props));
+  const wall = render(OverviewView, { ...props, wall: true });
+  check(wall);
+  const globalTiles = [...wall.matchAll(/<article class="wall-switch-tile[^]*?<\/article>/g)].filter(([tile]) => tile.includes(t('wall.global')));
+  assert.equal(globalTiles.length, 1);
+  assert.match(globalTiles[0][0], /Network zero/);
+  assert.match(globalTiles[0][0], /Network absent/);
+
+  const { MulticastView } = sourceWith('../src/views/MulticastView.tsx', {
+    '../usePolling': { usePolling: () => ({ data: { multicast: { findings }, states: groupedSwitches } }) },
+    '../components/AvStatus': { AvStatus: () => null },
+  });
+  check(render(MulticastView, props));
+  const { DhcpView } = sourceWith('../src/views/DhcpView.tsx', {
+    '../usePolling': { usePolling: () => ({ data: { findings, servers: groupedSwitches.map(sw => ({
+      switch_id: sw.id, switch_name: sw.name, server_on: true,
+    })) } }) },
+  });
+  const dhcp = render(DhcpView, props);
+  check(dhcp);
+  assert.ok(dhcp.includes(t('ui.m249')));
+  assert.doesNotMatch(dhcp, />East<\/td>/);
+  const { HealthAudit } = sourceWith('../src/views/HealthAudit.tsx', {
+    '../usePolling': { usePolling: () => ({ data: { audit: { findings } } }) },
+  });
+  check(render(HealthAudit, { ...props, selected: 0 }));
+  const events = findings.map(({ event_id, ...alert }) => ({ ...alert, id: event_id, category: 'SYSTEM' }));
+  const { Logs } = sourceWith('../src/views/Logs.tsx', { '../usePolling': { usePolling: () => ({ data: events }) } });
+  check(render(Logs, { ...props, events: [] }));
+});
+
+test('Filtered live and replay monitors label the overall count and report outside groups in both modes', () => {
+  const { PortMonitor } = require('../src/views/PortMonitor.tsx');
+  const states = groupedSwitches.map(sw => ({
+    ...sw, health: {}, alert_counts: sw.id === 1 ? { WARNING: 1 } : { CRITICAL: 2 },
+  }));
+  const snapshot = { id: 'recording', ts: '2026-01-01T00:00:00Z', timeline: {}, states };
+  for (const wall of [false, true]) {
+    for (const { replay, count, outside } of [
+      { replay: null, count: 4, outside: 1 },
+      { replay: { ...snapshot, alerts: groupFaults.slice(1) }, count: 3, outside: 1 },
+      { replay: snapshot, count: 3, outside: 2 },
+    ]) {
+      const document = {};
+      const state = [];
+      let cursor = 0;
+      const App = sourceWith('../src/App.tsx', {
+        react: {
+          useState: initial => {
+            const index = cursor++;
+            if (!(index in state)) state[index] = initial === null ? replay : initial?.switches ? groupView.overview
+              : typeof initial === 'function' ? initial() : initial;
+            return [state[index], value => { state[index] = value; }];
+          },
+          useCallback: callback => callback,
+          useEffect: effect => { if (effect.toString().includes('document.title')) effect(); },
+          useRef: current => ({ current }),
+        },
+        './components/TerminalDrawer': { TerminalDrawer: () => null },
+        './i18n': { t, useLang: () => ['ja'] },
+        './pcTime': { usePcTime: () => 0 },
+        './monitorHealth': { ...require('../src/monitorHealth.ts'), monitoringStopped: () => false },
+        './useDesktopNotifications': { useDesktopNotifications: noop },
+        './useLiveFeed': { useLiveFeed: () => ({}) },
+        './useOperations': { useOperations: () => ({ ready: true, alerts: groupFaults, groups: [] }) },
+      }, { document, URLSearchParams, location: { search: `?wall=${Number(wall)}` } }).default;
+      const header = tree => elements(tree, node => node.type === AppHeader)[0].props;
+      const monitor = tree => elements(tree, node => node.type === PortMonitor)[0].props;
+      const { OverviewView } = require('../src/views/Overview.tsx');
+      const first = App();
+      assert.equal(document.title, `(${count}) AVLine-Sight`);
+      assert.ok(!render(OverviewView, monitor(first)).includes(t('cleanup.outsideGroup', { count: outside })));
+      header(first).setGroupSelection('group:west');
+      cursor = 0;
+      const filtered = App();
+      const { summary } = header(filtered);
+      assert.equal(header(filtered).wall, wall);
+      assert.equal(summary.props.count, count);
+      assert.ok(render(summary.type, summary.props).includes(`>${t('cleanup.overall')}</span>`));
+      assert.equal(document.title, `(${count}) AVLine-Sight · ${t('cleanup.overall')}`);
+      const html = render(OverviewView, monitor(filtered));
+      assert.ok(html.includes(t('cleanup.outsideGroup', { count: outside })));
+      if (replay?.alerts) {
+        assert.match(html, /Network absent/);
+        assert.doesNotMatch(html, /Network zero|East fault|data-action="ack/);
+      }
+    }
+  }
+});
+
+test('Multicast flags both kinds of querier conflict, including across groups', () => {
+  const vlan = (id, vlan, oper, address) => ({ switch_id: id, vlan, querier_oper: oper, last_querier: address, snooping: true });
+  const rows = [
+    vlan(1, 10, 'querier', '0.0.0.0'), vlan(2, 10, 'querier', '::'),
+    vlan(1, 20, 'non-querier', '192.0.2.1'), vlan(2, 20, 'non-querier', '192.0.2.2'),
+    vlan(1, 30, 'querier', '192.0.2.1'), vlan(2, 30, 'non-querier', '192.0.2.1'),
+    vlan(1, 40, 'querier', '0.0.0.0'), vlan(2, 40, 'non-querier', '::'),
+  ];
+  const { MulticastView } = sourceWith('../src/views/MulticastView.tsx', {
+    '../usePolling': { usePolling: () => ({ data: { multicast: { vlans: rows }, states: groupedSwitches } }) },
+    '../components/AvStatus': { AvStatus: () => null },
+  });
+  const html = render(MulticastView, groupView);
+  for (const [vlan, querierOK, querierReview] of [[10, 0, 1], [20, 0, 1], [30, 1, 0], [40, 1, 0]]) {
+    assert.ok(html.includes(t('pages.vlanSummary', { vlan, querierOK, querierReview, snoopingOK: 1, snoopingReview: 0 })));
+  }
+});
+
+test('Alert band bulk acknowledgement applies the same eligibility rules inside each visible scope', () => {
+  const alerts = [...groupFaults, fault(5, { switch_id: 1, suppressed: true }),
+    fault(6, { switch_id: 1, severity: 'INFO' }), fault(7, { switch_id: 1, acked: true, active: true }),
+    fault(8, { switch_id: 1, severity: 'CRITICAL', active: false })];
+  const { AlertBand: clickableBand } = sourceWith('../src/components/AlertBand.tsx', {}, { window: { confirm: () => true } });
+  let bandProps;
+  const { OverviewView } = sourceWith('../src/views/Overview.tsx', {
+    '../components/AlertBand': { AlertBand: props => { bandProps = props; return null; } },
+  });
+  const calls = [];
+  const eligible = [...acknowledgeableEventIds(alerts)];
+  const operations = { ready: true, alerts, ack: () => calls.push(eligible), ackMany: ids => calls.push(Array.from(ids)) };
+  for (const wall of [false, true]) {
+    for (const group of [undefined, 'west']) {
+      render(OverviewView, { ...groupView, group, locked: false, wall, operations });
+      const tree = clickableBand(bandProps);
+      elements(tree, node => node.props?.['data-action'] === 'ack-all')[0].props.onClick();
+      assert.deepEqual(calls.pop().sort((a, b) => a - b), group ? [1, 2, 3, 8] : [1, 2, 3, 4, 8]);
+    }
+  }
+});
+
+test('Multi-tag device CSV contains exactly the displayed rows in live mode and replay', async () => {
+  const rows = [
+    { group_tag: 'west', mac: '02:00:00:00:00:01', label: '=West, "Mixer"' },
+    { group_tag: 'east', mac: '02:00:00:00:00:02', label: 'East camera' },
+    { group_tag: 'other', mac: '02:00:00:00:00:03', label: 'Excluded' },
+  ];
+  const downloads = [];
+  let loading = false;
+  const { Devices, DeviceInventoryTable: InventoryTable } = sourceWith('../src/views/Devices.tsx', {
+    react: { ...React, useState: initial => [initial, noop] },
+    '../api': { download: (blob, name) => downloads.push({ blob, name }) },
+    '../usePolling': { usePolling: (_load, _interval, [key]) => ({ data: loading ? undefined : { key, rows } }) },
+  });
+  const props = { part: 'show', settings: { views: [{ id: 'show', tags: ['west', 'east'] }] } };
+  for (const replay of [null, []]) {
+    const replayRef = replay && { id: 'recording', ts: '2026-01-01T00:00:00Z' };
+    const draw = () => Devices({ ...props, replay, replayRef });
+    const exportButton = tree => elements(tree, node => node.type === 'button' && node.props.children === t('ui.m235'))[0];
+    loading = true;
+    assert.equal(exportButton(draw()).props.disabled, true);
+    loading = false;
+    const tree = draw();
+    const tableRows = elements(tree, node => node.type === InventoryTable)[0].props.rows;
+    assert.deepEqual(Array.from(tableRows, row => row.mac), ['02:00:00:00:00:01', '02:00:00:00:00:02']);
+    assert.equal(elements(tree, node => node.type === 'a' && node.props.href?.includes('export.csv')).length, 0);
+    exportButton(tree).props.onClick();
+    const { blob, name } = downloads.pop();
+    assert.equal(name, 'avline-sight-devices.csv');
+    const csv = await blob.text();
+    assert.match(csv, /02:00:00:00:00:01,"'=West, ""Mixer"""/);
+    assert.match(csv, /02:00:00:00:00:02,East camera/);
+    assert.doesNotMatch(csv, /02:00:00:00:00:03|Excluded/);
+    assert.equal(csv.trimEnd().split('\r\n').length, 3);
+  }
+});
+
 test('Details shows the latest baseline diff and recent configuration events in both languages', async () => {
   const captured = '2026-01-01T00:00:00Z';
   const baseline = { id: 9, name: 'Show', captured_ts: captured };

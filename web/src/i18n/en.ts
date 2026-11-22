@@ -17,6 +17,10 @@ export const en: Dictionary = {
     },
   },
   logs: { receivedAt: 'PC receive time (JST)', issuesOnly: 'Issues and warnings only', unackedOnly: 'Unacknowledged only', marker: 'Markers' },
+  deviceCsv: {
+    header: 'MAC,name,note,planned_ip,IP,vendor,lldp_name,switch,port,VLAN,PoE(W),link_speed,last_seen,source,Ping',
+    notDetected: 'Not detected',
+  },
   wall: {
     counts: '{active} active / {unacked} unacknowledged', exit: 'Return to normal view',
     locked: 'Cannot acknowledge while locked or read-only', recovered: 'Recovered · unacknowledged',
@@ -36,6 +40,7 @@ export const en: Dictionary = {
     localSettings: 'Display and notifications in this browser', transfers: 'Data and groups', csvGroup: 'CSV export scope',
     switchPorts: 'Switch port details', lab: 'Test only: virtual switches (hidden in production)',
     allAlerts: '{count} unacknowledged', switchOK: '✓ Normal', switchUnknown: '— Status unknown',
+    overall: 'Overall', outsideGroup: '{count} in other groups',
   },
   operations: operationsEn,
   pages: {

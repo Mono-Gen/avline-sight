@@ -41,3 +41,7 @@ export function groupSwitches({ group, part, settings, replay, overview }: ViewS
 export function hasGroupFilter({ group, part, settings }: ViewScope) {
   return group !== undefined || !!asArray(asArray(settings?.views).find(view => view.id === part)?.tags).length;
 }
+
+export function inGroupScope(row: { switch_id?: number }, visibleIds: ReadonlySet<number>, filtered: boolean) {
+  return !filtered || !row.switch_id || visibleIds.has(row.switch_id);
+}

@@ -1027,12 +1027,16 @@ func (s *Server) replaySnapshot(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		ts = time.Now()
 	}
-	at, states, err := rp.st.SnapshotAt(ts)
+	at, snapshot, err := rp.st.SnapshotWithAlertsAt(ts)
 	if err != nil {
 		writeErr(w, 404, "スナップショットがありません", err.Error(), "")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ts": at, "switches": states})
+	result := map[string]any{"ts": at, "switches": snapshot.States}
+	if snapshot.Alerts != nil {
+		result["alerts"] = snapshot.Alerts
+	}
+	writeJSON(w, 200, result)
 }
 
 func (s *Server) replayEvents(w http.ResponseWriter, r *http.Request) {

@@ -16,6 +16,10 @@ export const ja = {
     },
   },
   logs: { receivedAt: 'PC受信時刻 (JST)', issuesOnly: '異常・警告のみ', unackedOnly: '未確認のみ', marker: 'マーカー' },
+  deviceCsv: {
+    header: 'MAC,名称,メモ,予定IP,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元,Ping',
+    notDetected: '未検出',
+  },
   wall: {
     counts: '発生中 {active}件 / 未確認 {unacked}件', exit: '通常表示に戻る',
     locked: 'ロック中のため確認できません', recovered: '復旧済み・未確認',
@@ -35,6 +39,7 @@ export const ja = {
     localSettings: 'このブラウザーの表示・通知', transfers: 'データとグループ', csvGroup: 'CSV書出の対象',
     switchPorts: 'スイッチのポート詳細', lab: '試験用：仮想スイッチ（本番では表示されません）',
     allAlerts: '未確認 {count}件', switchOK: '✓ 正常', switchUnknown: '— 状態不明',
+    overall: '全体', outsideGroup: '他のグループに {count}件',
   },
   operations: operationsJa,
   pages: {

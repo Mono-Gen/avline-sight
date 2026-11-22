@@ -203,6 +203,7 @@ export interface ReplaySession {
   id: string;
   timeline: Timeline;
   states: SwitchState[];
+  alerts?: import('./operationTypes').Alert[];
   ts?: string;
   requestedTs?: string;
 }
@@ -210,6 +211,7 @@ export interface ReplaySession {
 export interface ReplaySnapshot {
   ts: string;
   switches: SwitchState[];
+  alerts?: import('./operationTypes').Alert[];
 }
 
 export interface InventoryRow {

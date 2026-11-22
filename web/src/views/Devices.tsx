@@ -1,11 +1,11 @@
 import { t } from '../i18n';
 import { useState } from 'react';
-import { api, json } from '../api';
+import { api, download, json } from '../api';
 import { Badge } from '../components/Badge';
 import { DeviceCsvImportDialog } from '../components/DeviceCsvImportDialog';
 import { confirmBulkPing } from '../components/GroupActions';
 import { PollingStatus } from '../components/PollingStatus';
-import { bulkPingTimeoutMs, deviceUrl, importSummary, MAX_BULK_PING, pingLabel, pingTargets } from '../deviceCsv';
+import { bulkPingTimeoutMs, deviceUrl, importSummary, MAX_BULK_PING, pingLabel, pingTargets, visibleDeviceCsv } from '../deviceCsv';
 import type { DeviceScope } from '../deviceCsv';
 import { asArray, decimal, formatTime } from '../format';
 import { pcTimestamp } from '../pcTime';
@@ -84,6 +84,7 @@ export function Devices(p: ViewProps) {
   const [notice, setNotice] = useState('');
   const [revision, setRevision] = useState(0);
   const preset = asArray(p.settings?.views).find(view => view.id === p.part);
+  const multiTag = (preset?.tags?.length ?? 0) > 1;
   const vlans = asArray(preset?.vlans);
   const isReplay = p.replay !== null;
   const replay = p.replayRef;
@@ -128,10 +129,13 @@ export function Devices(p: ViewProps) {
         <label>{t('ui.m234')}<input type="search" value={q} onChange={event => setQuery(event.target.value)} /></label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        {enabled && <>
+        {enabled && (multiTag ? <button disabled={inventory.data?.key !== key}
+          onClick={() => download(visibleDeviceCsv(rows), scope === 'unnamed' ? 'avline-sight-devices-unnamed.csv' : 'avline-sight-devices.csv')}>
+          {t(scope === 'unnamed' ? 'ui.m236' : 'ui.m235')}
+        </button> : <>
           <a className="underline" href={deviceUrl({ ...filters, scope: 'all' }, replay, true)} download>{t('ui.m235')}</a>
           <a className="underline" href={deviceUrl({ ...filters, scope: 'unnamed' }, replay, true)} download>{t('ui.m236')}</a>
-        </>}
+        </>)}
         <button disabled={Boolean(importDisabledReason) || p.busy} title={importDisabledReason} onClick={() => {
           setNotice('');
           setImportOpen(true);

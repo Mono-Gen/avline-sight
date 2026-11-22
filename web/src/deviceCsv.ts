@@ -1,4 +1,5 @@
 import { getLang, t } from './i18n';
+import { jstTime, pcTimestamp } from './pcTime';
 import type { DeviceAliasImportResponse, InventoryRow, PingStatus, ReplayRef } from './types';
 
 export type DeviceScope = 'all' | 'unnamed';
@@ -20,6 +21,27 @@ export function deviceUrl(filters: DeviceFilters, replay?: ReplayRef, download =
   if (filters.group !== undefined) params.set('group', filters.group);
   if (download) params.set('lang', getLang());
   return `${base}${download ? '/export.csv' : ''}?${params}`;
+}
+
+function csvCell(value: string | number | undefined) {
+  let text = String(value ?? '');
+  if (/^ *[\t\r\n']/.test(text) || (/^ *[=+\-@]/.test(text) && !/^[+-]?\d+(?:\.\d+)?$/.test(text))) text = "'" + text;
+  return /[",\r\n]|^\s/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+}
+
+export function visibleDeviceCsv(rows: InventoryRow[]) {
+  const records = rows.map(row => {
+    const lastSeen = row.last_seen ? pcTimestamp(row.last_seen, true) : '—';
+    const last = lastSeen === '—' ? t('deviceCsv.notDetected')
+      : row.seen ? lastSeen : `${lastSeen} (${t('deviceCsv.notDetected')})`;
+    const source = row.via_uplink ? `${row.source} (${t('ui.m223')})` : row.source;
+    const ping = row.ping && `${pingLabel(row.ping.status, row.ping.rtt_ms)} (${jstTime(row.ping.at)})`;
+    const speed = row.speed_mbps >= 1000 && row.speed_mbps % 1000 === 0 ? `${row.speed_mbps / 1000}G`
+      : row.speed_mbps > 0 ? `${row.speed_mbps}M` : '';
+    return [row.mac, row.label, row.note, row.planned_ip, row.ip, row.vendor, row.lldp_name, row.switch_name,
+      row.port, row.vlan || '', row.poe_w?.toFixed(1), speed, last, source, ping].map(csvCell).join(',');
+  });
+  return new Blob(['\uFEFF', t('deviceCsv.header'), '\r\n', ...records.flatMap(record => [record, '\r\n'])], { type: 'text/csv;charset=utf-8' });
 }
 
 export function decodeDeviceCsv(bytes: Uint8Array): {

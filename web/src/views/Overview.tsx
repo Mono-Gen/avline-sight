@@ -13,11 +13,11 @@ import type { Alert, InventoryRow, Port, SwitchConfig, SwitchSummary } from '../
 import { useRackData } from '../useRackData';
 import { registeredSummary, replaySummary } from './rackSummaries';
 import type { PortMonitorTarget, ViewProps } from './props';
-import { hasGroupFilter } from './props';
+import { hasGroupFilter, inGroupScope } from './props';
 import type { Operations } from '../useOperations';
 import { PortMatrix } from './PortMatrix';
 import { WallSwitchTile } from '../components/WallSwitchTile';
-import { isPortAlert, matchingPortAlerts, summarizeAlerts } from '../wallAlerts';
+import { isPortAlert, matchingPortAlerts, replayIssueCount, summarizeAlerts } from '../wallAlerts';
 import { ErrorSymbol } from '../components/ErrorSymbol';
 
 const collapseKey = 'rack-collapsed';
@@ -63,9 +63,9 @@ function indexBySwitch<T extends { switch_id?: number }>(rows: T[]) {
 
 type OverviewProps = ViewProps & {
   wall?: boolean; operations?: Operations; onTrapHelp?: () => void;
+  replayAlerts?: Alert[];
   target?: PortMonitorTarget; onClosePortDetail?: () => void;
 };
-const noAlerts: Alert[] = [];
 const noDevices: InventoryRow[] = [];
 
 export function OverviewView(props: OverviewProps) {
@@ -120,8 +120,14 @@ export function OverviewView(props: OverviewProps) {
     });
   }, [targetSwitch?.id, targetSwitch?.group_tag]);
   const byId = new Map(summary.map(item => [item.id, item]));
-  const alerts = sortedAlerts((replay !== null ? noAlerts : asArray(operations?.alerts))
-    .filter(alert => !groupFiltered || visibleIds.has(alert.switch_id)).map(alert => {
+  const live = replay === null;
+  const allAlerts = asArray(live ? operations?.alerts : props.replayAlerts);
+  const visibleAlert = (alert: Alert) => inGroupScope(alert, visibleIds, groupFiltered);
+  const outsideCount = !groupFiltered ? 0 : !live && props.replayAlerts === undefined
+    ? replayIssueCount(asArray(replay).filter(sw => sw.id && !visibleIds.has(sw.id)))
+    : summarizeAlerts(allAlerts.filter(alert => !visibleAlert(alert))).count;
+  const outsideNote = outsideCount > 0 && <p role="status">{t('cleanup.outsideGroup', { count: outsideCount })}</p>;
+  const alerts = sortedAlerts(allAlerts.filter(visibleAlert).map(alert => {
       const portAlert = isPortAlert(alert);
       const port = portAlert ? ports.get(alert.switch_id)?.find(row => row.port.if_index === alert.if_index)?.port : undefined;
       const devices = bySwitch.get(alert.switch_id);
@@ -129,6 +135,7 @@ export function OverviewView(props: OverviewProps) {
         portAlert ? devices?.find(row => row.if_index === alert.if_index && row.registered) || devices?.find(row => row.if_index === alert.if_index) : undefined;
       return {
         ...alert,
+        switch_id: alert.switch_id ?? 0,
         switch_name: alert.switch_name || byId.get(alert.switch_id)?.name || '',
         port: portAlert ? alert.port || port?.name || `#${alert.if_index}` : '',
         device_name: alert.device_name || device?.label || device?.lldp_name || device?.mac ||
@@ -162,7 +169,7 @@ export function OverviewView(props: OverviewProps) {
   const wallTiles = [...visible];
   for (const alert of wallSummary.items) {
     if (!wallTiles.some(sw => sw.id === alert.switch_id)) wallTiles.push({
-      ...registeredSummary({ id: alert.switch_id, name: alert.switch_name || t('wall.global'), ip: '', group_tag: '' } as SwitchConfig),
+      ...registeredSummary({ id: alert.switch_id, name: alert.switch_id ? alert.switch_name || t('wall.global') : t('wall.global'), ip: '', group_tag: '' } as SwitchConfig),
       reachable: true,
     });
   }
@@ -176,9 +183,10 @@ export function OverviewView(props: OverviewProps) {
   const wallFilter = wallTiles.find(sw => sw.id === wallSwitch);
   if (wall) return <div className="wall-monitor">
     {wallFilter && <div className="wall-filter-note">{t('wall.filter', { name: wallFilter.name })} <button onClick={() => setWallSwitch(undefined)}>{t('wall.clearFilter')}</button></div>}
-    {replay === null && <AlertBand alerts={wallFilter ? alerts.filter(alert => alert.switch_id === wallFilter.id) : alerts}
-      wall pending={!operations?.ready} busy={busy} locked={locked} ackMany={operations?.ackMany}
-      undoCount={operations?.undoCount} undo={operations?.undoAck} />}
+    {outsideNote}
+    {(live || props.replayAlerts !== undefined) && <AlertBand alerts={wallFilter ? alerts.filter(alert => alert.switch_id === wallFilter.id) : alerts}
+      wall pending={live && !operations?.ready} busy={busy} locked={locked} ackMany={live ? operations?.ackMany : undefined}
+      undoCount={live ? operations?.undoCount : undefined} undo={live ? operations?.undoAck : undefined} />}
     <h2 className="wall-switches-heading">{t('wall.current')}</h2>
     <div className="wall-switches" style={{ '--switch-count': visible.length } as React.CSSProperties}>
       {!visible.length && <p>{rack.data ? t('rack.empty') : t('rack.loading')}</p>}
@@ -187,9 +195,10 @@ export function OverviewView(props: OverviewProps) {
     </div>
   </div>;
   return <div className="rack-overview">
-    {replay === null && <AlertBand alerts={alerts} wall={wall} busy={busy} locked={locked} ack={operations?.ack}
-      ackMany={groupFiltered ? operations?.ackMany : undefined} undoCount={operations?.undoCount} undo={operations?.undoAck}
-      pending={!operations?.ready && !operations?.alerts.length} />}
+    {outsideNote}
+    {(live || props.replayAlerts !== undefined) && <AlertBand alerts={alerts} wall={wall} busy={busy} locked={locked} ack={live ? operations?.ack : undefined}
+      ackMany={live && groupFiltered ? operations?.ackMany : undefined} undoCount={live ? operations?.undoCount : undefined}
+      undo={live ? operations?.undoAck : undefined} pending={live && !operations?.ready && !operations?.alerts.length} />}
     {!wall && operations?.toast && <div className="rack-toast" role="status">✓ {operations.toast}</div>}
     {!wall && <div className="rack-toolbar">
       <div role="group" aria-label={t('cleanup.layout')}>

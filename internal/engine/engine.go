@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"sort"
 	"strings"
@@ -567,17 +568,29 @@ func (e *Engine) Run(ctx context.Context, ret store.Retention) {
 			return
 		case <-snapT.C:
 			e.mu.Lock()
-			due := time.Since(e.lastSnap) >= 30*time.Second || (e.snapDirty && time.Since(e.lastSnap) >= 5*time.Second)
+			at := time.Now().UTC()
+			elapsed := at.Sub(e.lastSnap)
+			due := elapsed >= 30*time.Second || (e.snapDirty && elapsed >= 5*time.Second)
 			trig := "periodic"
+			var states []*model.SwitchState
+			var alerts []Alert
 			if e.snapDirty {
 				trig = "event"
 			}
 			if due {
-				e.lastSnap, e.snapDirty = time.Now(), false
+				e.lastSnap, e.snapDirty = at, false
+				states = e.statesLocked()
+				if len(states) > 0 {
+					alerts = e.alertsLocked(at)
+				}
 			}
 			e.mu.Unlock()
-			if due && len(e.States()) > 0 {
-				if err := e.st.InsertSnapshot(time.Now().UTC(), trig, e.States()); err != nil {
+			if len(states) > 0 {
+				data, err := json.Marshal(alerts)
+				if err == nil {
+					err = e.st.InsertSnapshot(at, trig, store.Snapshot{States: states, Alerts: data})
+				}
+				if err != nil {
 					slog.Warn("スナップショット保存に失敗", "err", err)
 				}
 			}

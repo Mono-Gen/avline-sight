@@ -75,6 +75,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_ev_dedupe ON events(switch_id, dedupe_key) 
 CREATE TABLE IF NOT EXISTS state_snapshots (
   id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, trigger TEXT NOT NULL, state_gz BLOB NOT NULL);
 CREATE INDEX IF NOT EXISTS ix_ss_ts ON state_snapshots(ts);
+CREATE TABLE IF NOT EXISTS snapshot_alerts (
+  snapshot_id INTEGER PRIMARY KEY, alerts_gz BLOB NOT NULL);
+CREATE TRIGGER IF NOT EXISTS delete_snapshot_alerts AFTER DELETE ON state_snapshots
+  BEGIN DELETE FROM snapshot_alerts WHERE snapshot_id=OLD.id; END;
 CREATE TABLE IF NOT EXISTS device_bindings (
   id INTEGER PRIMARY KEY, switch_id INTEGER NOT NULL, if_index INTEGER NOT NULL, mac TEXT NOT NULL,
   oui_vendor TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '', vlan_id INTEGER NOT NULL DEFAULT 0,
@@ -976,31 +980,77 @@ func ungz(b []byte, dst any) error {
 	return json.Unmarshal(data, dst)
 }
 
-// InsertSnapshot は全スイッチ状態をgzip圧縮して保存する（タイムマシン再生用）。
-func (s *Store) InsertSnapshot(ts time.Time, trigger string, states []*model.SwitchState) error {
-	b, err := gz(states)
+type Snapshot struct {
+	States []*model.SwitchState
+	Alerts json.RawMessage
+}
+
+func (s *Store) InsertSnapshot(ts time.Time, trigger string, snapshot Snapshot) error {
+	states, err := gz(snapshot.States)
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.Exec(`INSERT INTO state_snapshots(ts,trigger,state_gz) VALUES(?,?,?)`, ms(ts), trigger, b)
-	return err
+	alerts, err := gz(snapshot.Alerts)
+	if err != nil {
+		return err
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var id int64
+	err = tx.QueryRow(`INSERT INTO state_snapshots(ts,trigger,state_gz) VALUES(?,?,?) RETURNING id`, ms(ts), trigger, states).Scan(&id)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO snapshot_alerts(snapshot_id,alerts_gz) VALUES(?,?)`, id, alerts); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SnapshotAt は ts 以前で最新のスナップショットを返す（無ければ最古）。
 func (s *Store) SnapshotAt(ts time.Time) (time.Time, []*model.SwitchState, error) {
+	at, snapshot, err := s.snapshotAt(ts, false)
+	return at, snapshot.States, err
+}
+
+func (s *Store) SnapshotWithAlertsAt(ts time.Time) (time.Time, Snapshot, error) {
+	var available bool
+	err := s.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='snapshot_alerts')`).Scan(&available)
+	if err != nil {
+		return time.Time{}, Snapshot{}, err
+	}
+	return s.snapshotAt(ts, available)
+}
+
+func (s *Store) snapshotAt(ts time.Time, withAlerts bool) (time.Time, Snapshot, error) {
 	var t int64
-	var b []byte
+	var states, alerts []byte
 	// 未来の状態を過去に見せないため、ts以前が無ければ該当なしとする
-	err := s.DB.QueryRow(`SELECT ts,state_gz FROM state_snapshots WHERE ts<=? ORDER BY ts DESC LIMIT 1`, ms(ts)).Scan(&t, &b)
+	query := `SELECT ts,state_gz,NULL FROM state_snapshots WHERE ts<=? ORDER BY ts DESC LIMIT 1`
+	if withAlerts {
+		query = `SELECT ts,state_gz,alerts_gz FROM state_snapshots
+			LEFT JOIN snapshot_alerts ON snapshot_id=id WHERE ts<=? ORDER BY ts DESC LIMIT 1`
+	}
+	err := s.DB.QueryRow(query, ms(ts)).Scan(&t, &states, &alerts)
 	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, nil, fmt.Errorf("指定時刻（%s）以前の状態スナップショットがありません", ts.Format(time.RFC3339))
+		return time.Time{}, Snapshot{}, fmt.Errorf("指定時刻（%s）以前の状態スナップショットがありません", ts.Format(time.RFC3339))
 	}
 	if err != nil {
-		return time.Time{}, nil, err
+		return time.Time{}, Snapshot{}, err
 	}
-	var out []*model.SwitchState
-	err = ungz(b, &out)
-	return fromMS(t), out, err
+	var out Snapshot
+	if err = ungz(states, &out.States); err != nil {
+		return time.Time{}, Snapshot{}, err
+	}
+	if alerts != nil {
+		if err = ungz(alerts, &out.Alerts); err != nil {
+			return time.Time{}, Snapshot{}, err
+		}
+	}
+	return fromMS(t), out, nil
 }
 
 // TimeRange はスナップショット・イベントの期間。

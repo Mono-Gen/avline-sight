@@ -166,6 +166,10 @@ func (e *Engine) restoreAlerts() {
 func (e *Engine) Alerts() []Alert {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+	return e.alertsLocked(time.Now())
+}
+
+func (e *Engine) alertsLocked(at time.Time) []Alert {
 	out := make([]Alert, 0, len(e.active))
 	for _, entry := range e.active {
 		a := *entry
@@ -173,7 +177,7 @@ func (e *Engine) Alerts() []Alert {
 		if a.Active {
 			a.State = "active"
 		}
-		a.SuppressedBy = e.suppressedByLocked(&a, time.Now())
+		a.SuppressedBy = e.suppressedByLocked(&a, at)
 		a.Suppressed = a.SuppressedBy != ""
 		if s := e.states[a.SwitchID]; s != nil {
 			a.SwitchName = s.Name

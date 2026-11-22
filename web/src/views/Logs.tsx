@@ -13,7 +13,7 @@ import type { Event } from '../types';
 import { usePolling } from '../usePolling';
 import type { LiveMessage } from '../ws';
 import type { ViewProps } from './props';
-import { groupSwitches, hasGroupFilter } from './props';
+import { groupSwitches, hasGroupFilter, inGroupScope } from './props';
 
 const categories = ['ANOMALY', 'CONNECT', 'TRAP', 'SYSLOG', 'BASELINE', 'CONFIG', 'MARKER', 'SYSTEM'];
 const categoryLabel = (category: string) => category === 'CONFIG' ? t('configChanges.title') : category;
@@ -48,8 +48,8 @@ export function Logs(props: ViewProps) {
   });
   const groupFiltered = hasGroupFilter(props);
   const groupMembers = groupSwitches(props);
-  const visibleIds = new Set(groupMembers.map(item => String(item.id)));
-  const filter = groupFiltered && !visibleIds.has(localFilter.switch_id) ? { ...localFilter, switch_id: '' } : localFilter;
+  const visibleIds = new Set(groupMembers.map(item => item.id));
+  const filter = groupFiltered && !visibleIds.has(Number(localFilter.switch_id)) ? { ...localFilter, switch_id: '' } : localFilter;
   const ackable = acknowledgeableEventIds(asArray(props.operations?.alerts));
   const queryKey = JSON.stringify([filter, filter.unackedOnly ? [...ackable].sort((a, b) => a - b) : []]);
   const alertRevision = useRef({ observed: 0, requested: 0 });
@@ -86,7 +86,7 @@ export function Logs(props: ViewProps) {
     };
   }, [refreshSearch]);
   const rows = logRows(result.data || [], props.events, filter, ackable)
-    .filter(event => !groupFiltered || visibleIds.has(String(event.switch_id)));
+    .filter(event => inGroupScope(event, visibleIds, groupFiltered));
   const switches = new Map(groupMembers.map(item => [String(item.id), item.name]));
   for (const event of [...asArray(result.data), ...asArray(props.events)]) {
     const id = String(event.switch_id);

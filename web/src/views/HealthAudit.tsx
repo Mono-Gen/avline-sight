@@ -8,7 +8,7 @@ import type { Audit, MetricResult } from '../types';
 import { METRICS_REFRESH_MS, TOPOLOGY_REFRESH_MS, usePolling } from '../usePolling';
 import { useSwitchState } from '../useSwitchState';
 import type { ViewProps } from './props';
-import { groupSwitches, hasGroupFilter } from './props';
+import { groupSwitches, hasGroupFilter, inGroupScope } from './props';
 import { baselineDiffItem, findingColumns, localizedStatus } from './detailTables';
 import type { BaselineDiff } from './detailTables';
 
@@ -80,7 +80,7 @@ export function HealthAudit(p: ViewProps) {
       <PollingStatus {...metrics} />
       <PollingStatus {...report} />
       <h2>{t('ui.m256')}</h2>
-      <Table {...findingColumns} rows={asArray(audit?.findings).filter(row => !filtered || visibleIds.has(row.switch_id))} />
+      <Table {...findingColumns} rows={asArray(audit?.findings).filter(row => inGroupScope(row, visibleIds, filtered))} />
       <h2>{t('ui.m257')}</h2>
       <Table
         rows={asArray(Object.entries(audit?.fw_versions || {})).map(([version, switches]) => ({
@@ -127,7 +127,7 @@ export function HealthAudit(p: ViewProps) {
       <Table first={['switch_name', 'item', 'before', 'after', 'severity']}
         hide={['switch_id', 'config_field']}
         values={{ ...findingColumns.values, before: localizedStatus, after: localizedStatus }}
-        rows={diff.filter(row => !filtered || visibleIds.has(row.switch_id)).map(row => ({ ...row, item: baselineDiffItem(row) }))} />
+        rows={diff.filter(row => inGroupScope(row, visibleIds, filtered)).map(row => ({ ...row, item: baselineDiffItem(row) }))} />
     </>}
   </section>;
 }

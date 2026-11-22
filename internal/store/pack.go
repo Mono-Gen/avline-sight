@@ -63,6 +63,7 @@ func (s *Store) ExportPack(w io.Writer, tmpDir string, from, to time.Time, appVe
 		{`INSERT INTO pk.device_bindings SELECT * FROM main.device_bindings WHERE last_seen_ts>=? AND first_seen_ts<=?`, []any{a, b}},
 		// 期間開始時点の状態を再現できるよう、開始直前のスナップショット1件も含める
 		{`INSERT INTO pk.state_snapshots SELECT * FROM main.state_snapshots WHERE ts BETWEEN ? AND ? OR id=(SELECT id FROM main.state_snapshots WHERE ts<? ORDER BY ts DESC LIMIT 1)`, []any{a, b, a}},
+		{`INSERT INTO pk.snapshot_alerts SELECT sa.* FROM main.snapshot_alerts sa JOIN pk.state_snapshots ss ON ss.id=sa.snapshot_id`, nil},
 	}
 	for _, c := range copies {
 		if _, err := conn.Exec(c.q, c.args...); err != nil {

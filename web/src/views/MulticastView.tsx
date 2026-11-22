@@ -7,18 +7,28 @@ import { asArray } from '../format';
 import type { Multicast, SwitchState } from '../types';
 import { STATE_REFRESH_MS, usePolling } from '../usePolling';
 import type { ViewProps } from './props';
-import { hasGroupFilter } from './props';
+import { hasGroupFilter, inGroupScope } from './props';
 import { enabledStatus, findingColumns, localizedStatus, switchColumn } from './detailTables';
 
-export function VlanQuerierTable({ rows }: { rows: Multicast['vlans'] }) {
+const hasLastQuerier = (address?: string) => !!address && address !== '0.0.0.0' && address !== '::';
+
+export function VlanQuerierTable({ rows, networkRows = rows }: { rows: Multicast['vlans']; networkRows?: Multicast['vlans'] }) {
+  const queriersByVlan = new Map<number, { switches: Set<number>; addresses: Set<string> }>();
+  for (const row of networkRows) {
+    const queriers = queriersByVlan.get(row.vlan) ?? { switches: new Set<number>(), addresses: new Set<string>() };
+    if (row.querier_oper === 'querier') queriers.switches.add(row.switch_id);
+    if (hasLastQuerier(row.last_querier)) queriers.addresses.add(row.last_querier);
+    queriersByVlan.set(row.vlan, queriers);
+  }
   const byVlan = new Map<number, (typeof rows)[number][]>();
   for (const row of rows) {
     const items = byVlan.get(row.vlan);
     if (items) items.push(row); else byVlan.set(row.vlan, [row]);
   }
   const summary = [...byVlan].sort(([a], [b]) => a - b).map(([vlan, members]) => {
-    const querierOK = members.filter(row => row.querier_oper === 'querier' ||
-      (row.last_querier && row.last_querier !== '0.0.0.0' && row.last_querier !== '::')).length;
+    const queriers = queriersByVlan.get(vlan);
+    const conflict = queriers && (queriers.switches.size > 1 || queriers.addresses.size > 1);
+    const querierOK = conflict ? 0 : members.filter(row => row.querier_oper === 'querier' || hasLastQuerier(row.last_querier)).length;
     const snoopingOK = members.filter(row => row.snooping).length;
     return t('pages.vlanSummary', { vlan, querierOK, querierReview: members.length - querierOK,
       snoopingOK, snoopingReview: members.length - snoopingOK });
@@ -60,7 +70,7 @@ export function MulticastView(props: ViewProps) {
     (!tags.length || tags.includes(state.group_tag)));
   const filtered = hasGroupFilter(props);
   const visibleIds = new Set(visibleStates.map(state => state.id));
-  const visible = (row: { switch_id: number }) => !filtered || visibleIds.has(row.switch_id);
+  const visible = (row: { switch_id?: number }) => inGroupScope(row, visibleIds, filtered);
   const filter = <T extends {
     vlan: number;
     switch_id: number
@@ -70,7 +80,7 @@ export function MulticastView(props: ViewProps) {
     <div className="panel space-y-4">
       {!props.replay && <PollingStatus {...result} />}
       <h2>{t('ui.m270')}</h2>
-      <VlanQuerierTable rows={filter(data?.vlans)} />
+      <VlanQuerierTable rows={filter(data?.vlans)} networkRows={asArray(data?.vlans)} />
       <h2>{t('ui.m271')}</h2>
       <Table {...switchColumn} rows={filter(data?.groups)} first={['switch_name', 'vlan', 'group']} />
       <h2>{t('ui.m272')}</h2>
