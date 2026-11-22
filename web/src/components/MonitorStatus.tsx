@@ -1,14 +1,16 @@
 import { t } from '../i18n';
 import { pcTimestamp } from '../pcTime';
+import { ErrorSymbol } from './ErrorSymbol';
 
-export function OverallStatus({ count, critical, ready, stopped, replay = false }: {
-  count: number; critical: boolean; ready: boolean; stopped: boolean; replay?: boolean;
+export function OverallStatus({ count, critical, ready, stopped, replay = false, active, unacked }: {
+  count: number; critical: boolean; ready: boolean; stopped: boolean; replay?: boolean; active?: number; unacked?: number;
 }) {
   const unknown = stopped || !ready;
   const tone = unknown ? 'unknown' : count ? critical ? 'critical' : 'warning' : 'healthy';
   return <div className={`overall-status status-${tone}`} role="status">
-    <strong>{unknown ? '—' : count ? critical ? '✖' : '▲' : '✓'} {unknown
-      ? t(stopped ? 'cleanup.unknown' : 'cleanup.pending') : t(count ? 'cleanup.issues' : 'cleanup.normal', { count })}</strong>
+    <strong>{unknown ? '—' : count ? critical ? <ErrorSymbol /> : '▲' : '✓'} {unknown
+      ? t(stopped ? 'cleanup.unknown' : 'cleanup.pending') : count && active !== undefined && unacked !== undefined
+        ? t('wall.counts', { active, unacked }) : t(count ? 'cleanup.issues' : 'cleanup.normal', { count })}</strong>
     {replay && <small>{t('rack.replay')}</small>}
   </div>;
 }

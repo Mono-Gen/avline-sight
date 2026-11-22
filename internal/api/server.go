@@ -137,6 +137,7 @@ func (s *Server) Handler() http.Handler {
 
 	h("GET /api/events", s.events)
 	h("POST /api/events/{id}/ack", s.ack)
+	h("POST /api/events/{id}/unack", s.unack)
 	h("POST /api/events/ack-all", s.ackAll)
 	h("POST /api/markers", s.marker)
 
@@ -184,8 +185,7 @@ func (s *Server) Handler() http.Handler {
 // lockExempt は閲覧専用ロック中も許可する変更系パス。
 func lockExempt(path string) bool {
 	return path == "/api/mode/lock" || path == "/api/markers" || strings.HasPrefix(path, "/api/replay/") ||
-		path == "/api/events/ack-all" ||
-		path == "/api/export/pack" || strings.HasPrefix(path, "/api/events/") && strings.HasSuffix(path, "/ack")
+		path == "/api/export/pack"
 }
 
 func (s *Server) middleware(next http.Handler) http.Handler {

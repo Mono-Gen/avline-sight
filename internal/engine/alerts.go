@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -325,6 +326,48 @@ func (e *Engine) Ack(id int64, all bool) error {
 				delete(e.active, k)
 			}
 		}
+	}
+	e.mu.Unlock()
+	e.broadcastAlerts()
+	return nil
+}
+
+var ErrUndoUnavailable = errors.New("alert is unavailable in the current profile")
+
+func (e *Engine) Unack(id int64) error {
+	e.mu.Lock()
+	events, err := e.st.Events(store.EventFilter{ID: id, ProfileID: e.profileID, Limit: 1})
+	if err != nil {
+		e.mu.Unlock()
+		return err
+	}
+	if len(events) == 0 || events[0].Category == "TRAP" || (events[0].Severity != model.SevCritical && events[0].Severity != model.SevWarning) {
+		e.mu.Unlock()
+		return ErrUndoUnavailable
+	}
+	a := alertFromEvent(events[0])
+	if a.eventSuppressed || isPortMonitoringEvent(a.Code, a.IfIndex) && e.portCfg[a.SwitchID][a.IfIndex].Excluded {
+		e.mu.Unlock()
+		return ErrUndoUnavailable
+	}
+	if err = e.st.Unack(id); err != nil {
+		e.mu.Unlock()
+		return err
+	}
+	found := false
+	for _, entry := range e.active {
+		if entry.EventID == id {
+			entry.Acked = false
+			found = true
+		}
+	}
+	if !found {
+		a.Acked = false
+		key := transientKey(events[0]) + "|restored"
+		if oneShot, _ := events[0].Detail["_one_shot"].(bool); oneShot {
+			key = transientKey(events[0])
+		}
+		e.active[key] = a
 	}
 	e.mu.Unlock()
 	e.broadcastAlerts()

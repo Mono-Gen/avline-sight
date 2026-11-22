@@ -823,6 +823,7 @@ func (s *Store) InsertEvent(e *model.Event) (bool, error) {
 // EventFilter は検索条件。
 type EventFilter struct {
 	Category, Severity, Q string
+	ID, ProfileID         int64
 	SwitchID              int64
 	From, To              time.Time
 	Limit                 int
@@ -832,6 +833,13 @@ type EventFilter struct {
 func (s *Store) Events(f EventFilter) ([]model.Event, error) {
 	var conds []string
 	var args []any
+	if f.ID != 0 {
+		conds, args = append(conds, "id=?"), append(args, f.ID)
+	}
+	if f.ProfileID != 0 {
+		conds = append(conds, `(switch_id IN (SELECT id FROM switches WHERE profile_id=? AND enabled=1) OR (switch_id=0 AND json_extract(detail_json,'$._profile_id')=?))`)
+		args = append(args, f.ProfileID, f.ProfileID)
+	}
 	if f.RestoreProfileID != 0 {
 		conds = append(conds, `acked=0 AND category<>'TRAP' AND severity IN ('CRITICAL','WARNING') AND (switch_id IN (SELECT id FROM switches WHERE profile_id=?) OR (switch_id=0 AND json_extract(detail_json,'$._profile_id')=?))`)
 		args = append(args, f.RestoreProfileID, f.RestoreProfileID)
@@ -907,6 +915,11 @@ func (s *Store) Ack(id int64) error {
 
 func (s *Store) AckAll() error {
 	_, err := s.DB.Exec(`UPDATE events SET acked=1, acked_at=? WHERE acked=0`, ms(time.Now()))
+	return err
+}
+
+func (s *Store) Unack(id int64) error {
+	_, err := s.DB.Exec(`UPDATE events SET acked=0, acked_at=NULL WHERE id=?`, id)
 	return err
 }
 

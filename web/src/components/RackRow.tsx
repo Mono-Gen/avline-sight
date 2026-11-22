@@ -2,6 +2,7 @@ import { api, json } from '../api';
 import { asArray, decimal, formatBps, formatTime } from '../format';
 import { frontPanelRows } from '../frontPanelLayout';
 import { t } from '../i18n';
+import { ErrorSymbol } from './ErrorSymbol';
 import { isPortAlert, lampState } from '../rackModel';
 import type { Alert, InventoryRow, ModelDefinitions, Port, SwitchConfig, SwitchSummary } from '../types';
 import type { ViewProps } from '../views/props';
@@ -12,7 +13,7 @@ export function PortLamp({ port, alerts, devices, suppressed, reachable, wall, o
   const state = lampState(port, alerts, devices, suppressed, reachable, uplink);
   const attached = devices.length ? devices : asArray(port.devices);
   const label = [port.name, ...attached.map(device => [device.label || device.lldp_name || device.mac, device.ip].filter(Boolean).join(' ')), t(`rack.${state.tone}`)].join(' · ');
-  const content = <><span className="lamp-symbol">{state.symbol}</span><span className="lamp-number">{port.name.match(/(\d+)\D*$/)?.[1] || port.name}</span></>;
+  const content = <><span className="lamp-symbol">{state.tone === 'critical' ? <ErrorSymbol /> : state.symbol}</span><span className="lamp-number">{port.name.match(/(\d+)\D*$/)?.[1] || port.name}</span></>;
   const className = `port-lamp lamp-${state.tone}${state.unacked ? ' lamp-unacked' : ''}`;
   return wall ? <span className={className} title={label} aria-label={label}>{content}</span>
     : <button className={className} title={label} aria-label={label} onClick={onSelect}>{content}</button>;
@@ -87,7 +88,7 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, supp
           {uplinks.has(`${sw.id}/${port.name}`) && <Sparkline samples={samples[`${sw.id}/${port.name}`] || []} label={`${port.name} ${t('rack.uplink')} ${formatBps(port.rx_bps)} / ${formatBps(port.tx_bps)}`} />}
         </div> : <span className="rack-port-gap" key={`gap-${position}`} />)}</div>)}
       {callouts.size > 0 && <div className="rack-callouts">{[...callouts.values()].slice(0, 3).map(alert => <span key={alert.if_index} className={alert.suppressed ? '' : alert.severity === 'CRITICAL' ? 'text-red-400' : 'text-amber-400'}>
-        {alert.suppressed ? '🔧' : alert.severity === 'CRITICAL' ? '✖' : '▲'} {alert.device_name || t('operations.unknownDevice')} · {alert.port}
+        {alert.suppressed ? '🔧' : alert.severity === 'CRITICAL' ? <ErrorSymbol /> : '▲'} {alert.device_name || t('operations.unknownDevice')} · {alert.port}
       </span>)}{callouts.size > 3 && <span>{t('rack.more', { count: callouts.size - 3 })}</span>}</div>}
     </div>
     <div className="rack-health">{health.map(item => <span key={item.key} title={`${t(`rack.${item.key}`)} ${item.value}`} aria-label={`${t(`rack.${item.key}`)} ${item.bad ? '⚠' : '✓'} ${item.value}`} className={item.bad ? 'health-abnormal' : ''}>{item.bad ? '⚠' : ''}{item.icon}</span>)}</div>

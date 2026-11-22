@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { api } from './api';
-import { acknowledgeEvents } from './acknowledge';
+import { acknowledgeEvents, unacknowledgeEvents } from './acknowledge';
 import { asArray } from './format';
 import { t } from './i18n';
 import type { Alert, Event, Phase, Status, SwitchGroup } from './types';
 import type { LiveMessage } from './ws';
 import { usePolling } from './usePolling';
+
+export const ACK_UNDO_MS = 5000;
 
 export function useOperations({ online, replay, profileId, setStatus, run }: {
   online: boolean; replay: boolean; profileId?: number;
@@ -17,9 +19,12 @@ export function useOperations({ online, replay, profileId, setStatus, run }: {
   const [groups, setGroups] = useState<SwitchGroup[]>([]);
   const [phase, setPhase] = useState<Phase>();
   const [toast, setToast] = useState(0);
+  const [undo, setUndo] = useState<{ ids: number[]; until: number }>();
   const [disappeared, setDisappeared] = useState<Alert[]>([]);
   const previous = useRef<Alert[] | undefined>();
   const localAcks = useRef(new Map<number, number>());
+  const scope = useRef(profileId);
+  scope.current = profileId;
   const revision = useRef({ alerts: 0, groups: 0, phase: 0, lock: 0 });
   const hydrate = useCallback((items: Alert[]) => {
     const next = asArray(items);
@@ -68,6 +73,7 @@ export function useOperations({ online, replay, profileId, setStatus, run }: {
     setGroups([]);
     setDisappeared([]);
     setToast(0);
+    setUndo(undefined);
   }, [profileId, replay]);
   useEffect(() => {
     if (replay) return;
@@ -99,6 +105,42 @@ export function useOperations({ online, replay, profileId, setStatus, run }: {
     const timer = setTimeout(() => setToast(0), 4500);
     return () => clearTimeout(timer);
   }, [toast]);
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(undefined), Math.max(0, undo.until - Date.now()));
+    return () => clearTimeout(timer);
+  }, [undo]);
+  const refreshAlerts = async () => {
+    const version = revision.current.alerts;
+    const fresh = await api<Alert[]>('/api/alerts');
+    if (scope.current === profileId && version === revision.current.alerts) hydrate(fresh);
+  };
+  const ackMany = (targets: number[]) => {
+    const ids = [...new Set(targets)].filter(id => alerts.some(alert => alert.event_id === id && !alert.acked && !alert.suppressed));
+    if (!ids.length || replay) return;
+    run(async () => {
+      const succeeded: number[] = [];
+      ids.forEach(id => localAcks.current.set(id, Infinity));
+      setUndo(undefined);
+      try {
+        await acknowledgeEvents(ids, refreshAlerts, changed => succeeded.push(...changed));
+      } finally {
+        ids.forEach(id => localAcks.current.set(id, Date.now() + ACK_UNDO_MS));
+        if (succeeded.length && scope.current === profileId) setUndo({ ids: succeeded, until: Date.now() + ACK_UNDO_MS });
+      }
+    });
+  };
+  const undoAck = () => {
+    if (!undo || Date.now() >= undo.until || replay) return;
+    const ids = undo.ids;
+    run(async () => {
+      await unacknowledgeEvents(ids, refreshAlerts, changed => {
+          if (scope.current !== profileId) return;
+          changed.forEach(id => localAcks.current.delete(id));
+          setUndo(current => current ? { ...current, ids: current.ids.filter(id => !changed.includes(id)) } : current);
+      });
+    });
+  };
   const ack = (id?: number) => confirmAck(id, run, async () => {
     const ids = id === undefined ? alerts.filter(alert => !alert.acked).map(alert => alert.event_id) : [id];
     ids.forEach(value => localAcks.current.set(value, Infinity));
@@ -117,7 +159,8 @@ export function useOperations({ online, replay, profileId, setStatus, run }: {
     const info = details.get(item.event_id);
     return { ...item, detail: item.detail || info?.detail, hint: item.hint || info?.hint, acked_at: item.acked_at || info?.acked_at };
   });
-  return { alerts: withDetails, groups, phase, setPhase, toast: toast ? t('rack.remoteAck') : '', ack, refresh: feed.refresh, ready: !!feed.updatedAt };
+  return { alerts: withDetails, groups, phase, setPhase, toast: toast ? t('rack.remoteAck') : '', ack, ackMany, undoAck,
+    undoCount: undo?.ids.length || 0, refresh: feed.refresh, ready: !!feed.updatedAt };
 }
 
 export function confirmAck(id: number | undefined, run: (action: () => Promise<void>) => void, action: () => Promise<void>) {

@@ -2,7 +2,7 @@
 
 バックエンド（Go）とWebUI（React）の間の契約。型の正は `internal/model/model.go` のJSONタグ。
 時刻はすべて RFC3339（UTC）。エラー時は HTTP 4xx/5xx と `{"error": "日本語メッセージ"}`。
-閲覧専用ロック中は変更系（POST/PUT/DELETE）が `423 Locked`。例外は `/api/mode/lock`、`/api/markers`、イベント確認（個別・一括）、再生関連、`/api/export/pack`。手動Ping・フェーズ変更・カウンタリセットはロック中に実行不可。
+閲覧専用ロック中は変更系（POST/PUT/DELETE）が `423 Locked`。例外は `/api/mode/lock`、`/api/markers`、再生関連、`/api/export/pack`。イベント確認（個別・一括）と確認取り消し、手動Ping・フェーズ変更・カウンタリセットはロック中に実行不可。
 
 ## 状態・システム
 | メソッド | パス | 応答 |
@@ -100,6 +100,7 @@ PC通知はブラウザー単位の設定で既定OFF。許可を得た場合の
 ## イベント・マーカー
 - `GET /api/events?category=&severity=&switch_id=&q=&from=&to=&limit=500` → `[Event]`（新しい順）
 - `POST /api/events/:id/ack`、`POST /api/events/ack-all`
+- `POST /api/events/:id/unack` → `{unacked:id}`。確認状態と確認時刻を解除し、復旧済みなら未確認ラッチを復元する。現在のプロファイルの有効なスイッチ（または全体）のCRITICAL/WARNINGが対象。削除・無効化・ポート除外・発生時抑止・対象外履歴は404、不正IDは400、ロック中は423。壁表示の確認成功後5秒間は「元に戻す」を表示する。
 - `GET /api/alerts` → `[{event_id,switch_id,switch_name,if_index,severity,code,title,ts,active,acked,cleared_at:RFC3339|null,port,mac?,device_name?,state:"active"|"latched",suppressed,suppressed_by:"phase"|""}]`。抑止中の発生条件も含む。CRITICAL→WARNING→INFO、同重要度はts降順（同時刻はevent_id降順）
   - REST応答は保存イベント由来の翻訳引数 `detail`、対処文 `hint`、確認時刻 `acked_at` を取得できる場合に補う。WebSocket通知では省略する。
 - `POST /api/markers` 入力 `{note}` → `Event`（category=MARKER）

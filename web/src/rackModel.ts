@@ -21,7 +21,7 @@ export function lampState(port: Port, alerts: Alert[], devices: InventoryRow[], 
     device.ping && device.ping.status !== 'ok') || [port.err_delta, port.discard_delta, port.fcs_delta, port.cos_drop_delta].some(value => value > 0)) tone = 'warning';
   else if (!reachable) tone = 'offline';
   else if (port.oper === 'up' && (uplink || asArray(port.devices).length || devices.some(device => device.seen))) tone = 'healthy';
-  const symbols: Record<LampTone, string> = { critical: '✖', warning: '▲', healthy: '●', unused: '·', suppressed: '🔧', offline: '⚠' };
+  const symbols: Record<LampTone, string> = { critical: '!', warning: '▲', healthy: '●', unused: '·', suppressed: '🔧', offline: '⚠' };
   return { tone, symbol: symbols[tone], unacked: tone !== 'suppressed' && visible.some(alert => !alert.acked) };
 }
 

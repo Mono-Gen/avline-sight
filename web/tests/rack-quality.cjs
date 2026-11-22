@@ -79,7 +79,7 @@ test('ラックのランプは色と記号を併記し、復旧未確認の白�
   const input = { port: { name: '1/0/1', oper: 'up', devices: [{ mac: 'AA' }] }, devices: [], alerts: [], suppressed: false, reachable: true, wall: false, onSelect: noop };
   const css = fs.readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
   for (const [severity, expected, symbol, color] of [
-    ['CRITICAL', 'critical', '✖', '#7f1d1d'], ['WARNING', 'warning', '▲', '#713f12'], [null, 'healthy', '●', '#154434'],
+    ['CRITICAL', 'critical', 'error-symbol', '#7f1d1d'], ['WARNING', 'warning', '▲', '#713f12'], [null, 'healthy', '●', '#154434'],
   ]) {
     const html = render(PortLamp, { ...input, alerts: severity ? [alert({ severity })] : [] });
     assert.match(html, new RegExp(`lamp-${expected}`));
@@ -93,7 +93,7 @@ test('ラックのランプは色と記号を併記し、復旧未確認の白�
   assert.doesNotMatch(suppressed, /lamp-unacked/);
 });
 
-test('壁表示には終了以外のヘッダー操作、ラック操作、アラート確認がない', () => {
+test('壁表示にはラベル付き終了とアラート確認を置き、ラック操作は隠す', () => {
   const header = render(AppHeader, { ...controls, wall: true, setWall: noop });
   assert.equal((header.match(/<button\b/g) || []).length, 1);
   assert.match(header, /wall-exit/);
@@ -103,7 +103,9 @@ test('壁表示には終了以外のヘッダー操作、ラック操作、ア�
   assert.equal(render(GroupActions, { ...group, wall: true }), '');
   const band = render(AlertBand, { alerts: [alert()], wall: true, ack: noop });
   assert.match(band, /Switch A.*Mixer/);
-  assert.doesNotMatch(band, /<button/);
+  assert.match(band, /data-action="ack"/);
+  assert.match(band, /data-action="ack-all"/);
+  assert.match(header, /通常表示に戻る/);
 });
 
 test('登録済み機器のリンク断は赤、筐体番号が一致してもファン故障では正常ポートを赤にしない', () => {
@@ -124,14 +126,13 @@ test('CPU・温度・PoEの無効なしきい値では数値を異常扱いし�
   assert.match(render(RackRow, { ...props, summary: { ...props.summary, temp_state: 'critical' } }), /health-abnormal/);
 });
 
-test('閲覧専用ロックではフェーズ変更を隠し、Pingとリセットを無効にして確認は許可する', () => {
+test('閲覧専用ロックではフェーズ変更と確認を隠し、Pingとリセットを無効にする', () => {
   assert.doesNotMatch(render(PhaseControls, { ...controls, locked: true }), /<select/);
   const html = render(GroupActions, { ...group, locked: true });
   assert.equal((html.match(/disabled=""/g) || []).length, 2);
   assert.doesNotMatch(html, /data-action="work"|group-menu|export\.csv/);
-  const band = render(AlertBand, { alerts: [alert()], ack: noop });
-  assert.match(band, /data-action="ack"/);
-  assert.match(band, /data-action="ack-all"/);
+  const band = render(AlertBand, { alerts: [alert()], ack: noop, locked: true });
+  assert.doesNotMatch(band, /data-action="ack"|data-action="ack-all"/);
 });
 
 test('旧データの * グループでは全台へのPingとリセットを無効にする', () => {

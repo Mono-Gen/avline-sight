@@ -12,7 +12,7 @@ import { DhcpView, HealthAudit, Logs, MulticastView } from './views/Monitoring';
 import { SwitchPorts } from './views/SwitchPorts';
 import { SettingsTools } from './components/SettingsTools';
 import { MonitorStopped, OverallStatus } from './components/MonitorStatus';
-import { issueAlerts, monitoringStopped } from './monitorHealth';
+import { monitoringStopped } from './monitorHealth';
 import { usePcTime } from './pcTime';
 import { useDesktopNotifications } from './useDesktopNotifications';
 import { PortMonitor } from './views/PortMonitor';
@@ -20,6 +20,7 @@ import { Topology } from './views/Topology';
 import { useLiveFeed } from './useLiveFeed';
 import { t, useLang } from './i18n';
 import { useOperations } from './useOperations';
+import { summarizeAlerts } from './wallAlerts';
 const pages = ['monitor', 'topology', 'devices', 'details', 'logs'] as const;
 type Page = typeof pages[number] | 'switch';
 const replayPages: readonly string[] = ['monitor', 'switch', 'devices', 'details'];
@@ -202,14 +203,16 @@ export default function App() {
   const operations = useOperations({ online, replay: !!replay, profileId, setStatus, run });
   const now = usePcTime();
   const stopped = !replay && monitoringStopped(online && live.fresh, live.updatedAt, now);
-  const issues = issueAlerts(operations.alerts);
+  const alertSummary = summarizeAlerts(operations.alerts);
+  const issues = alertSummary.items;
   const issueCount = replay ? asArray(replay.states).reduce((count, state) => count + (state.alert_counts?.CRITICAL || 0) + (state.alert_counts?.WARNING || 0), 0) : issues.length;
   const critical = replay ? asArray(replay.states).some(state => (state.alert_counts?.CRITICAL || 0) > 0) : issues.some(alert => alert.severity === 'CRITICAL');
   const ready = replay ? !!replay.ts : operations.ready;
   const activeDetailTab = replay && detailTab === 'dhcp' ? 'multicast' : detailTab;
   useDesktopNotifications({ enabled: notifications, alerts: operations.alerts, profileId, ready, paused: !!replay || stopped });
   useEffect(() => { document.title = `(${issueCount}) AVLine-Sight`; }, [issueCount]);
-  const summary = <OverallStatus count={issueCount} critical={critical} ready={ready} stopped={stopped} replay={!!replay} />;
+  const summary = <OverallStatus count={issueCount} critical={critical} ready={ready} stopped={stopped} replay={!!replay}
+    active={!replay ? alertSummary.active : undefined} unacked={!replay ? alertSummary.unacked : undefined} />;
   const pageTitle = page === 'details' ? t('cleanup.details') : page === 'switch' ? t('cleanup.switchPorts') : t(`rack.nav.${page}`);
   const props = {
     overview,
@@ -249,13 +252,13 @@ export default function App() {
       run={run}
     />}
 
-    {!wall && error && <div role="alert" className="bg-red-900 p-3 text-white">⚠
+    {error && <div role="alert" className="bg-red-900 p-3 text-white">⚠
       {error}
 
       <button onClick={() => setError('')}>{t('rack.close')}
       </button>
     </div>}
-    {!wall && busy && <div role="status" className="bg-amber-100 text-black">{t('rack.busy')}
+    {busy && <div role="status" className="bg-amber-100 text-black">{t('rack.busy')}
     </div>}
     <div className={wall ? 'wall-content' : 'flex flex-col md:flex-row'}>
       {!wall && <nav className="app-nav">

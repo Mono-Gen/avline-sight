@@ -64,8 +64,14 @@ func TestOperationEndpointsLocksAndSync(t *testing.T) {
 	if len(a) != 1 {
 		t.Fatal(a)
 	}
-	if w := do(h, "POST", "/api/events/ack-all", ""); w.Code != 200 {
+	if w := do(h, "POST", "/api/events/ack-all", ""); w.Code != 423 {
 		t.Fatalf("ロック中の一括確認: %d", w.Code)
+	}
+	if w := do(h, "POST", "/api/mode/lock", `{"locked":false}`); w.Code != 200 {
+		t.Fatal(w.Body)
+	}
+	if w := do(h, "POST", "/api/events/ack-all", ""); w.Code != 200 {
+		t.Fatal(w.Body)
 	}
 	if !s.Engine.Alerts()[0].Acked {
 		t.Fatal("メモリ未反映")

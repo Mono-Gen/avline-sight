@@ -16,7 +16,7 @@ export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, s
   const phaseControl = <PhaseControls {...{ phase, locked, busy, wall, run, onPhase }} />;
   if (wall) return <header className="wall-header">
     {summary}{phaseControl}<PcClock />
-    <button className="wall-exit" aria-label={t('rack.exitWall')} onClick={() => setWall(false)}>×</button>
+    <button className="wall-exit" onClick={() => setWall(false)}>{t('wall.exit')}</button>
   </header>;
   return <header className="app-header">
     <div className="header-controls">

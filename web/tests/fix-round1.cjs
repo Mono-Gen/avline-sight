@@ -57,13 +57,13 @@ test('重大イベントでも音声を作らず、履歴と接続状態を更�
   cleanup(); assert.equal(socketClosed, 1);
 });
 
-test('復旧時刻nullはアラート帯とポート詳細で不明と表示する', context => {
+test('復旧時刻nullではアラート帯とポート詳細の復旧行を隠す', context => {
   context.after(() => setLang('ja'));
   for (const [lang, expected] of [['ja', '復旧: 不明'], ['en', 'Cleared: Unknown']]) {
     setLang(lang);
     const alerts = [alert(1)];
-    assert.ok(render(AlertBand, { alerts }).includes(expected));
-    assert.ok(render(PortDetail, { switchId: 1, switchName: 'SW', port: { if_index: 1, name: '1/0/1' },
+    assert.ok(!render(AlertBand, { alerts }).includes(expected));
+    assert.ok(!render(PortDetail, { switchId: 1, switchName: 'SW', port: { if_index: 1, name: '1/0/1' },
       devices: [], alerts, close() {}, replay: true }).includes(expected));
   }
 });
@@ -78,7 +78,7 @@ test('壁表示は収まる全件を表示し、超過時だけ集約行の高�
 });
 
 test('壁表示は未確認だけを新着順に全件表示し、件数が多くても行を省略しない', () => {
-  const alerts = Array.from({ length: 30 }, (_, index) => alert(index + 1, { code: 'CUSTOM', title: `UniqueFault${index + 1}` }));
+  const alerts = Array.from({ length: 30 }, (_, index) => alert(index + 1, { if_index: index + 1, code: 'CUSTOM', title: `UniqueFault${index + 1}` }));
   alerts.push(alert(100, { acked: true, title: 'Acked fault', code: 'CUSTOM' }));
   alerts.push(alert(101, { suppressed: true, title: 'Suppressed fault', code: 'CUSTOM' }));
   const html = render(AlertBand, { alerts, wall: true });

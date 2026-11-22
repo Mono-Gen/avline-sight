@@ -2,6 +2,13 @@ import { operationsJa } from './operations';
 import { eventJa } from './eventJa';
 import { rackJa } from './rack';
 export const ja = {
+  wall: {
+    counts: '発生中 {active}件 / 未確認 {unacked}件', exit: '通常表示に戻る',
+    locked: 'ロック中のため確認できません', recovered: '復旧済み・未確認',
+    related: '（関連{count}件）', undo: '元に戻す', acknowledged: '{count}件を確認しました',
+    current: 'スイッチ別の現在状態', filter: '{name} の未確認アラート', clearFilter: '絞り込みを解除',
+    more: '他 {count}件', global: 'その他・全体',
+  },
   cleanup: {
     details: '詳細', diagram: '図', list: '一覧', layout: '表示方法',
     normal: 'すべて正常', issues: '異常 {count}件', pending: '状態を確認中', unknown: '状態不明',
@@ -225,7 +232,7 @@ export const ja = {
   "m207": "✓ 応答 {p0}ms",
   "m208": "⚠ 無応答",
   "m209": "⚠ 到達不能",
-  "m210": "✕ 送信失敗",
+  "m210": "❗ 送信失敗",
   "m211": "{p0}日 {p1}時間 {p2}分",
   "m212": "その他",
   "m213": "LLDP名",

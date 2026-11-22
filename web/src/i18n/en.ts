@@ -3,6 +3,13 @@ import { eventEn } from './eventEn';
 import type { Dictionary } from './index';
 import { rackEn } from './rack';
 export const en: Dictionary = {
+  wall: {
+    counts: '{active} active / {unacked} unacknowledged', exit: 'Return to normal view',
+    locked: 'Cannot acknowledge while locked or read-only', recovered: 'Recovered · unacknowledged',
+    related: ' ({count} related)', undo: 'Undo', acknowledged: 'Acknowledged {count} alerts',
+    current: 'Current state by switch', filter: 'Unacknowledged alerts on {name}', clearFilter: 'Clear filter',
+    more: '{count} more', global: 'Other / network',
+  },
   cleanup: {
     details: 'Details', diagram: 'Diagram', list: 'List', layout: 'Layout',
     normal: 'All normal', issues: '{count} issues', pending: 'Checking status', unknown: 'Status unknown',
@@ -226,7 +233,7 @@ export const en: Dictionary = {
   "m207": "✓ Response {p0}ms",
   "m208": "⚠ No response",
   "m209": "⚠ Unreachable",
-  "m210": "✕ Send failed",
+  "m210": "❗ Send failed",
   "m211": "{p0}d {p1}h {p2}m",
   "m212": "Other",
   "m213": "LLDP name",

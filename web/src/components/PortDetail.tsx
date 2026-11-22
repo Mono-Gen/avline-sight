@@ -6,6 +6,7 @@ import { pingLabel } from '../deviceCsv';
 import type { Alert, InventoryRow, MetricResult, Port } from '../types';
 import { usePolling } from '../usePolling';
 import { Chart } from './Chart';
+import { ErrorSymbol } from './ErrorSymbol';
 
 export function PortDetail({ switchId, switchName, port, devices, alerts, close, replay }: {
   switchId: number; switchName: string; port: Port; devices: InventoryRow[]; alerts: Alert[]; close: () => void; replay: boolean;
@@ -33,10 +34,10 @@ export function PortDetail({ switchId, switchName, port, devices, alerts, close,
         : device.ping_ok == null ? t('rack.notPinged') : pingLabel(device.ping_ok ? 'ok' : 'timeout', device.ping_rtt_ms || 0)} {device.ping?.at || device.ping_ts ? pcTimestamp(device.ping?.at || device.ping_ts || '') : ''}</p>
     </section>)}
     {alerts.map(alert => <article key={alert.event_id} className="border-b border-slate-600 py-3">
-      <h3>{alert.severity === 'CRITICAL' ? '✖' : '▲'} {eventTitle(alert)}</h3>
+      <h3>{alert.severity === 'CRITICAL' ? <ErrorSymbol /> : '▲'} {eventTitle(alert)}</h3>
       <p>{eventHint(alert)}</p>
       <p>{t('rack.raised')}: <time dateTime={alert.ts}>{pcTimestamp(alert.ts)}</time></p>
-      <p>{t('rack.cleared')}: {alert.cleared_at ? <time dateTime={alert.cleared_at}>{pcTimestamp(alert.cleared_at)}</time> : alert.active ? '—' : t('rack.unknownTime')}</p>
+      {alert.cleared_at && <p>{t('rack.cleared')}: <time dateTime={alert.cleared_at}>{pcTimestamp(alert.cleared_at)}</time></p>}
       <p>{t('rack.acked')}: {alert.acked_at ? <time dateTime={alert.acked_at}>{pcTimestamp(alert.acked_at)}</time> : '—'}</p>
     </article>)}
     <h3 className="mt-4 font-bold">{t('rack.bandwidth')}</h3>

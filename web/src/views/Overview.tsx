@@ -17,6 +17,8 @@ import type { ViewProps } from './props';
 import type { Operations } from '../useOperations';
 import { PortMatrix } from './PortMatrix';
 import { WallSwitchTile } from '../components/WallSwitchTile';
+import { summarizeAlerts } from '../wallAlerts';
+import { ErrorSymbol } from '../components/ErrorSymbol';
 
 const collapseKey = 'rack-collapsed';
 function readCollapsed() {
@@ -72,6 +74,7 @@ export function OverviewView(props: OverviewProps) {
   const [selected, setSelected] = useState<{ switchId: number; ifIndex: number }>();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [notice, setNotice] = useState('');
+  const [wallSwitch, setWallSwitch] = useState<number>();
   const rack = useRackData(props.status?.profile.id, replay, props.replayRef);
   const configs = rack.data?.configs;
   const summary = useMemo(() => {
@@ -126,16 +129,36 @@ export function OverviewView(props: OverviewProps) {
   const selectedPort = selected && ports.get(selected.switchId)?.find(row => row.port.if_index === selected.ifIndex)?.port;
   const profileId = props.status?.profile.id;
   const actionProps = { locked, wall, busy, devices, run: props.run, refresh, notice: setNotice, replay: replay !== null, profileId };
+  const wallSummary = summarizeAlerts(alerts);
+  const wallTiles = [...visible];
+  for (const alert of wallSummary.items) {
+    if (!wallTiles.some(sw => sw.id === alert.switch_id)) wallTiles.push({
+      ...registeredSummary({ id: alert.switch_id, name: alert.switch_name || t('wall.global'), ip: '', group_tag: '' } as SwitchConfig),
+      reachable: true,
+    });
+  }
+  wallTiles.sort((a, b) => {
+    const rank = (sw: SwitchSummary) => {
+      const current = summarizeAlerts(byAlert.get(sw.id) || []);
+      return current.active ? current.critical ? 0 : 1 : !sw.reachable ? 2 : current.unacked ? 3 : 4;
+    };
+    return rank(a) - rank(b);
+  });
+  const wallFilter = wallTiles.find(sw => sw.id === wallSwitch);
   if (wall) return <div className="wall-monitor">
-    {replay === null && <AlertBand alerts={alerts} wall pending={!operations?.ready} />}
+    {wallFilter && <div className="wall-filter-note">{t('wall.filter', { name: wallFilter.name })} <button onClick={() => setWallSwitch(undefined)}>{t('wall.clearFilter')}</button></div>}
+    {replay === null && <AlertBand alerts={wallFilter ? alerts.filter(alert => alert.switch_id === wallFilter.id) : alerts}
+      wall pending={!operations?.ready} busy={busy} locked={locked} ackMany={operations?.ackMany}
+      undoCount={operations?.undoCount} undo={operations?.undoAck} />}
+    <h2 className="wall-switches-heading">{t('wall.current')}</h2>
     <div className="wall-switches" style={{ '--switch-count': visible.length } as React.CSSProperties}>
       {!visible.length && <p>{rack.data ? t('rack.empty') : t('rack.loading')}</p>}
-      {visible.map(sw => <WallSwitchTile key={sw.id} summary={sw} alerts={byAlert.get(sw.id) || []}
-        ports={(ports.get(sw.id) || []).map(row => row.port)} devices={bySwitch.get(sw.id) || []} stale={!!rack.error} suppressed={!!phase && phaseSuppressesPorts(phase) && replay === null} />)}
+      {wallTiles.map(sw => <WallSwitchTile key={sw.id} summary={sw} alerts={byAlert.get(sw.id) || []}
+        stale={!!rack.error} selected={wallFilter?.id === sw.id} onSelect={() => setWallSwitch(current => current === sw.id ? undefined : sw.id)} />)}
     </div>
   </div>;
   return <div className="rack-overview">
-    {replay === null && <AlertBand alerts={alerts} wall={wall} busy={busy} ack={operations?.ack} pending={!operations?.ready && !operations?.alerts.length} />}
+    {replay === null && <AlertBand alerts={alerts} wall={wall} busy={busy} locked={locked} ack={operations?.ack} pending={!operations?.ready && !operations?.alerts.length} />}
     {!wall && operations?.toast && <div className="rack-toast" role="status">✓ {operations.toast}</div>}
     {!wall && <div className="rack-toolbar">
       <strong>{t('rack.all')}</strong>
@@ -168,7 +191,7 @@ export function OverviewView(props: OverviewProps) {
         return <section className="rack-group" key={name}>
           <div className="rack-group-header">
             <h2>{name || t('rack.ungrouped')}</h2>
-            <span className="rack-critical-count" aria-label={t('rack.critical')}>✖ {critical}</span>
+            <span className="rack-critical-count" aria-label={t('rack.critical')}><ErrorSymbol /> {critical}</span>
             <span className="rack-warning-count" aria-label={t('rack.warning')}>▲ {warning}</span>
             <button className="group-collapse" aria-label={t(isClosed ? 'rack.expand' : 'rack.collapse')} aria-expanded={!isClosed} onClick={collapse}>{isClosed ? '+' : '−'}</button>
             <GroupActions {...actionProps} group={name} />

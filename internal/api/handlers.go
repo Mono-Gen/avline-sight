@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -680,6 +681,23 @@ func (s *Server) ackAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"acked": "all"})
+}
+
+func (s *Server) unack(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil || id <= 0 {
+		writeErr(w, 400, "イベントIDが不正です", "", "")
+		return
+	}
+	if err := s.Engine.Unack(id); err != nil {
+		if errors.Is(err, engine.ErrUndoUnavailable) {
+			writeErr(w, 404, "アラートが見つかりません", "", "画面を更新してから再試行してください")
+		} else {
+			writeErr(w, 500, "確認を取り消せません", err.Error(), "画面を更新してから再試行してください")
+		}
+		return
+	}
+	writeJSON(w, 200, map[string]any{"unacked": id})
 }
 
 func (s *Server) marker(w http.ResponseWriter, r *http.Request) {
