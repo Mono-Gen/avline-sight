@@ -10,6 +10,47 @@ import (
 	"github.com/Mono-Gen/avline-sight/internal/trap"
 )
 
+func TestEventQuickFiltersApplyBeforeLimit(t *testing.T) {
+	s, h := newDevicesServer(t)
+	now := time.Now()
+	for _, ev := range []model.Event{
+		{TS: now.Add(-4 * time.Second), SwitchID: 1, IfIndex: 1, Category: "CONNECT", Severity: model.SevWarning, Code: "LINK_DOWN"},
+		{TS: now.Add(-3 * time.Second), SwitchID: 1, Category: "SYSLOG", Severity: model.SevWarning, Code: "SWITCH_LOG"},
+		{TS: now.Add(-2 * time.Second), SwitchID: 1, Category: "SYSLOG", Severity: model.SevInfo, Code: "SWITCH_LOG"},
+		{TS: now.Add(-time.Second), Category: "MARKER", Severity: model.SevInfo, Code: "MARKER"},
+	} {
+		s.Engine.OnEvent(ev)
+	}
+	for _, tc := range []struct{ query, category, severity string }{
+		{"", "MARKER", model.SevInfo},
+		{"&issues_only=1", "SYSLOG", model.SevWarning},
+		{"&issues_only=1&severity=INFO", "", ""},
+		{"&unacked_only=1", "CONNECT", model.SevWarning},
+		{"&unacked_only=1&switch_id=2", "", ""},
+		{"&category=MARKER", "MARKER", model.SevInfo},
+	} {
+		w := do(h, "GET", "/api/events?limit=1"+tc.query, "")
+		var events []model.Event
+		if err := json.Unmarshal(w.Body.Bytes(), &events); w.Code != 200 || err != nil {
+			t.Fatalf("%s: %d %s (%v)", tc.query, w.Code, w.Body, err)
+		}
+		if tc.category == "" {
+			if len(events) != 0 {
+				t.Fatalf("%s: %v", tc.query, events)
+			}
+		} else if len(events) != 1 || events[0].Category != tc.category || events[0].Severity != tc.severity {
+			t.Fatalf("%s: %v", tc.query, events)
+		}
+	}
+	if err := s.Engine.Ack(s.Engine.Alerts()[0].EventID, false); err != nil {
+		t.Fatal(err)
+	}
+	w := do(h, "GET", "/api/events?unacked_only=1", "")
+	if w.Code != 200 || w.Body.String() != "[]\n" {
+		t.Fatalf("確認後: %d %s", w.Code, w.Body)
+	}
+}
+
 func TestOperationEndpointsLocksAndSync(t *testing.T) {
 	s, h := newDevicesServer(t)
 	s.Hub = NewHub()

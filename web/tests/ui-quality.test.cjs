@@ -38,6 +38,10 @@ const { AppHeader } = require('../src/components/AppHeader.tsx');
 const { PhaseControls } = require('../src/components/PhaseControls.tsx');
 const { AlertBand, AlertEntry } = require('../src/components/AlertBand.tsx');
 const { summarizeAlerts, groupWallAlerts } = require('../src/wallAlerts.ts');
+const { acknowledgeableEventIds, logRows, syslogMessage } = require('../src/events.ts');
+const { LogEventRow } = require('../src/views/Logs.tsx');
+const { DeviceInventoryTable } = require('../src/views/Devices.tsx');
+const { PollingStatus } = require('../src/components/PollingStatus.tsx');
 const render = (component, props) => renderToStaticMarkup(React.createElement(component, props));
 const noop = () => {};
 const fault = (id, extra = {}) => ({ event_id: id, severity: 'WARNING', suppressed: false, acked: false, code: 'CUSTOM', title: 'Fault', ...extra });
@@ -57,6 +61,116 @@ test('壁の上部・未確認キュー・全タイルは発生中と未確認�
   const top = render(OverallStatus, { count: counts.count, active: counts.active, unacked: counts.unacked, ready: true, stopped: false });
   assert.match(top, /発生中 2件 \/ 未確認 2件/);
   assert.match(render(AlertBand, { alerts, wall: true }), /未確認 2件/);
+});
+
+test('グループ、総合帯、壁、ランプは同じ発生中・未確認を表示する', () => {
+  const summary = { id: 1, name: 'Switch West', group_tag: 'West', reachable: true };
+  const ports = [1, 2, 3].map(if_index => ({
+    switch_id: 1, port: { if_index, name: `1/0/${if_index}`, oper: if_index === 3 ? 'down' : 'up', type: 'sfp', sfp: { los: if_index === 3 } },
+  }));
+  const alerts = [
+    fault(1, { switch_id: 1, if_index: 1, active: true, acked: true }),
+    fault(2, { switch_id: 1, if_index: 2, active: false }),
+    fault(3, { switch_id: 1, if_index: 3, active: true, suppressed: true }),
+    fault(4, { switch_id: 1, if_index: 3, active: true, severity: 'INFO' }),
+  ];
+  const { OverviewView } = sourceWith('../src/views/Overview.tsx', {
+    '../useRackData': { useRackData: () => ({ data: { ports }, definitions: {}, refresh: noop }) },
+  });
+  const props = { overview: { switches: [summary] }, operations: { alerts, ready: true }, replay: null, locked: true };
+  const monitor = render(OverviewView, props);
+  assert.match(monitor, /rack-group-counts" aria-label="発生中 1件 \/ 未確認 1件"/);
+  assert.match(monitor, /lamp-critical" title="1\/0\/1/);
+  assert.match(monitor, /lamp-warning" title="1\/0\/2/);
+  assert.match(monitor, /lamp-unknown" title="1\/0\/3/);
+  assert.match(render(OverviewView, { ...props, wall: true }), /status-critical[^]*発生中 1件 \/ 未確認 1件/);
+  assert.match(render(OverallStatus, { ...summarizeAlerts(alerts), critical: true, ready: true }), /発生中 1件 \/ 未確認 1件/);
+  assert.match(render(WallSwitchTile, { summary, alerts: [alerts[1]] }), /status-warning[^]*復旧済み・未確認/);
+  assert.match(render(OverviewView, { ...props, target: { switchId: 1, ifIndex: 2 } }), /ポート詳細 · Switch West \/ 1\/0\/2/);
+});
+
+test('トポロジーと接続機器は同じ色・記号を使い、監視対象を特定する', () => {
+  const alerts = [fault(1, { switch_id: 1, if_index: 2, port: '1/0/2', active: false })];
+  const cy = require('cytoscape')({ headless: true, styleEnabled: true });
+  try {
+    const { updateTopology } = require('../src/topologyGraph.ts');
+    updateTopology(cy, {
+      nodes: [{ id: 'sw', switch_id: 1, label: 'West', kind: 'switch', reachable: true },
+        { id: 'ext', label: 'Other', kind: 'external', reachable: true }],
+      edges: [{ id: 'link', source: 'sw', target: 'ext', local_port: '1/0/2' }],
+    }, undefined, '', true, false, alerts);
+    assert.equal(cy.getElementById('sw').data('statusLabel'), '! West');
+    assert.equal(cy.getElementById('ext').data('statusTone'), 'warning');
+    assert.equal(cy.getElementById('ext').data('monitorSwitchId'), 1);
+    assert.equal(cy.getElementById('ext').data('monitorPortName'), '1/0/2');
+  } finally {
+    cy.destroy();
+  }
+  const clicked = [];
+  const props = { alerts, onNavigate: target => clicked.push(target), rows: [
+    { mac: 'AA', switch_id: 1, if_index: 2, switch_name: 'West', port: '1/0/2', seen: true },
+    { mac: 'BB', switch_id: 2, if_index: 2, seen: true },
+    { mac: 'CC', seen: false },
+  ] };
+  const html = render(DeviceInventoryTable, props);
+  assert.match(html, /status-warning[^>]*>!</);
+  assert.match(html, /status-healthy[^>]*>✓</);
+  assert.match(html, /status-unknown[^>]*>—</);
+  const clickableRows = elements(DeviceInventoryTable(props), node => node.type === 'tr' && node.props.onClick);
+  assert.equal(clickableRows.length, 2);
+  clickableRows[0].props.onClick();
+  assert.deepEqual(clicked, [{ switchId: 1, ifIndex: 2, portName: '1/0/2' }]);
+});
+
+test('通常・壁の更新時刻とカードの発生・復旧をJSTでそろえる', () => {
+  const updatedAt = Date.parse('2026-11-22T15:01:02Z');
+  const props = { updatedAt, online: true, profiles: [], part: '', busy: false, locked: true };
+  for (const wall of [false, true]) {
+    assert.match(render(AppHeader, { ...props, wall }), /header-time[^]*更新: 00:01:02 JST/);
+  }
+  assert.match(render(PollingStatus, { updatedAt: new Date(updatedAt) }), /更新: 00:01:02 JST/);
+  const recovered = fault(1, { active: false, ts: '2026-11-22T09:29:32Z', cleared_at: '2026-11-22T09:30:10Z' });
+  const html = render(AlertEntry, { alert: recovered });
+  assert.match(html, /alert-warning alert-recovered/);
+  assert.match(html, /発生 <time[^>]*>18:29:32<\/time> → 復旧 <time[^>]*>18:30:10 JST<\/time>/);
+});
+
+test('ログはPC受信時刻だけを時刻列にし、展開時にSyslog原文を表示する', () => {
+  const raw = '<13> Nov  7 15:16:44 SwitchWest LLDP: neighbor keepalive';
+  assert.equal(syslogMessage(raw), 'LLDP: neighbor keepalive');
+  assert.equal(syslogMessage('<34>1 2026-11-07T15:16:44Z SwitchWest service 123 ID - data'), 'service 123 ID - data');
+  assert.equal(syslogMessage('LLDP: neighbor keepalive'), 'LLDP: neighbor keepalive');
+  const event = { id: 9, ts: '2026-11-07T15:16:45Z', title: raw, code: 'SWITCH_LOG', category: 'SYSLOG', severity: 'INFO' };
+  const html = render(LogEventRow, { event, ackable: new Set([9]) });
+  assert.equal((html.match(/<time /g) || []).length, 1);
+  assert.match(html, /2026-11-08 00:16:45 JST/);
+  assert.match(html, /<summary>LLDP: neighbor keepalive<\/summary>/);
+  assert.match(html, /<pre>&lt;13&gt; Nov  7 15:16:44 SwitchWest LLDP: neighbor keepalive<\/pre>/);
+  assert.doesNotMatch(html, /data-action="ack"/);
+});
+
+test('ログのクイック絞り込みと確認ボタンは対象行だけに適用する', () => {
+  const events = [
+    { id: 1, category: 'ANOMALY', severity: 'CRITICAL', switch_id: 7, switch_name: 'West' },
+    { id: 2, category: 'TRAP', severity: 'WARNING', switch_id: 7, switch_name: 'West' },
+    { id: 3, category: 'MARKER', severity: 'INFO', switch_id: 0 },
+    { id: 4, category: 'ANOMALY', severity: 'WARNING', switch_id: 7, acked: true },
+  ].map(event => ({ ts: '2026-11-07T15:16:45Z', title: 'Test', code: 'CUSTOM', ...event }));
+  const alerts = [fault(1, { severity: 'CRITICAL' }), fault(2, { suppressed: true }), fault(3, { severity: 'INFO' }), fault(4, { acked: true })];
+  const ids = acknowledgeableEventIds(alerts);
+  const filter = { from: '', to: '', q: '', switch_id: '', severity: '', category: '' };
+  const filtered = extra => logRows(events, [], { ...filter, ...extra }, ids).map(event => event.id);
+  assert.deepEqual(filtered({ issuesOnly: true }), [1, 2, 4]);
+  assert.deepEqual(filtered({ unackedOnly: true }), [1]);
+  assert.deepEqual(filtered({ category: 'MARKER' }), [3]);
+  assert.deepEqual(filtered({ category: 'ANOMALY', severity: 'WARNING', switch_id: '7' }), [4]);
+  assert.deepEqual(logRows(events, [{ ...events[0], acked: true }], { ...filter, unackedOnly: true }, ids), []);
+  const { Logs } = sourceWith('../src/views/Logs.tsx', { '../usePolling': { usePolling: () => ({ data: events }) } });
+  const html = render(Logs, { overview: { switches: [] }, events, operations: { alerts }, locked: false });
+  assert.equal((html.match(/<select/g) || []).length, 3);
+  assert.match(html, /<option value="7">West<\/option>/);
+  assert.match(html, /異常・警告のみ[^]*未確認のみ[^]*マーカー/);
+  assert.equal((html.match(/data-action="ack"/g) || []).length, 1);
 });
 
 test('同じスイッチとポートの同一分だけをまとめ、全メンバーを確認する', () => {
@@ -139,7 +253,7 @@ test('監視停止は切断・初回未更新・15秒未着で発火し、配信
   assert.equal(monitoringStopped(true, 2000, 16999), false);
   assert.equal(monitoringStopped(true, 2000, 17000), true);
   assert.equal(monitoringStopped(true, 17000, 17000), false);
-  assert.match(render(MonitorStopped, { updatedAt: 2000 }), /監視停止中.*最終更新/);
+  assert.match(render(MonitorStopped, { updatedAt: 2000 }), /監視停止中.*更新: 09:00:02 JST/);
 });
 
 test('総合状態は抑止とINFOを数えず、復旧未確認・発生中確認済みは残す', () => {

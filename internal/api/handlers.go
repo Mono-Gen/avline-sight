@@ -658,7 +658,18 @@ func (s *Server) eventFilter(r *http.Request) store.EventFilter {
 }
 
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
-	evs, err := s.Store.Events(s.eventFilter(r))
+	filter := s.eventFilter(r)
+	query := r.URL.Query()
+	filter.IssuesOnly = query.Get("issues_only") == "1"
+	if query.Get("unacked_only") == "1" {
+		filter.AlertIDs = []int64{}
+		for _, alert := range s.Engine.Alerts() {
+			if !alert.Acked && !alert.Suppressed && (alert.Severity == model.SevCritical || alert.Severity == model.SevWarning) {
+				filter.AlertIDs = append(filter.AlertIDs, alert.EventID)
+			}
+		}
+	}
+	evs, err := s.Store.Events(filter)
 	if err != nil {
 		writeErr(w, 500, "イベントを取得できません", err.Error(), "")
 		return

@@ -125,7 +125,7 @@ export function SettingsDialog({ value, close, run, busy, webAddr, locked = fals
           ])}
         >{t('ui.m186')}</button>
         {validation && <p role="alert">⚠ {validation}</p>}
-        <button onClick={save}>{t('ui.m187')}</button>
+        <button className="button-primary" onClick={save}>{t('ui.m187')}</button>
       </fieldset>
     </Dialog>
   );

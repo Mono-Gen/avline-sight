@@ -1,21 +1,23 @@
 import type cytoscape from 'cytoscape';
 import { asArray } from './format';
-import type { Multicast, Topology } from './types';
+import type { Alert, Multicast, Topology } from './types';
+import { alertStates, alertTone, isPortAlert, summarizeAlerts } from './wallAlerts';
 
 export const topologyStyles: cytoscape.Stylesheet[] = [
   {
     selector: 'node',
     style: {
-      label: 'data(label)',
-      'background-color': '#38bdf8',
+      label: 'data(statusLabel)',
+      'background-color': 'data(statusColor)',
       color: '#ddd',
       'text-valign': 'bottom'
     }
   },
   {
     selector: 'node[kind = "external"], node[kind = "device"]',
-    style: { shape: 'diamond', 'background-color': '#a78bfa' }
+    style: { shape: 'diamond' }
   },
+  { selector: 'node[statusTone = "warning"]', style: { 'border-color': '#fde68a', 'border-width': 3 } },
   {
     selector: 'edge',
     style: {
@@ -30,7 +32,7 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
   { selector: 'edge.hidden', style: { display: 'none' } },
   {
     selector: 'node[?highlight]',
-    style: { 'background-color': '#f59e0b', 'border-color': '#f59e0b', 'border-width': 3 }
+    style: { 'border-color': '#7dd3fc', 'border-width': 3 }
   },
   { selector: 'edge[?highlight]', style: { 'line-color': '#f59e0b', width: 5 } },
 ];
@@ -42,6 +44,7 @@ export function updateTopology(
   selectedGroup: string,
   showBlocking: boolean,
   initial: boolean,
+  alerts: Alert[] = [],
 ) {
   const nodes = asArray(topology.nodes);
   const edges = asArray(topology.edges);
@@ -55,8 +58,20 @@ export function updateTopology(
   core.batch(() => {
     core.elements().filter(element => !ids.has(element.id())).remove();
     nodes.forEach((node, index) => {
+      const localEdge = node.switch_id ? undefined : edges.find(edge => edge.target === node.id && switchIds.get(edge.source));
+      const switchId = node.switch_id || (localEdge && switchIds.get(localEdge.source));
+      const portName = localEdge?.local_port;
+      const relevant = node.switch_id ? alerts.filter(alert => alert.switch_id === switchId) :
+        switchId && portName ? alerts.filter(alert => alert.switch_id === switchId && alert.port === portName && isPortAlert(alert)) : [];
+      const statusTone = alertTone(summarizeAlerts(relevant), node.reachable === true);
+      const status = alertStates[statusTone];
       const data = {
         ...node,
+        monitorSwitchId: switchId || 0,
+        monitorPortName: portName || '',
+        statusTone,
+        statusLabel: `${status.symbol} ${node.label}`,
+        statusColor: status.color,
         highlight: Boolean(selectedGroup && node.switch_id !== undefined && members.has(node.switch_id))
       };
       const existing = core.getElementById(node.id);

@@ -4,18 +4,21 @@ import { asArray } from '../format';
 import type { Phase, Profile, Settings, Status } from '../types';
 import { t } from '../i18n';
 import { PcClock, PhaseControls } from './PhaseControls';
+import { jstTime } from '../pcTime';
 interface HeaderProps {
   online: boolean; phase?: Phase; onPhase: (phase: Phase) => void; onTrapHelp: () => void;
   wall: boolean; setWall: (value: boolean) => void; status?: Status; busy: boolean; locked: boolean;
   profiles: Profile[]; settings?: Settings; part: string; setPart: (value: string) => void;
   replay: unknown; marker: () => void; summary?: ReactNode;
+  updatedAt?: number | string;
   run: (action: () => Promise<void>) => void; refresh: () => Promise<void>; setDialog: (value: string) => void;
 }
 export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, status, busy, locked,
-  profiles, settings, part, setPart, replay, marker, run, refresh, setDialog, summary }: HeaderProps) {
+  profiles, settings, part, setPart, replay, marker, run, refresh, setDialog, summary, updatedAt }: HeaderProps) {
   const phaseControl = <PhaseControls {...{ phase, locked, busy, wall, run, onPhase }} />;
+  const clock = <div className="header-time"><PcClock /><small>{t('rack.lastUpdated', { at: jstTime(updatedAt ?? NaN) })}</small></div>;
   if (wall) return <header className="wall-header">
-    {summary}{phaseControl}<PcClock />
+    {summary}{phaseControl}{clock}
     <button className="wall-exit" onClick={() => setWall(false)}>{t('wall.exit')}</button>
   </header>;
   return <header className="app-header">
@@ -41,7 +44,7 @@ export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, s
       })}>{t(status?.locked ? 'rack.locked' : 'rack.lock')}</button>
       <button disabled={busy || !status} onClick={() => setDialog('settings')}>{t('rack.settings')}</button>
       <button onClick={() => setWall(true)}>{t('rack.wall')}</button>
-      <PcClock />
+      {clock}
     </div>
     {summary}
   </header>;

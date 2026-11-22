@@ -1,6 +1,7 @@
 import * as echarts from 'echarts';
 import { useEffect, useRef } from 'react';
 import { asArray } from '../format';
+import { pcTimestamp } from '../pcTime';
 
 export function Chart({ points, keys }: {
   points: Record<string, number | string>[];
@@ -16,7 +17,7 @@ export function Chart({ points, keys }: {
       legend: { textStyle: { color: '#888' } },
       xAxis: {
         type: 'category',
-        data: asArray(p).map(x => x.ts)
+        data: p.map(point => pcTimestamp(point.ts, true)),
       },
       yAxis: { type: 'value' },
       series: asArray(keys).map(k => ({

@@ -2,6 +2,7 @@ import { operationsJa } from './operations';
 import { eventJa } from './eventJa';
 import { rackJa } from './rack';
 export const ja = {
+  logs: { receivedAt: 'PC受信時刻 (JST)', issuesOnly: '異常・警告のみ', unackedOnly: '未確認のみ', marker: 'マーカー' },
   wall: {
     counts: '発生中 {active}件 / 未確認 {unacked}件', exit: '通常表示に戻る',
     locked: 'ロック中のため確認できません', recovered: '復旧済み・未確認',

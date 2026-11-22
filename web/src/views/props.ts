@@ -1,6 +1,11 @@
 import type React from 'react';
 import type { Event, Overview, ReplayRef, Settings, Status, SwitchState, WatchItem } from '../types';
 import type { Operations } from '../useOperations';
+export interface PortMonitorTarget {
+  switchId: number;
+  ifIndex?: number;
+  portName?: string;
+}
 export interface ViewProps {
   overview: Overview;
   operations?: Operations;
@@ -9,6 +14,7 @@ export interface ViewProps {
   part: string;
   selected: number;
   select: (id: number) => void;
+  openPortMonitor?: (target: PortMonitorTarget) => void;
   state?: SwitchState;
   replay: SwitchState[] | null;
   replayRef?: ReplayRef;

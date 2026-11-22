@@ -8,16 +8,15 @@ import { PortDetail } from '../components/PortDetail';
 import { RackRow } from '../components/RackRow';
 import { asArray } from '../format';
 import { t } from '../i18n';
-import { pcTimestamp } from '../pcTime';
-import { criticalLink, isPortAlert, phaseSuppressesPorts, sortedAlerts, uplinkPorts } from '../rackModel';
+import { sortedAlerts, uplinkPorts } from '../rackModel';
 import type { Alert, InventoryRow, Port, SwitchConfig, SwitchSummary } from '../types';
 import { useRackData } from '../useRackData';
 import { registeredSummary, replaySummary } from './rackSummaries';
-import type { ViewProps } from './props';
+import type { PortMonitorTarget, ViewProps } from './props';
 import type { Operations } from '../useOperations';
 import { PortMatrix } from './PortMatrix';
 import { WallSwitchTile } from '../components/WallSwitchTile';
-import { summarizeAlerts } from '../wallAlerts';
+import { isPortAlert, matchingPortAlerts, summarizeAlerts } from '../wallAlerts';
 import { ErrorSymbol } from '../components/ErrorSymbol';
 
 const collapseKey = 'rack-collapsed';
@@ -61,17 +60,17 @@ function indexBySwitch<T extends { switch_id?: number }>(rows: T[]) {
   return index;
 }
 
-type OverviewProps = ViewProps & { wall?: boolean; operations?: Operations; onTrapHelp?: () => void };
+type OverviewProps = ViewProps & { wall?: boolean; operations?: Operations; onTrapHelp?: () => void; target?: PortMonitorTarget };
 const noAlerts: Alert[] = [];
 const noDevices: InventoryRow[] = [];
 
 export function OverviewView(props: OverviewProps) {
-  const { wall = false, operations, onTrapHelp = () => undefined, replay, locked, busy } = props;
+  const { wall = false, operations, onTrapHelp = () => undefined, replay, locked, busy, target } = props;
   const [layout, setLayout] = useState<'diagram' | 'list'>('diagram');
   const [edit, setEdit] = useState<SwitchConfig | null>();
   const [discover, setDiscover] = useState(false);
   const [groupEdit, setGroupEdit] = useState<GroupEdit>();
-  const [selected, setSelected] = useState<{ switchId: number; ifIndex: number }>();
+  const [selected, setSelected] = useState<PortMonitorTarget | undefined>(() => target?.ifIndex || target?.portName ? target : undefined);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [notice, setNotice] = useState('');
   const [wallSwitch, setWallSwitch] = useState<number>();
@@ -91,7 +90,26 @@ export function OverviewView(props: OverviewProps) {
   const bySwitch = indexBySwitch(devices);
   const knownGroups = new Map(asArray(operations?.groups).map(group => [group.name, group]));
   const preset = asArray(props.settings?.views).find(view => view.id === props.part);
-  const visible = summary.filter(item => wall || !preset?.tags?.length || preset.tags.includes(item.group_tag));
+  const visible = summary.filter(item => wall || item.id === target?.switchId || !preset?.tags?.length || preset.tags.includes(item.group_tag));
+  const targetSwitch = visible.find(item => item.id === target?.switchId);
+  const focusedTarget = useRef<PortMonitorTarget>();
+  useEffect(() => {
+    if (!target || !targetSwitch || layout !== 'diagram' || collapsed.has(targetSwitch.group_tag) || focusedTarget.current === target) return;
+    const row = document.getElementById(`rack-switch-${target.switchId}`);
+    if (row) {
+      row.focus();
+      focusedTarget.current = target;
+    }
+  }, [target, targetSwitch, layout, collapsed]);
+  useEffect(() => {
+    if (!targetSwitch) return;
+    setCollapsed(previous => {
+      if (!previous.has(targetSwitch.group_tag)) return previous;
+      const next = new Set(previous);
+      next.delete(targetSwitch.group_tag);
+      return next;
+    });
+  }, [targetSwitch?.id, targetSwitch?.group_tag]);
   const byId = new Map(summary.map(item => [item.id, item]));
   const alerts = sortedAlerts((replay !== null ? noAlerts : asArray(operations?.alerts)).map(alert => {
       const portAlert = isPortAlert(alert);
@@ -100,7 +118,7 @@ export function OverviewView(props: OverviewProps) {
       const device = alert.mac ? devices?.find(row => row.mac === alert.mac) :
         portAlert ? devices?.find(row => row.if_index === alert.if_index && row.registered) || devices?.find(row => row.if_index === alert.if_index) : undefined;
       return {
-        ...alert, severity: criticalLink(alert, devices || []) ? 'CRITICAL' : alert.severity,
+        ...alert,
         switch_name: alert.switch_name || byId.get(alert.switch_id)?.name || '',
         port: portAlert ? alert.port || port?.name || `#${alert.if_index}` : '',
         device_name: alert.device_name || device?.label || device?.lldp_name || device?.mac ||
@@ -124,9 +142,9 @@ export function OverviewView(props: OverviewProps) {
   const refresh = async () => {
     await Promise.all([rack.refresh(), operations?.refresh()]);
   };
-  const phase = operations?.phase || props.status?.phase;
   const selectedSwitch = selected && visible.find(item => item.id === selected.switchId);
-  const selectedPort = selected && ports.get(selected.switchId)?.find(row => row.port.if_index === selected.ifIndex)?.port;
+  const selectedPort = selected && ports.get(selected.switchId)?.find(row =>
+    selected.ifIndex ? row.port.if_index === selected.ifIndex : row.port.name === selected.portName)?.port;
   const profileId = props.status?.profile.id;
   const actionProps = { locked, wall, busy, devices, run: props.run, refresh, notice: setNotice, replay: replay !== null, profileId };
   const wallSummary = summarizeAlerts(alerts);
@@ -140,7 +158,7 @@ export function OverviewView(props: OverviewProps) {
   wallTiles.sort((a, b) => {
     const rank = (sw: SwitchSummary) => {
       const current = summarizeAlerts(byAlert.get(sw.id) || []);
-      return current.active ? current.critical ? 0 : 1 : !sw.reachable ? 2 : current.unacked ? 3 : 4;
+      return current.active ? 0 : current.unacked ? 1 : !sw.reachable ? 2 : 3;
     };
     return rank(a) - rank(b);
   });
@@ -171,7 +189,6 @@ export function OverviewView(props: OverviewProps) {
         <button disabled={busy} onClick={() => setEdit(null)}>{t('rack.add')}</button>
         <button disabled={busy} onClick={() => setDiscover(true)}>{t('rack.discover')}</button>
       </>}
-      {rack.updatedAt && <small>{t('rack.lastUpdated', { at: pcTimestamp(rack.updatedAt.getTime()) })}</small>}
     </div>}
     {!wall && notice && <div role="status" className="panel flex items-center justify-between gap-2">{notice}<button onClick={() => setNotice('')}>{t('rack.close')}</button></div>}
     {rack.error && <p role="alert" className="rack-data-error">⚠ {rack.error}</p>}
@@ -180,9 +197,7 @@ export function OverviewView(props: OverviewProps) {
       {groups.map(name => {
         const rows = groupRows.get(name) || [];
         const isClosed = !wall && collapsed.has(name);
-        const shown = rows.flatMap(sw => byAlert.get(sw.id) || []).filter(alert => !alert.suppressed);
-        const critical = shown.filter(alert => alert.severity === 'CRITICAL').length;
-        const warning = shown.filter(alert => alert.severity === 'WARNING').length;
+        const counts = summarizeAlerts(rows.flatMap(sw => byAlert.get(sw.id) || []));
         const collapse = () => {
           const next = new Set(collapsed);
           if (next.has(name)) next.delete(name); else next.add(name);
@@ -191,24 +206,26 @@ export function OverviewView(props: OverviewProps) {
         return <section className="rack-group" key={name}>
           <div className="rack-group-header">
             <h2>{name || t('rack.ungrouped')}</h2>
-            <span className="rack-critical-count" aria-label={t('rack.critical')}><ErrorSymbol /> {critical}</span>
-            <span className="rack-warning-count" aria-label={t('rack.warning')}>▲ {warning}</span>
+            <span className="rack-group-counts" aria-label={t('wall.counts', counts)}>
+              <span className="rack-critical-count"><ErrorSymbol /> {counts.active}</span>
+              <span className="rack-warning-count">! {counts.unacked}</span>
+            </span>
             <button className="group-collapse" aria-label={t(isClosed ? 'rack.expand' : 'rack.collapse')} aria-expanded={!isClosed} onClick={collapse}>{isClosed ? '+' : '−'}</button>
             <GroupActions {...actionProps} group={name} />
             {!locked && <button disabled={busy} aria-label={t('operations.rename')} onClick={() => setGroupEdit({ name })}>✎</button> }
           </div>
           {!isClosed && rows.map(sw => <RackRow key={sw.id} summary={sw}
             ports={(ports.get(sw.id) || []).map(row => row.port)} devices={bySwitch.get(sw.id) || []} alerts={byAlert.get(sw.id) || []}
-            definitions={rack.definitions} suppressed={!!phase && phaseSuppressesPorts(phase) && replay === null}
+            definitions={rack.definitions}
             wall={wall} stale={!!rack.error} uplinks={uplinks} samples={samples} actions={props}
             onPort={port => setSelected({ switchId: sw.id, ifIndex: port.if_index })} onEdit={setEdit} onHelp={onTrapHelp} refresh={refresh} />)}
         </section>;
       })}
     </div>}
-    {!wall && selected && selectedSwitch && selectedPort && <PortDetail key={`${selected.switchId}/${selected.ifIndex}`}
+    {!wall && selected && selectedSwitch && selectedPort && <PortDetail key={`${selected.switchId}/${selectedPort.if_index}`}
       switchId={selected.switchId} switchName={selectedSwitch.name} port={selectedPort}
-      devices={(bySwitch.get(selected.switchId) || []).filter(device => device.if_index === selected.ifIndex)}
-      alerts={(byAlert.get(selected.switchId) || []).filter(alert => isPortAlert(alert) && alert.if_index === selected.ifIndex)}
+      devices={(bySwitch.get(selected.switchId) || []).filter(device => device.if_index === selectedPort.if_index)}
+      alerts={matchingPortAlerts(byAlert.get(selected.switchId) || [], selected.switchId, selectedPort.if_index)}
       close={() => setSelected(undefined)} replay={replay !== null} />}
     {!wall && !locked && props.status?.lab && <LabPanel run={props.run} busy={busy} switches={asArray(props.overview.switches)} />}
     {!wall && !locked && edit !== undefined && <SwitchForm value={edit || undefined} groups={allGroupNames} busy={busy} run={props.run}

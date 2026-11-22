@@ -1,28 +1,13 @@
 import { asArray } from './format';
-import type { Alert, InventoryRow, Phase, Port, SwitchSummary, Topology } from './types';
+import type { Alert, Port, SwitchSummary, Topology } from './types';
+import { alertStates, alertTone, isPortAlert, summarizeAlerts } from './wallAlerts';
 
-export type LampTone = 'critical' | 'warning' | 'healthy' | 'unused' | 'suppressed' | 'offline';
-export const isPortAlert = (alert: Alert) => alert.if_index > 0 && !['FAN_FAIL', 'PSU_FAIL'].includes(alert.code);
-
-export function criticalLink(alert: Alert, devices: InventoryRow[]) {
-  return isPortAlert(alert) && alert.code === 'LINK_DOWN' &&
-    devices.some(device => device.if_index === alert.if_index && device.registered && !device.via_uplink);
-}
-
-export function lampState(port: Port, alerts: Alert[], devices: InventoryRow[], suppressed: boolean, reachable: boolean, uplink = false) {
-  const relevant = asArray(alerts).filter(isPortAlert);
-  const visible = relevant.filter(alert => !alert.suppressed);
-  let tone: LampTone = 'unused';
-  if (suppressed || port.excluded || relevant.some(alert => alert.suppressed) && !visible.length) tone = 'suppressed';
-  else if (!reachable && !visible.length) tone = 'offline';
-  else if (visible.some(alert => alert.severity === 'CRITICAL' || criticalLink(alert, devices)) || port.sfp?.los || port.sfp?.tx_fault ||
-    Boolean(port.poe?.fault && port.poe.fault.toLowerCase() !== 'none')) tone = 'critical';
-  else if (visible.some(alert => alert.severity === 'WARNING') || devices.some(device => device.ip_mismatch || device.ping_ok === false ||
-    device.ping && device.ping.status !== 'ok') || [port.err_delta, port.discard_delta, port.fcs_delta, port.cos_drop_delta].some(value => value > 0)) tone = 'warning';
-  else if (!reachable) tone = 'offline';
-  else if (port.oper === 'up' && (uplink || asArray(port.devices).length || devices.some(device => device.seen))) tone = 'healthy';
-  const symbols: Record<LampTone, string> = { critical: '!', warning: '▲', healthy: '●', unused: '·', suppressed: '🔧', offline: '⚠' };
-  return { tone, symbol: symbols[tone], unacked: tone !== 'suppressed' && visible.some(alert => !alert.acked) };
+export function lampState(port: Port, alerts: Alert[], reachable: boolean) {
+  const relevant = alerts.filter(alert => isPortAlert(alert) && alert.if_index === port.if_index);
+  const tone = alertTone(summarizeAlerts(relevant), reachable && !port.excluded && port.oper === 'up');
+  const label = tone !== 'unknown' ? alertStates[tone].label :
+    port.excluded || relevant.some(alert => alert.suppressed) ? 'rack.suppressed' : !reachable ? 'rack.offline' : 'rack.unused';
+  return { tone, symbol: alertStates[tone].symbol, label } as const;
 }
 
 export function sortedAlerts(alerts: Alert[]): Alert[] {
@@ -30,8 +15,6 @@ export function sortedAlerts(alerts: Alert[]): Alert[] {
   return asArray(alerts).slice().sort((left, right) => Number(left.suppressed) - Number(right.suppressed) ||
     severity(left.severity) - severity(right.severity) || Date.parse(right.ts) - Date.parse(left.ts) || right.event_id - left.event_id);
 }
-
-export function phaseSuppressesPorts(phase: Phase) { return phase === 'setup'; }
 
 export function uplinkPorts(topology: Topology | undefined, switches: SwitchSummary[]): Set<string> {
   const ids = new Set(asArray(topology?.nodes).filter(node => node.kind === 'switch' &&

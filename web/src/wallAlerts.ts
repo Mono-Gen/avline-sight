@@ -1,15 +1,42 @@
 import { issueAlerts } from './monitorHealth';
-import type { Alert } from './types';
+import type { Alert, InventoryRow } from './types';
 
 export function summarizeAlerts(alerts: Alert[]) {
   const items = issueAlerts(alerts).filter(alert => alert.active || !alert.acked);
+  const activeItems = items.filter(alert => alert.active);
   return {
     items,
     count: items.length,
-    active: items.filter(alert => alert.active).length,
+    activeItems,
+    active: activeItems.length,
     unacked: items.filter(alert => !alert.acked).length,
-    critical: items.some(alert => alert.severity === 'CRITICAL'),
   };
+}
+
+export const alertStates = {
+  critical: { symbol: '!', label: 'rack.active', color: '#f87171' },
+  warning: { symbol: '!', label: 'wall.recovered', color: '#fbbf24' },
+  healthy: { symbol: '✓', label: 'cleanup.switchOK', color: '#86efac' },
+  unknown: { symbol: '—', label: 'cleanup.switchUnknown', color: '#94a3b8' },
+} as const;
+
+export function alertTone(counts: ReturnType<typeof summarizeAlerts>, known: boolean) {
+  return counts.active ? 'critical' : counts.unacked ? 'warning' : known ? 'healthy' : 'unknown';
+}
+
+export const isPortAlert = (alert: Alert) => alert.if_index > 0 && !['FAN_FAIL', 'PSU_FAIL'].includes(alert.code);
+
+function matchesPort(alert: Alert, switchId: number | undefined, ifIndex: number | undefined) {
+  return alert.switch_id === switchId && alert.if_index === ifIndex && isPortAlert(alert);
+}
+
+export function matchingPortAlerts(alerts: Alert[], switchId: number, ifIndex: number) {
+  return alerts.filter(alert => matchesPort(alert, switchId, ifIndex));
+}
+
+export function matchingDeviceAlerts(alerts: Alert[], device: InventoryRow) {
+  const mac = device.mac.toLowerCase();
+  return alerts.filter(alert => alert.mac ? alert.mac.toLowerCase() === mac : matchesPort(alert, device.switch_id, device.if_index));
 }
 
 export interface AlertGroup { key: string; alert: Alert; members: Alert[] }

@@ -51,7 +51,7 @@ export function GroupEditDialog({ edit, groups, busy, close, run, refresh, profi
         </li>)}
         {groups.includes('') && <li>{t('rack.ungrouped')}</li>}
       </ol> : <label>{t('operations.newGroup')} <input value={name} onChange={event => setName(event.target.value)} /></label>}
-      <button className="block" disabled={edit !== 'order' && (invalid || edit.name === name.trim())} onClick={save}>{t('operations.save')}</button>
+      <button className="button-primary block" disabled={edit !== 'order' && (invalid || edit.name === name.trim())} onClick={save}>{t('operations.save')}</button>
     </fieldset>
   </Dialog>;
 }

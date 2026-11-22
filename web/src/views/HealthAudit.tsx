@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { api, json } from '../api';
 import { Chart, Table } from '../components/Common';
 import { PollingStatus } from '../components/PollingStatus';
-import { asArray } from '../format';
+import { asArray, formatTime } from '../format';
 import type { Audit, MetricResult } from '../types';
 import { METRICS_REFRESH_MS, TOPOLOGY_REFRESH_MS, usePolling } from '../usePolling';
 import { useSwitchState } from '../useSwitchState';
@@ -93,7 +93,7 @@ export function HealthAudit(p: ViewProps) {
       {asArray((bases || [])).map(b => <div key={b.id}>
         {b.name}
 
-        {b.captured_ts}
+        {formatTime(b.captured_ts)}
 
         <button
           onClick={() => p.run(async () => {
@@ -105,6 +105,7 @@ export function HealthAudit(p: ViewProps) {
         >{t('ui.m261')}</button>
 
         <button
+          className="button-danger"
           disabled={p.locked || p.busy}
           onClick={() => {
             if (confirm(t('ui.m262', { p0: b.name }))) p.run(async () => {

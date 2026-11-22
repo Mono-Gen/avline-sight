@@ -75,22 +75,22 @@ test('APIは選択言語とリクエスト固有のヘッダーを送る', async
   await api('/api/test', { headers: { 'Content-Type': 'application/json' } });
 });
 
-test('ラックのランプは色と記号を併記し、復旧未確認の白枠は抑止中に点滅しない', () => {
-  const input = { port: { name: '1/0/1', oper: 'up', devices: [{ mac: 'AA' }] }, devices: [], alerts: [], suppressed: false, reachable: true, wall: false, onSelect: noop };
+test('ラックのランプは発生中を赤、復旧未確認を枠付きの橙、未観測を灰にする', () => {
+  const input = { port: { if_index: 1, name: '1/0/1', oper: 'up', devices: [{ mac: 'AA' }] }, devices: [], alerts: [], reachable: true, wall: false, onSelect: noop };
   const css = fs.readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-  for (const [severity, expected, symbol, color] of [
-    ['CRITICAL', 'critical', 'error-symbol', '#7f1d1d'], ['WARNING', 'warning', '▲', '#713f12'], [null, 'healthy', '●', '#154434'],
+  for (const [alerts, expected, symbol, color] of [
+    [[alert({ severity: 'WARNING', active: true, acked: true })], 'critical', 'error-symbol', '#7f1d1d'],
+    [[alert()], 'warning', '!', '#713f12'],
+    [[alert({ acked: true })], 'healthy', '✓', '#154434'],
   ]) {
-    const html = render(PortLamp, { ...input, alerts: severity ? [alert({ severity })] : [] });
+    const html = render(PortLamp, { ...input, alerts });
     assert.match(html, new RegExp(`lamp-${expected}`));
     assert.ok(html.includes(symbol));
     assert.match(css, new RegExp(`\\.lamp-${expected}[^}]+background: ${color}`));
-    assert.equal(html.includes('lamp-unacked'), !!severity);
   }
-  const suppressed = render(PortLamp, { ...input, suppressed: true, alerts: [alert()] });
-  assert.match(suppressed, /lamp-suppressed/);
-  assert.match(suppressed, /🔧/);
-  assert.doesNotMatch(suppressed, /lamp-unacked/);
+  assert.match(css, /\.lamp-warning[^}]+box-shadow: inset/);
+  assert.match(render(PortLamp, { ...input, port: { ...input.port, oper: 'down', sfp: { los: true } } }), /lamp-unknown/);
+  assert.match(render(PortLamp, { ...input, alerts: [alert({ active: true, suppressed: true })] }), /lamp-healthy/);
 });
 
 test('壁表示にはラベル付き終了とアラート確認を置き、ラック操作は隠す', () => {
@@ -109,10 +109,10 @@ test('壁表示にはラベル付き終了とアラート確認を置き、ラ�
 });
 
 test('登録済み機器のリンク断は赤、筐体番号が一致してもファン故障では正常ポートを赤にしない', () => {
-  const input = { port: { name: '1/0/1', oper: 'up', devices: [{ mac: 'AA' }] }, devices: [], suppressed: false, reachable: true, wall: false, onSelect: noop };
-  const down = alert({ severity: 'WARNING' });
+  const input = { port: { if_index: 1, name: '1/0/1', oper: 'up', devices: [{ mac: 'AA' }] }, devices: [], reachable: true, wall: false, onSelect: noop };
+  const down = alert({ severity: 'WARNING', active: true });
   assert.match(render(PortLamp, { ...input, alerts: [down], devices: [{ if_index: 1, registered: true }] }), /lamp-critical/);
-  assert.match(render(PortLamp, { ...input, alerts: [down], devices: [{ if_index: 1, registered: false, label: 'Console' }] }), /lamp-warning/);
+  assert.match(render(PortLamp, { ...input, alerts: [down], devices: [{ if_index: 1, registered: false, label: 'Console' }] }), /lamp-critical/);
   assert.match(render(PortLamp, { ...input, alerts: [alert({ code: 'FAN_FAIL', if_index: 1 })] }), /lamp-healthy/);
 });
 
@@ -187,10 +187,10 @@ test('フェーズ変更・リセット・一括確認はキャンセル時に�
 });
 
 test('PC時刻は秒とタイムゾーンを表示し、今日のアラートは日付を省略する', () => {
-  const time = new Date(2020, 8, 15, 14, 3, 8).getTime();
-  assert.match(pcTimestamp(time, true, time), /^2020-09-15 14:03:08 \S/);
-  assert.match(pcTimestamp(time, false, time), /^14:03:08 \S/);
-  assert.match(pcTimestamp(time, false, new Date(2020, 8, 16).getTime()), /^2020-09-15 /);
+  const time = Date.parse('2020-09-15T05:03:08Z');
+  assert.equal(pcTimestamp(time, true, time), '2020-09-15 14:03:08 JST');
+  assert.equal(pcTimestamp(time, false, time), '14:03:08 JST');
+  assert.equal(pcTimestamp(time, false, Date.parse('2020-09-15T15:00:00Z')), '2020-09-15 14:03:08 JST');
   const settings = render(SettingsDialog, { value: { thresholds: {}, views: [] }, webAddr: '127.0.0.1:8080', close: noop, run: noop, busy: false });
   assert.match(settings, /他のPCからは接続できません/);
 });

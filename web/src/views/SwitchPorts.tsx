@@ -100,6 +100,9 @@ export function SwitchPorts(p: ViewProps) {
     {!p.replay && <PollingStatus {...statePolling} />}
     {s && <>
       <FrontPanel
+        alerts={p.replay ? [] : p.operations?.alerts}
+        switchId={s.id}
+        reachable={s.reachable}
         model={s.model}
         definitions={models.data}
         selected={idx}
@@ -183,6 +186,7 @@ export function SwitchPorts(p: ViewProps) {
             </option>)}
           </select>
           <button
+            className="button-primary"
             disabled={p.busy || p.locked}
             onClick={() => p.run(async () => {
               await api(`/api/switches/${p.selected}/ports/${idx}`, json('PUT', {
@@ -211,6 +215,7 @@ export function SwitchPorts(p: ViewProps) {
           >{t('ui.m293')}</button>
         </div>
         <button
+          className="button-danger"
           disabled={p.busy || p.locked}
           onClick={() => {
             if (confirm(t('ui.m294'))) p.run(async () => {

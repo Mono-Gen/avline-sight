@@ -828,6 +828,8 @@ type EventFilter struct {
 	From, To              time.Time
 	Limit                 int
 	RestoreProfileID      int64
+	IssuesOnly            bool
+	AlertIDs              []int64
 }
 
 func (s *Store) Events(f EventFilter) ([]model.Event, error) {
@@ -849,6 +851,17 @@ func (s *Store) Events(f EventFilter) ([]model.Event, error) {
 	}
 	if f.Severity != "" {
 		conds, args = append(conds, "severity=?"), append(args, f.Severity)
+	}
+	if f.IssuesOnly {
+		conds = append(conds, "severity IN ('CRITICAL','WARNING')")
+	}
+	if f.AlertIDs != nil {
+		ids, err := json.Marshal(f.AlertIDs)
+		if err != nil {
+			return nil, fmt.Errorf("確認対象イベントIDの変換: %w", err)
+		}
+		conds = append(conds, "acked=0 AND id IN (SELECT value FROM json_each(?))")
+		args = append(args, string(ids))
 	}
 	if f.SwitchID != 0 {
 		conds, args = append(conds, "switch_id=?"), append(args, f.SwitchID)

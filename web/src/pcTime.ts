@@ -1,5 +1,4 @@
 import { useSyncExternalStore } from 'react';
-import { getLang } from './i18n';
 
 let now = Date.now();
 let timer: ReturnType<typeof setInterval> | undefined;
@@ -25,18 +24,28 @@ function subscribe(listener: () => void) {
 
 export const usePcTime = () => useSyncExternalStore(subscribe, () => now, () => now);
 
-const clocks = {
-  ja: new Intl.DateTimeFormat('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZoneName: 'short' }),
-  en: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZoneName: 'short' }),
-};
-const two = (part: number) => String(part).padStart(2, '0');
-const day = (date: Date) => `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
+const displayTimeZone = 'JST';
+const clock = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+});
+const calendar = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+export function jstTime(value: string | number | Date, withZone = true) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime()) || date.getUTCFullYear() < 2) return '—';
+  return withZone ? `${clock.format(date)} ${displayTimeZone}` : clock.format(date);
+}
+
+function jstDay(value: string | number) {
+  const parts = calendar.formatToParts(new Date(value));
+  return ['year', 'month', 'day'].map(type => parts.find(part => part.type === type)?.value).join('-');
+}
 
 export function pcTimestamp(value: string | number, alwaysDate = false, today = Date.now()) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime()) || date.getFullYear() < 2) return '—';
-  const parts = clocks[getLang()].formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value || '';
-  const time = `${part('hour')}:${part('minute')}:${part('second')} ${part('timeZoneName')}`;
-  return alwaysDate || day(date) !== day(new Date(today)) ? `${day(date)} ${time}` : time;
+  const time = jstTime(value);
+  if (time === '—') return time;
+  const day = jstDay(value);
+  return alwaysDate || day !== jstDay(today) ? `${day} ${time}` : time;
 }

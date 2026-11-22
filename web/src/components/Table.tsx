@@ -1,6 +1,6 @@
 import { eventHint, eventTitle, getLang, t } from '../i18n';
 import React from 'react';
-import { asArray, decimal, formatBps } from '../format';
+import { asArray, decimal, formatBps, formatTime } from '../format';
 import { Badge } from './Badge';
 import { columnLabels } from './columnLabels';
 
@@ -11,6 +11,7 @@ function cellValue(key: string, value: unknown, row: Record<string, unknown>): R
   }
   if (value == null) return '—';
   if (key === 'severity') return <Badge text={String(value)} />;
+  if (typeof value === 'string' && (key === 'ts' || key.endsWith('_ts') || key === 'cleared_at' || key === 'acked_at')) return formatTime(value);
   if (typeof value === 'boolean') return value ? t('ui.m193') : t('ui.m194');
   if (typeof value === 'number') {
     if (key === 'rx_bps' || key === 'tx_bps') return formatBps(value);

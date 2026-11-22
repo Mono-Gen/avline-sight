@@ -3,6 +3,7 @@ import { eventEn } from './eventEn';
 import type { Dictionary } from './index';
 import { rackEn } from './rack';
 export const en: Dictionary = {
+  logs: { receivedAt: 'PC receive time (JST)', issuesOnly: 'Issues and warnings only', unackedOnly: 'Unacknowledged only', marker: 'Markers' },
   wall: {
     counts: '{active} active / {unacked} unacknowledged', exit: 'Return to normal view',
     locked: 'Cannot acknowledge while locked or read-only', recovered: 'Recovered · unacknowledged',

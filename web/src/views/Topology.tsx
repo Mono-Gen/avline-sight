@@ -16,8 +16,8 @@ export function Topology(props: ViewProps) {
   const container = useRef<HTMLDivElement>(null);
   const graph = useRef<cytoscape.Core>();
   const initialized = useRef(false);
-  const onSelect = useRef(props.select);
-  onSelect.current = props.select;
+  const onSelect = useRef(props.openPortMonitor);
+  onSelect.current = props.openPortMonitor;
   const result = usePolling(async signal => {
     const [topology, multicast] = await Promise.all([
       api<Graph>('/api/topology', { signal }),
@@ -36,8 +36,9 @@ export function Topology(props: ViewProps) {
     });
     graph.current = instance;
     instance.on('tap', 'node', event => {
-      const id = event.target.data('switch_id');
-      if (id) onSelect.current(id);
+      const switchId = event.target.data('monitorSwitchId');
+      const portName = event.target.data('monitorPortName');
+      if (switchId) onSelect.current?.({ switchId, portName });
     });
     return () => {
       instance.destroy();
@@ -47,9 +48,9 @@ export function Topology(props: ViewProps) {
   }, []);
   useEffect(() => {
     if (!graph.current || !result.data) return;
-    updateTopology(graph.current, result.data.topology, result.data.multicast, group, blocking, !initialized.current);
+    updateTopology(graph.current, result.data.topology, result.data.multicast, group, blocking, !initialized.current, props.operations?.alerts);
     if (asArray(result.data.topology.nodes).length) initialized.current = true;
-  }, [result.data, group, blocking]);
+  }, [result.data, group, blocking, props.operations?.alerts]);
 
   const background = result.data?.topology.background;
   return (

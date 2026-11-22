@@ -21,6 +21,7 @@ import { useLiveFeed } from './useLiveFeed';
 import { t, useLang } from './i18n';
 import { useOperations } from './useOperations';
 import { summarizeAlerts } from './wallAlerts';
+import type { PortMonitorTarget } from './views/props';
 const pages = ['monitor', 'topology', 'devices', 'details', 'logs'] as const;
 type Page = typeof pages[number] | 'switch';
 const replayPages: readonly string[] = ['monitor', 'switch', 'devices', 'details'];
@@ -51,6 +52,7 @@ export default function App() {
   const [language] = useLang();
   useEffect(() => { document.documentElement.lang = language; }, [language]);
   const [page, setPage] = useState<Page>('monitor');
+  const [monitorTarget, setMonitorTarget] = useState<PortMonitorTarget>();
   const [detailTab, setDetailTab] = useState<'multicast' | 'dhcp' | 'health'>('multicast');
   const [theme, setTheme] = useState(() => get('theme', 'dark'));
   const [notifications, setNotifications] = useState(() => get('desktop-notifications', 'false') === 'true');
@@ -204,9 +206,8 @@ export default function App() {
   const now = usePcTime();
   const stopped = !replay && monitoringStopped(online && live.fresh, live.updatedAt, now);
   const alertSummary = summarizeAlerts(operations.alerts);
-  const issues = alertSummary.items;
-  const issueCount = replay ? asArray(replay.states).reduce((count, state) => count + (state.alert_counts?.CRITICAL || 0) + (state.alert_counts?.WARNING || 0), 0) : issues.length;
-  const critical = replay ? asArray(replay.states).some(state => (state.alert_counts?.CRITICAL || 0) > 0) : issues.some(alert => alert.severity === 'CRITICAL');
+  const issueCount = replay ? asArray(replay.states).reduce((count, state) => count + (state.alert_counts?.CRITICAL || 0) + (state.alert_counts?.WARNING || 0), 0) : alertSummary.count;
+  const critical = replay ? asArray(replay.states).some(state => (state.alert_counts?.CRITICAL || 0) > 0) : alertSummary.active > 0;
   const ready = replay ? !!replay.ts : operations.ready;
   const activeDetailTab = replay && detailTab === 'dhcp' ? 'multicast' : detailTab;
   useDesktopNotifications({ enabled: notifications, alerts: operations.alerts, profileId, ready, paused: !!replay || stopped });
@@ -224,6 +225,10 @@ export default function App() {
     part,
     selected,
     select,
+    openPortMonitor: (target: PortMonitorTarget) => {
+      setMonitorTarget(target);
+      setPage('monitor');
+    },
     state,
     replay: replay?.states || null,
     replayRef: replay?.ts ? { id: replay.id, ts: replay.ts } : undefined,
@@ -238,7 +243,8 @@ export default function App() {
   };
   return <div className={wall ? 'wall-shell' : 'min-h-screen'}>
     <AppHeader {...{ online, phase: operations.phase || status?.phase, onPhase: operations.setPhase, onTrapHelp: props.onTrapHelp,
-      wall, setWall, status, busy, locked, profiles, settings, part, setPart, replay, marker, run, refresh, setDialog, summary }} />
+      wall, setWall, status, busy, locked, profiles, settings, part, setPart, replay, marker, run, refresh, setDialog, summary,
+      updatedAt: replay ? replay.ts : live.updatedAt }} />
     {stopped && <MonitorStopped updatedAt={live.updatedAt} />}
     {replay && !wall && <ScrubBar
       key={replay.id}
@@ -266,7 +272,7 @@ export default function App() {
           key={v}
           disabled={!!replay && !replayPages.includes(v)}
           aria-current={page === v || page === 'switch' && v === 'monitor' ? 'page' : undefined}
-          onClick={() => setPage(v)}
+          onClick={() => { setMonitorTarget(undefined); setPage(v); }}
         >
           {v === 'details' ? t('cleanup.details') : t(`rack.nav.${v}`)}
         </button>)}
@@ -274,7 +280,7 @@ export default function App() {
       <main className={wall ? 'wall-main' : 'min-w-0 flex-1 space-y-4 p-4'}>
         {!wall && <h1 className="text-2xl font-bold">{pageTitle}</h1>}
         <ErrorBoundary key={wall ? 'wall' : page} name={wall ? t('rack.wall') : pageTitle}>
-          {(wall || page === 'monitor') && <PortMonitor key={status?.profile.id || 0} {...props} />}
+          {(wall || page === 'monitor') && <PortMonitor key={status?.profile.id || 0} {...props} target={wall ? undefined : monitorTarget} />}
 
           {!wall && page === 'topology' && <Topology {...props} />}
 

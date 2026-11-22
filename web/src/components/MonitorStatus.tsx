@@ -1,5 +1,5 @@
 import { t } from '../i18n';
-import { pcTimestamp } from '../pcTime';
+import { jstTime } from '../pcTime';
 import { ErrorSymbol } from './ErrorSymbol';
 
 export function OverallStatus({ count, critical, ready, stopped, replay = false, active, unacked }: {
@@ -9,7 +9,7 @@ export function OverallStatus({ count, critical, ready, stopped, replay = false,
   const onlyUnacked = active === 0 && !!unacked;
   const tone = unknown ? 'unknown' : count ? critical && !onlyUnacked ? 'critical' : 'warning' : 'healthy';
   return <div className={`overall-status status-${tone}`} role="status">
-    <strong>{unknown ? '—' : count ? critical ? <ErrorSymbol /> : '▲' : '✓'} {unknown
+    <strong>{unknown ? '—' : count ? active !== undefined || critical ? <ErrorSymbol /> : '▲' : '✓'} {unknown
       ? t(stopped ? 'cleanup.unknown' : 'cleanup.pending') : count && active !== undefined && unacked !== undefined
         ? t('wall.counts', { active, unacked }) : t(count ? 'cleanup.issues' : 'cleanup.normal', { count })}</strong>
     {replay && <small>{t('rack.replay')}</small>}
@@ -19,7 +19,7 @@ export function OverallStatus({ count, critical, ready, stopped, replay = false,
 export function MonitorStopped({ updatedAt }: { updatedAt?: number }) {
   return <div className="monitor-stalled" role="alert" aria-live="assertive">
     <strong>⚠ {t('cleanup.stopped')}</strong>
-    <time dateTime={updatedAt ? new Date(updatedAt).toISOString() : undefined}>{t('cleanup.lastUpdate', { at: updatedAt ? pcTimestamp(updatedAt) : '—' })}</time>
+    <time dateTime={updatedAt !== undefined ? new Date(updatedAt).toISOString() : undefined}>{t('rack.lastUpdated', { at: jstTime(updatedAt ?? NaN) })}</time>
     <p>{t('cleanup.stoppedHelp')}</p>
   </div>;
 }

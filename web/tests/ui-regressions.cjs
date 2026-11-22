@@ -87,7 +87,7 @@ test('再生バーは表示中の時刻と移動先を別々に保ち、取得�
   });
   assert.match(html, new RegExp(`<input[^>]*type="range"[^>]*disabled=""[^>]*value="${Date.parse(requestedTs)}"`));
   assert.match(html, /<button[^>]*title="マーカー"[^>]*disabled=""/);
-  assert.ok(html.includes(new Date(ts).toLocaleString('ja-JP', { hour12: false })));
+  assert.match(html, /2026-01-01 09:01:00 JST/);
 });
 
 test('配列以外のAPI応答とnull要素を安全に扱う', () => {

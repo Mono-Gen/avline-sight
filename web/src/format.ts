@@ -1,4 +1,5 @@
 import { getLang, t } from './i18n';
+import { pcTimestamp } from './pcTime';
 
 export function asArray<T>(value: T): (T extends readonly (infer Item)[] ? NonNullable<Item> : never)[] {
   return (Array.isArray(value) ? value.filter(item => item != null) : []) as (T extends readonly (infer Item)[] ? NonNullable<Item> : never)[];
@@ -49,6 +50,5 @@ export function alertCount(counts: object | null | undefined, severity: string):
 
 export function formatTime(value: unknown): string {
   if (typeof value !== 'string' || value === '') return '—';
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString(getLang() === 'ja' ? 'ja-JP' : 'en-US', { hour12: false });
+  return pcTimestamp(value, true);
 }

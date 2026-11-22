@@ -44,7 +44,7 @@ export function GroupActions({ group, all = false, profileId, locked, wall, busy
 
   return <div className="group-actions" aria-label={label}>
     <button data-action="ping" disabled={locked || busy || replay || legacyReserved} onClick={ping}>{t('rack.ping')}</button>
-    <button data-action="reset" disabled={locked || busy || replay || legacyReserved} onClick={() => resetGroup(target, label, run, async rows => {
+    <button className="button-danger" data-action="reset" disabled={locked || busy || replay || legacyReserved} onClick={() => resetGroup(target, label, run, async rows => {
       const failed = rows.filter(row => !row.ok);
       const summary = t('rack.resetResult', { ok: rows.length - failed.length, total: rows.length });
       notice(failed.length ? `⚠ ${summary} · ${failed.map(row => `#${row.switch_id}`).join(', ')}` : summary);

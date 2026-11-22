@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { api } from './api';
 import { acknowledgeEvents, unacknowledgeEvents } from './acknowledge';
@@ -154,11 +154,13 @@ export function useOperations({ online, replay, profileId, setStatus, run }: {
       ids.forEach(value => localAcks.current.set(value, Date.now() + 5000));
     }
   });
-  const details = new Map(asArray(displayDetails.data).map(item => [item.event_id, item]));
-  const withDetails = alerts.map(item => {
-    const info = details.get(item.event_id);
-    return { ...item, detail: item.detail || info?.detail, hint: item.hint || info?.hint, acked_at: item.acked_at || info?.acked_at };
-  });
+  const withDetails = useMemo(() => {
+    const details = new Map(asArray(displayDetails.data).map(item => [item.event_id, item]));
+    return alerts.map(item => {
+      const info = details.get(item.event_id);
+      return { ...item, detail: item.detail || info?.detail, hint: item.hint || info?.hint, acked_at: item.acked_at || info?.acked_at };
+    });
+  }, [alerts, displayDetails.data]);
   return { alerts: withDetails, groups, phase, setPhase, toast: toast ? t('rack.remoteAck') : '', ack, ackMany, undoAck,
     undoCount: undo?.ids.length || 0, refresh: feed.refresh, ready: !!feed.updatedAt };
 }
