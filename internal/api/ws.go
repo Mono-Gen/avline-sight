@@ -119,8 +119,12 @@ func (s *Server) wsTerminal(w http.ResponseWriter, r *http.Request) {
 		port = st.Config.TelnetPort
 	}
 	// ラボ: 仮想スイッチのモックCLIへ接続
-	if s.Lab != nil && host == "127.0.0.1" && proto == "telnet" {
-		port = LabCLIBase + (cfg.SNMPPort - LabSNMPBase)
+	if s.Lab != nil && host == "127.0.0.1" {
+		if proto == "ssh" {
+			port = LabSSHBase + (cfg.SNMPPort - LabSNMPBase)
+		} else {
+			port = LabCLIBase + (cfg.SNMPPort - LabSNMPBase)
+		}
 	}
 	// 認証待ちの間にロックされた場合は接続しない
 	if s.isLocked() {
@@ -233,6 +237,7 @@ func (s *Server) wsTerminal(w http.ResponseWriter, r *http.Request) {
 const (
 	LabSNMPBase = 16100
 	LabCLIBase  = 2300
+	LabSSHBase  = 2400
 )
 
 func truncate(s string, n int) string {

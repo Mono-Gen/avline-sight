@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ func (l *Lab) startCLI(ctx context.Context, s *Switch, addr string) error {
 func (l *Lab) cliSession(s *Switch, c net.Conn) {
 	defer c.Close()
 	r := bufio.NewReader(c)
-	w := func(f string, a ...any) { fmt.Fprintf(c, strings.ReplaceAll(f, "\n", "\r\n"), a...) }
+	w := func(f string, a ...any) { io.WriteString(c, toCRLF(fmt.Sprintf(f, a...))) }
 	readLine := func() (string, bool) {
 		c.SetReadDeadline(time.Now().Add(15 * time.Minute))
 		line, err := r.ReadString('\n')
@@ -49,13 +50,21 @@ func (l *Lab) cliSession(s *Switch, c net.Conn) {
 		}
 		return strings.TrimSpace(b.String()), true
 	}
-	w("\nUser:")
-	if _, ok := readLine(); !ok {
-		return
-	}
-	w("Password:")
-	if _, ok := readLine(); !ok {
-		return
+	l.cliLoop(s, w, readLine, true)
+}
+
+// cliLoop はTelnet/SSH共通のCLI対話ループ。login=true ならUser/Passwordプロンプトを出す
+// （SSHはトランスポート層で認証済みのため省略する）。
+func (l *Lab) cliLoop(s *Switch, w func(string, ...any), readLine func() (string, bool), login bool) {
+	if login {
+		w("\nUser:")
+		if _, ok := readLine(); !ok {
+			return
+		}
+		w("Password:")
+		if _, ok := readLine(); !ok {
+			return
+		}
 	}
 	prompt := fmt.Sprintf("(%s) #", s.Name)
 	w("\n%s", prompt)
@@ -141,4 +150,9 @@ func (l *Lab) showOutput(s *Switch, cmd string) string {
 		b.WriteString("% Lab mock CLI: このshowコマンドは模擬応答がありません")
 	}
 	return b.String()
+}
+
+// toCRLF は出力の改行をCRLFへそろえる。端末はLFだけだと行頭に戻らず階段状に表示されるため。
+func toCRLF(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\n", "\r\n")
 }

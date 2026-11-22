@@ -1,6 +1,8 @@
 package sim
 
 import (
+	"golang.org/x/crypto/ssh"
+
 	"context"
 	"errors"
 	"fmt"
@@ -25,11 +27,20 @@ const maxResponseBytes = 8192
 type Config struct {
 	BaseSNMPPort int    // 仮想エージェントのUDPポート開始番号（i番目は Base+i）
 	BaseCLIPort  int    // モックTelnet CLIのTCPポート開始番号
+	BaseSSHPort  int    // モックSSH CLIのTCPポート開始番号（0なら起動しない）
 	TrapTarget   string // Trap送信先 host:port（空なら送らない）
 }
 
 // Start は全仮想スイッチのエージェントとCLIを起動する。ctx終了で停止する。
 func (l *Lab) Start(ctx context.Context, cfg Config) error {
+	var hostKey ssh.Signer
+	if cfg.BaseSSHPort > 0 {
+		k, err := newSSHHostKey()
+		if err != nil {
+			return err
+		}
+		hostKey = k
+	}
 	for _, s := range l.Switches {
 		addr := fmt.Sprintf("127.0.0.1:%d", cfg.BaseSNMPPort+s.Index)
 		pc, err := net.ListenPacket("udp", addr)
@@ -40,6 +51,11 @@ func (l *Lab) Start(ctx context.Context, cfg Config) error {
 		go l.serve(pc, s)
 		if cfg.BaseCLIPort > 0 {
 			if err := l.startCLI(ctx, s, fmt.Sprintf("127.0.0.1:%d", cfg.BaseCLIPort+s.Index)); err != nil {
+				return err
+			}
+		}
+		if hostKey != nil {
+			if err := l.startSSH(ctx, s, fmt.Sprintf("127.0.0.1:%d", cfg.BaseSSHPort+s.Index), hostKey); err != nil {
 				return err
 			}
 		}

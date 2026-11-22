@@ -108,7 +108,7 @@ func run() error {
 		if h, p, err := net.SplitHostPort(ta); err == nil && (h == "0.0.0.0" || h == "") {
 			trapTarget = net.JoinHostPort("127.0.0.1", p)
 		}
-		if err := simLab.Start(ctx, sim.Config{BaseSNMPPort: api.LabSNMPBase, BaseCLIPort: api.LabCLIBase, TrapTarget: trapTarget}); err != nil {
+		if err := simLab.Start(ctx, sim.Config{BaseSNMPPort: api.LabSNMPBase, BaseCLIPort: api.LabCLIBase, BaseSSHPort: api.LabSSHBase, TrapTarget: trapTarget}); err != nil {
 			return err
 		}
 		if err := registerLab(st, pid, simLab); err != nil {
