@@ -108,6 +108,13 @@ var errorFragments = [][2]string{
 }
 
 var errorEnglish = map[string]string{
+	"設定を書き出せません":                                                  "Could not export the configuration",
+	"設定ファイルを読み込めません":                                              "Could not read the configuration file",
+	"現在の設定を読み込めません":                                               "Could not read the current configuration",
+	"確認後に設定が変更されました":                                              "The configuration changed after preview",
+	"ファイルを選び直して差分を確認してください":                                       "Select the file again and review the changes",
+	"該当項目を修正して再試行してください":                                          "Correct the indicated field and try again",
+	"状態を取得できません":                                                  "Could not load application status",
 	"本番前チェックに残項目があります":                                            "Some pre-show checks still need review",
 	"チェックリストを更新して確認してください":                                        "Refresh the checklist and review the remaining items",
 	"本番前チェックを取得できません":                                             "Could not load the pre-show checklist",

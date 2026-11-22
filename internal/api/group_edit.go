@@ -5,13 +5,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/Mono-Gen/avline-sight/internal/engine"
+	"github.com/Mono-Gen/avline-sight/internal/model"
 )
 
 func validGroupName(name string) bool {
-	return name != "" && name != "*" && name != "." && name != ".." && strings.IndexFunc(name, unicode.IsControl) == -1
+	return model.ValidGroupName(name)
 }
 
 // グループ名は現場内でしか一意ではない。別画面の現場切替と操作を直列化する。

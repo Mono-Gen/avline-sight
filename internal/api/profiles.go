@@ -1,13 +1,14 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/Mono-Gen/avline-sight/internal/engine"
-	"github.com/Mono-Gen/avline-sight/internal/model"
 	"github.com/Mono-Gen/avline-sight/internal/store"
 )
 
@@ -60,71 +61,151 @@ func (s *Server) activateProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"id": id})
 }
 
-// profileExport はプロファイル一式（スイッチ・ポート設定・ラベル・設定・レイアウト）のJSON。
-type profileExport struct {
-	Name      string                               `json:"name"`
-	Settings  json.RawMessage                      `json:"settings"`
-	Layout    json.RawMessage                      `json:"topology_layout"`
-	Watchlist json.RawMessage                      `json:"watchlist"`
-	Switches  []model.SwitchConfig                 `json:"switches"`
-	Ports     map[string]map[int]store.PortSetting `json:"ports"`
-	Aliases   []store.Alias                        `json:"aliases"`
-}
-
 func (s *Server) exportProfile(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
 	if err != nil {
 		writeErr(w, 400, "不正なID", "", "")
 		return
 	}
-	var ex profileExport
-	var set, lay, wl string
-	if err := s.Store.DB.QueryRow(`SELECT name,settings_json,topology_layout_json,watchlist_json FROM profiles WHERE id=?`, id).Scan(&ex.Name, &set, &lay, &wl); err != nil {
+	c, err := s.Store.ProfileConfig(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
 		writeErr(w, 404, "プロファイルが見つかりません", err.Error(), "")
 		return
 	}
-	ex.Settings, ex.Layout, ex.Watchlist = json.RawMessage(set), json.RawMessage(lay), json.RawMessage(wl)
-	ex.Switches, _ = s.Store.Switches(id)
-	ex.Ports = map[string]map[int]store.PortSetting{}
-	for i := range ex.Switches {
-		ps, _ := s.Store.PortSettings(ex.Switches[i].ID)
-		ex.Ports[ex.Switches[i].Name] = ps
-		ex.Switches[i].ID = 0
+	if err == nil {
+		c, err = engine.ExportProfileConfig(c)
 	}
-	ex.Aliases, _ = s.Store.Aliases(id)
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="profile-%d.json"`, id))
-	writeJSON(w, 200, ex)
+	if err != nil {
+		writeErr(w, 500, "設定を書き出せません", err.Error(), "")
+		return
+	}
+	w.Header().Set("Content-Disposition", `attachment; filename="avline-sight.config.json"`)
+	writeJSON(w, 200, c)
+}
+
+type configDiff struct {
+	Field  string `json:"field"`
+	Before any    `json:"before"`
+	After  any    `json:"after"`
+}
+
+func (s *Server) previewProfile(w http.ResponseWriter, r *http.Request) {
+	next, err := engine.ReadProfileConfig(r.Body)
+	if err != nil {
+		writeConfigInputError(w, err)
+		return
+	}
+	pid := s.Engine.ProfileID()
+	current, err := s.Store.ProfileConfig(r.Context(), pid)
+	if err != nil {
+		writeErr(w, 500, "現在の設定を読み込めません", err.Error(), "")
+		return
+	}
+	revision, err := store.ConfigRevision(pid, current, next)
+	if err == nil {
+		current, err = engine.ExportProfileConfig(current)
+	}
+	if err != nil {
+		writeErr(w, 500, "現在の設定を読み込めません", err.Error(), "")
+		return
+	}
+	if next.TrapAddr == "" {
+		next.TrapAddr = current.TrapAddr
+	}
+	groups := map[string]bool{}
+	for _, sw := range next.Switches {
+		if sw.GroupTag != "" {
+			groups[sw.GroupTag] = true
+		}
+	}
+	changes, err := compareProfileConfigs(current, next)
+	if err != nil {
+		writeErr(w, 500, "現在の設定を読み込めません", err.Error(), "")
+		return
+	}
+	writeJSON(w, 200, map[string]any{
+		"profile_id": pid, "revision": revision, "switch_count": len(next.Switches), "group_count": len(groups),
+		"changes": changes,
+	})
+}
+
+func compareProfileConfigs(current, next store.ProfileConfig) ([]configDiff, error) {
+	changes := []configDiff{}
+	for _, diff := range []configDiff{
+		{"name", current.Name, next.Name},
+		{"switches", current.Switches, next.Switches},
+		{"group_order", current.GroupOrder, next.GroupOrder},
+		{"trap_addr", current.TrapAddr, next.TrapAddr},
+		{"ports", current.Ports, next.Ports},
+		{"aliases", current.Aliases, next.Aliases},
+		{"watchlist", current.Watchlist, next.Watchlist},
+		{"topology_layout", current.Layout, next.Layout},
+	} {
+		if !reflect.DeepEqual(diff.Before, diff.After) {
+			changes = append(changes, diff)
+		}
+	}
+	var before, after map[string]json.RawMessage
+	// 両方とも Settings 型から生成済み。項目順を固定して変更箇所を比較する。
+	if err := json.Unmarshal(current.Settings, &before); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(next.Settings, &after); err != nil {
+		return nil, err
+	}
+	for _, field := range []string{"setup_ping_interval_sec", "rehearsal_ping_interval_sec", "thresholds", "expert_display_default", "views"} {
+		if string(before[field]) != string(after[field]) {
+			changes = append(changes, configDiff{"settings." + field, before[field], after[field]})
+		}
+	}
+	return changes, nil
+}
+
+func writeConfigInputError(w http.ResponseWriter, err error) {
+	writeErr(w, 400, "設定ファイルを読み込めません", err.Error(), "該当項目を修正して再試行してください")
 }
 
 func (s *Server) importProfile(w http.ResponseWriter, r *http.Request) {
-	var ex profileExport
-	if err := readJSON(r, &ex); err != nil || ex.Name == "" {
-		writeErr(w, 400, "プロファイルを読み込めません", "JSON形式が不正です", "エクスポートしたファイルを指定してください")
-		return
-	}
-	id, err := s.Store.CreateProfile(ex.Name + "（読込）")
+	c, err := engine.ReadProfileConfig(r.Body)
 	if err != nil {
-		writeErr(w, 500, "プロファイルを作成できません", err.Error(), "")
+		writeConfigInputError(w, err)
 		return
 	}
-	var set engine.Settings
-	if json.Unmarshal(ex.Settings, &set) == nil {
-		s.Store.SetProfileJSON(id, "settings_json", set)
+	s.groupMu.Lock()
+	defer s.groupMu.Unlock()
+	if !s.checkGroupProfile(w, r) {
+		return
 	}
-	var lay any
-	if json.Unmarshal(ex.Layout, &lay) == nil && lay != nil {
-		s.Store.SetProfileJSON(id, "topology_layout_json", lay)
+	revision := r.Header.Get("X-AVLine-Config-Revision")
+	opts := store.ConfigApply{Activate: revision != "", PreviewProfile: s.Engine.ProfileID(), Revision: revision}
+	if !opts.Activate {
+		c.Name += "（読込）"
 	}
-	for _, sw := range ex.Switches {
-		sw.ID, sw.ProfileID = 0, id
-		if err := s.Store.SaveSwitch(&sw); err == nil {
-			for ix, ps := range ex.Ports[sw.Name] {
-				s.Store.SavePortSetting(sw.ID, ix, ps)
-			}
+	s.mu.Lock()
+	if s.locked {
+		s.mu.Unlock()
+		writeErr(w, http.StatusLocked, "閲覧専用ロック中のため変更できません", "", "ヘッダーのロックを解除してから操作してください")
+		return
+	}
+	id, err := s.Store.ApplyProfileConfig(r.Context(), c, opts)
+	s.mu.Unlock()
+	if errors.Is(err, store.ErrConfigChanged) {
+		writeErr(w, 409, "確認後に設定が変更されました", err.Error(), "ファイルを選び直して差分を確認してください")
+		return
+	}
+	if err != nil {
+		writeErr(w, 500, "設定を保存できません", err.Error(), "")
+		return
+	}
+	if opts.Activate {
+		s.Engine.SetProfile(id)
+		if s.Poller != nil {
+			s.resync()
 		}
-	}
-	for _, a := range ex.Aliases {
-		s.Store.SaveAlias(id, a)
+		if s.Trap != nil && c.TrapAddr != "" && s.Trap.Status().Addr != c.TrapAddr {
+			s.Trap.Start(c.TrapAddr)
+		}
+		s.broadcastGroupsChanged()
 	}
 	writeJSON(w, 200, map[string]any{"id": id})
 }

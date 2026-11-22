@@ -58,19 +58,21 @@ func (s *Server) listSwitches(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, "スイッチ一覧を取得できません", err.Error(), "")
 		return
 	}
-	out := []model.SwitchConfig{}
+	type switchResponse struct {
+		model.SwitchConfig
+		NeedsCredentials bool `json:"needs_credentials"`
+	}
+	out := []switchResponse{}
 	for _, c := range sws {
+		needsCredentials := c.NeedsCredentials()
 		c.Community = "****" // コミュニティ文字列はAPIで返さない
-		out = append(out, c)
+		out = append(out, switchResponse{c, needsCredentials})
 	}
 	writeJSON(w, 200, out)
 }
 
 func validHost(ip string) bool {
-	if net.ParseIP(ip) != nil {
-		return true
-	}
-	return regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$`).MatchString(ip)
+	return model.ValidSwitchHost(ip)
 }
 
 func (s *Server) saveSwitch(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +95,11 @@ func (s *Server) saveSwitch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "スイッチを保存できません", "SNMPポート番号が範囲外です", "通常は161です")
 		return
 	}
+	s.groupMu.Lock()
+	defer s.groupMu.Unlock()
+	if !s.checkGroupProfile(w, r) {
+		return
+	}
 	pid := s.Engine.ProfileID()
 	if r.Method == http.MethodPut {
 		id, err := pathID(r, "id")
@@ -101,14 +108,14 @@ func (s *Server) saveSwitch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		in.ID = id
+		old, found := s.findSwitch(id)
+		if !found {
+			writeErr(w, 404, "スイッチが見つかりません", "", "一覧を再読込してください")
+			return
+		}
 		// "****" または空ならコミュニティは変更しない
 		if in.Community == "" || in.Community == "****" {
-			old, _ := s.Store.Switches(pid)
-			for _, o := range old {
-				if o.ID == id {
-					in.Community = o.Community
-				}
-			}
+			in.Community = old.Community
 		}
 	} else {
 		in.ID = 0

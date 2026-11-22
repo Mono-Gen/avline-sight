@@ -1,6 +1,10 @@
 import type { EventCopy, eventJa } from './eventJa';
 
 export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
+  "CONFIG_AUTO_IMPORTED": {
+    "title": "Configuration file imported automatically",
+    "hint": ""
+  },
   "DEVICE_MISSING": {
     "title": "Registered device is missing: {name}",
     "hint": "Check that the device is powered on. Check and firmly re-seat the Ethernet cable.",

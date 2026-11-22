@@ -41,6 +41,10 @@ export function SettingsTools({ theme, setTheme, notifications, setNotifications
       <label className="block"><input type="checkbox" checked={notifications} disabled={busy} onChange={toggleNotifications} /> {t('cleanup.notifications')}</label>
       {notice && <p role="alert">⚠ {notice}</p>}
       <h3>{t('cleanup.transfers')}</h3>
+      {!replay && profileId !== undefined && <>
+        <a href={`/api/profiles/${profileId}/export`} download="avline-sight.config.json">{t('configFile.export')}</a>
+        <button disabled={busy || locked} onClick={() => setDialog('config-import')}>{t('configFile.import')}</button>
+      </>}
       <button disabled={busy || locked} onClick={() => setDialog('export')}>{t('rack.export')}</button>
       {!replay && <ShowReportButton run={run} busy={busy} />}
       <ImportReplay run={run} disabled={busy || locked} onImport={(id, timeline) => { setReplay({ id, timeline, states: [] }); setDialog(''); }} />

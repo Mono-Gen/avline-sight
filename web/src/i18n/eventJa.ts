@@ -6,6 +6,10 @@ export interface EventCopy {
 }
 
 export const eventJa = {
+  "CONFIG_AUTO_IMPORTED": {
+    "title": "設定ファイルを自動で読み込みました",
+    "hint": ""
+  },
   "DEVICE_MISSING": {
     "title": "登録機器が未検出になりました: {name}",
     "hint": "対象機器の電源が入っているか確認してください。LANケーブルの抜け・緩みを確認して差し直す。",

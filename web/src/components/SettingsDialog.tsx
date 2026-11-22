@@ -25,8 +25,9 @@ const thresholdLabels: Record<string, string> = {
 };
 const commaList = (value: string) => asArray(value.split(',')).map(item => item.trim()).filter(Boolean);
 
-export function SettingsDialog({ value, close, run, busy, webAddr, locked = false, tools }: {
+export function SettingsDialog({ value, profileId, close, run, busy, webAddr, locked = false, tools }: {
   value: Settings;
+  profileId?: number;
   locked?: boolean;
   tools?: ReactNode;
   webAddr?: string;
@@ -37,6 +38,7 @@ export function SettingsDialog({ value, close, run, busy, webAddr, locked = fals
   const [thresholds, setThresholds] = useState({ ...value.thresholds });
   const [setupPing, setSetupPing] = useState(value.setup_ping_interval_sec ?? 60);
   const [rehearsalPing, setRehearsalPing] = useState(value.rehearsal_ping_interval_sec ?? 60);
+  const [expertDefault, setExpertDefault] = useState(value.expert_display_default ?? false);
   const [views, setViews] = useState<ViewDraft[]>(() => asArray(value.views).map(view => ({
     id: view.id,
     name: view.name,
@@ -67,12 +69,16 @@ export function SettingsDialog({ value, close, run, busy, webAddr, locked = fals
     }
     setValidation('');
     run(async () => {
-      await api('/api/settings', json('PUT', {
+      const request = json('PUT', {
         thresholds,
         setup_ping_interval_sec: setupPing,
         rehearsal_ping_interval_sec: rehearsalPing,
+        expert_display_default: expertDefault,
         views: parsed
-      }));
+      });
+      const headers = new Headers(request.headers);
+      if (profileId !== undefined) headers.set('X-AVLine-Profile', String(profileId));
+      await api('/api/settings', { ...request, headers });
       close();
     });
   };
@@ -103,6 +109,8 @@ export function SettingsDialog({ value, close, run, busy, webAddr, locked = fals
         <label className="block">{t('cleanup.setupPing')} <input type="number" min="30" max="3600" step="1" value={Number.isFinite(setupPing) ? setupPing : ''} onChange={event => setSetupPing(event.target.value === '' ? NaN : Number(event.target.value))} /></label>
         <label className="block">{t('cleanup.rehearsalPing')} <input type="number" min="30" max="3600" step="1" value={Number.isFinite(rehearsalPing) ? rehearsalPing : ''} onChange={event => setRehearsalPing(event.target.value === '' ? NaN : Number(event.target.value))} /></label>
         <p>{t('cleanup.pingBounds')}</p>
+        <label className="block"><input type="checkbox" checked={expertDefault}
+          onChange={event => setExpertDefault(event.target.checked)} /> {t('configFile.expertDefault')}</label>
         <h3 className="font-bold">{t('ui.m182')}</h3>
         {asArray(views).map((view, index) => (
           <div key={view.id} className="grid gap-2 rounded border p-2">

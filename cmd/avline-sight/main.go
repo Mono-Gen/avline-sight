@@ -49,6 +49,7 @@ func exeDir() string {
 func run() error {
 	var (
 		dataDir  = flag.String("data", filepath.Join(exeDir(), "data"), "データ保存先ディレクトリ")
+		config   = configFlag(flag.CommandLine)
 		listen   = flag.String("listen", "127.0.0.1:8080", "WebUI待受アドレス（LAN公開は 0.0.0.0:8080。閲覧専用ロック併用推奨）")
 		trapAddr = flag.String("trap", "", "SNMP Trap待受アドレス（既定 0.0.0.0:162、失敗時は設定画面で変更）")
 		lab      = flag.Int("lab", 0, "仮想M4250ラボを N 台起動して監視する（実機なし検証用、1〜20）")
@@ -61,6 +62,15 @@ func run() error {
 	)
 	flag.Usage = func() { printUsage(flag.CommandLine) }
 	flag.Parse()
+	var missingConfigPath bool
+	flag.Visit(func(option *flag.Flag) {
+		if option.Name == "config" && *config == "" {
+			missingConfigPath = true
+		}
+	})
+	if missingConfigPath {
+		return fmt.Errorf("--config: 設定ファイルのパスを指定してください")
+	}
 	lvl := slog.LevelInfo
 	if *debug {
 		lvl = slog.LevelDebug
@@ -87,6 +97,15 @@ func run() error {
 		return err
 	}
 	defer st.Close()
+	configCtx, cancelConfig := context.WithTimeout(context.Background(), 20*time.Second)
+	configWarning, err := loadStartupConfig(configCtx, st, exeDir(), *config)
+	cancelConfig()
+	if err != nil {
+		return err
+	}
+	if configWarning != "" {
+		slog.Warn("設定ファイルを自動で読み込めません", "file", defaultConfigName, "err", configWarning)
+	}
 	pid, err := st.EnsureDefaultProfile()
 	if err != nil {
 		return fmt.Errorf("プロファイル初期化に失敗: %w", err)
@@ -144,7 +163,7 @@ func run() error {
 		return err
 	}
 	srv := &api.Server{Version: version, DataDir: *dataDir, Store: st, Engine: eng, Poller: pm, Trap: tr, Hub: hub, Lab: simLab,
-		Static: web.Dist(), WebAddr: addr, Ctx: ctx}
+		Static: web.Dist(), WebAddr: addr, Ctx: ctx, ConfigStartupError: configWarning}
 	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	pm.Sync(ctx, sws)
 	tr.Start(ta)

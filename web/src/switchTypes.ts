@@ -8,6 +8,7 @@ export interface SwitchConfig {
   ip: string;
   snmp_port: number;
   community?: string;
+  needs_credentials?: boolean;
   enabled: boolean;
   web_url?: string;
   last_trap_ts?: string | null;

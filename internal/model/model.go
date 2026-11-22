@@ -17,6 +17,10 @@ type SwitchConfig struct {
 	LastTrapTS *time.Time `json:"last_trap_ts"`
 }
 
+func (c SwitchConfig) NeedsCredentials() bool {
+	return c.Community == ""
+}
+
 // Severity 定数
 const (
 	SevCritical = "CRITICAL"

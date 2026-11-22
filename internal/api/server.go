@@ -27,17 +27,18 @@ import (
 
 // Server はHTTPサーバーの依存関係。
 type Server struct {
-	Version string
-	DataDir string
-	Store   *store.Store
-	Engine  *engine.Engine
-	Poller  *poller.Manager
-	Trap    *trap.Receiver
-	Hub     *Hub
-	Lab     *sim.Lab // nil なら非ラボ
-	Static  fs.FS    // web/dist
-	WebAddr string
-	Ctx     context.Context
+	Version            string
+	DataDir            string
+	Store              *store.Store
+	Engine             *engine.Engine
+	Poller             *poller.Manager
+	Trap               *trap.Receiver
+	Hub                *Hub
+	Lab                *sim.Lab // nil なら非ラボ
+	Static             fs.FS    // web/dist
+	WebAddr            string
+	Ctx                context.Context
+	ConfigStartupError string
 
 	mu      sync.Mutex
 	groupMu sync.Mutex
@@ -100,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 	h("POST /api/profiles", s.createProfile)
 	h("PUT /api/profiles/{id}/activate", s.activateProfile)
 	h("GET /api/profiles/{id}/export", s.exportProfile)
+	h("POST /api/profiles/import/preview", s.previewProfile)
 	h("POST /api/profiles/import", s.importProfile)
 
 	h("GET /api/switches", s.listSwitches)
@@ -229,6 +231,11 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	locked, pinSet := s.locked, s.pinHash != ""
 	s.mu.Unlock()
 	pid := s.Engine.ProfileID()
+	pending, err := s.Store.CredentialPendingCount(r.Context(), pid)
+	if err != nil {
+		writeErr(w, 500, "状態を取得できません", err.Error(), "")
+		return
+	}
 	name := ""
 	if ps, err := s.Store.Profiles(); err == nil {
 		for _, p := range ps {
@@ -237,8 +244,13 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	var trapStatus trap.Status
+	if s.Trap != nil {
+		trapStatus = s.Trap.Status()
+	}
 	writeJSON(w, 200, map[string]any{"version": s.Version, "mode": "live", "lab": s.Lab != nil, "locked": locked, "pin_set": pinSet,
-		"profile": map[string]any{"id": pid, "name": name}, "trap": s.Trap.Status(), "web_addr": s.WebAddr, "phase": s.Engine.Phase()})
+		"config_startup_error": s.ConfigStartupError, "credentials_pending": pending,
+		"profile": map[string]any{"id": pid, "name": name}, "trap": trapStatus, "web_addr": s.WebAddr, "phase": s.Engine.Phase()})
 }
 
 func hashPIN(p string) string {
@@ -302,6 +314,8 @@ func (s *Server) networkBind(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "待受設定が不正です", "trap_addr が必要です", "例: 0.0.0.0:1162")
 		return
 	}
+	s.groupMu.Lock()
+	defer s.groupMu.Unlock()
 	st := s.Trap.Start(in.TrapAddr)
 	s.Store.DB.Exec(`INSERT OR REPLACE INTO meta(k,v) VALUES('trap_addr',?)`, in.TrapAddr)
 	writeJSON(w, 200, st)
@@ -318,7 +332,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := in.Validate(); err != nil {
-		writeErr(w, 400, "設定を保存できません", "Ping間隔は30〜3600秒の整数で指定してください", "")
+		writeErr(w, 400, "設定を保存できません", err.Error(), "")
+		return
+	}
+	s.groupMu.Lock()
+	defer s.groupMu.Unlock()
+	if !s.checkGroupProfile(w, r) {
 		return
 	}
 	if err := s.Engine.SaveSettings(in); err != nil {

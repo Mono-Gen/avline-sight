@@ -40,6 +40,7 @@ type Settings struct {
 	Thresholds               Thresholds `json:"thresholds"`
 	SetupPingIntervalSec     int        `json:"setup_ping_interval_sec"`
 	RehearsalPingIntervalSec int        `json:"rehearsal_ping_interval_sec"`
+	ExpertDisplayDefault     bool       `json:"expert_display_default"`
 	Views                    []View     `json:"views"`
 }
 
@@ -128,9 +129,6 @@ func (e *Engine) reload() {
 	set := DefaultSettings()
 	if err := e.st.ProfileJSON(e.profileID, "settings_json", &set); err != nil {
 		slog.Warn("設定の読込に失敗。既定値を使用", "err", err)
-	}
-	if set.Thresholds.ErrDelta == 0 && set.Thresholds.CPUPct == 0 {
-		set = DefaultSettings()
 	}
 	set.normalizePingIntervals()
 	sws, err := e.st.Switches(e.profileID)

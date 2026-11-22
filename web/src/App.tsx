@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, json, message } from './api';
 import { AppHeader } from './components/AppHeader';
+import { ConfigCredentialsDialog } from './components/ConfigCredentialsDialog';
+import { ConfigImportDialog } from './components/ConfigImportDialog';
 import { ExportDialog, ScrubBar, SettingsDialog } from './components/Dialogs';
 import { submitPhase } from './components/PhaseControls';
 import { ShowChecklist } from './components/ShowChecklist';
@@ -64,12 +66,16 @@ export default function App() {
   const [detailTab, setDetailTab] = useState<'multicast' | 'dhcp' | 'health' | 'config' | 'recommendations'>('multicast');
   const [theme, setTheme] = useState(() => get('theme', 'dark'));
   const [notifications, setNotifications] = useState(() => get('desktop-notifications', 'false') === 'true');
-  const [expert, setExpert] = useState(() => get('expert-display', 'false') === 'true');
-  const pages = expert ? [...normalPages, ...expertPages] : normalPages;
+  const [expertOverride, setExpertOverride] = useState<boolean | undefined>(() => {
+    const saved = get('expert-display', '');
+    return saved === 'true' ? true : saved === 'false' ? false : undefined;
+  });
   const [overview, setOverview] = useState(empty);
   const [status, setStatus] = useState<Status>();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [settings, setSettings] = useState<Settings>();
+  const expert = expertOverride ?? settings?.expert_display_default ?? false;
+  const pages = expert ? [...normalPages, ...expertPages] : normalPages;
   const [settingsVersion, setSettingsVersion] = useState(0);
   const [groupSelection, setGroupSelection] = useState('');
   const part = groupSelection.startsWith('view:') ? groupSelection.slice(5) : '';
@@ -83,6 +89,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState('');
+  const [startupNoticeDismissed, setStartupNoticeDismissed] = useState(false);
   const [wall, setWall] = useState(() => typeof location !== 'undefined' && (new URLSearchParams(location.search).has('wall') ? new URLSearchParams(location.search).get('wall') === '1' : get('wall', 'false') === 'true'));
   useEffect(() => {
     put('wall', String(wall));
@@ -94,7 +101,7 @@ export default function App() {
   }, [wall]);
   const [terminal, setTerminal] = useState(0);
   const changeExpert = (enabled: boolean) => {
-    setExpert(enabled);
+    setExpertOverride(enabled);
     put('expert-display', String(enabled));
     if (!enabled) {
       setTerminal(0);
@@ -102,6 +109,11 @@ export default function App() {
     }
   };
   const [dialog, setDialog] = useState('');
+  useEffect(() => {
+    if (expert || !settings) return;
+    setTerminal(0);
+    setPage(current => current === 'details' || current === 'topology' ? 'monitor' : current);
+  }, [expert, settings]);
   const [deviceTarget, setDeviceTarget] = useState('');
   const trapHelpShown = useRef(false);
   const [replay, setReplay] = useState<ReplaySession | null>(null);
@@ -306,6 +318,14 @@ export default function App() {
         setGroupSelection(value);
       }} />
     {stopped && <MonitorStopped updatedAt={live.updatedAt} />}
+    {status?.config_startup_error && !startupNoticeDismissed && <div role="alert" className="panel p-3">
+      ⚠ {t('configFile.startupError', { reason: status.config_startup_error })}
+      <button onClick={() => setStartupNoticeDismissed(true)}>{t('rack.close')}</button>
+    </div>}
+    {!replay && (status?.credentials_pending ?? 0) > 0 && <div role="status" className="panel p-3">
+      ⚠ {t('configFile.credentialsPending', { count: status?.credentials_pending })}
+      {!wall && <button disabled={busy} onClick={() => setDialog('config-credentials')}>{t('configFile.enterCredentials')}</button>}
+    </div>}
     {replay && !wall && <ScrubBar
       key={replay.id}
       sid={replay.id}
@@ -374,6 +394,17 @@ export default function App() {
     {!wall && expert && terminal > 0 && !locked && <TerminalDrawer id={terminal} close={() => setTerminal(0)} />}
 
     {!wall && !locked && dialog === 'export' && <ExportDialog close={() => setDialog('')} busy={busy} run={run} />}
+    {!wall && dialog === 'config-import' && <ConfigImportDialog locked={locked} close={() => setDialog('settings')}
+      onApplied={async () => {
+        setSelected(0);
+        setMonitorTarget(undefined);
+        setGroupSelection('');
+        setPage('monitor');
+        setDialog('');
+        await refresh().catch(reason => setError(message(reason)));
+      }} />}
+    {!wall && dialog === 'config-credentials' && <ConfigCredentialsDialog {...{ profileId, busy, locked, run, refresh }}
+      close={() => setDialog('')} />}
 
     {!wall && !replay && canOpenShowChecklist && (dialog === 'show-checklist' || dialog === 'show-gate') &&
       <ShowChecklist key={profileId} gate={dialog === 'show-gate'} busy={busy} locked={locked} actionError={error} close={() => setDialog('')}
@@ -385,6 +416,7 @@ export default function App() {
     {!wall && dialog === 'trap' && <TrapHelp close={() => setDialog('')} error={status?.trap.error} />}
     {!wall && dialog === 'settings' && settings && <SettingsDialog
       key={profileId}
+      profileId={profileId}
       locked={locked}
       tools={<SettingsTools {...{ theme, setTheme, notifications, setNotifications, expert, busy, locked, groups: operations.groups, profileId, run, setDialog }}
         setExpert={changeExpert}

@@ -60,7 +60,7 @@ func (m *Manager) Sync(ctx context.Context, sws []model.SwitchConfig) {
 	defer m.mu.Unlock()
 	want := map[int64]model.SwitchConfig{}
 	for _, s := range sws {
-		if s.Enabled {
+		if s.Enabled && !s.NeedsCredentials() {
 			want[s.ID] = s
 		}
 	}

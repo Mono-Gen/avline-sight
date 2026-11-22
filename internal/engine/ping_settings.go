@@ -13,9 +13,19 @@ const (
 )
 
 func (s Settings) Validate() error {
-	for _, value := range []int{s.SetupPingIntervalSec, s.RehearsalPingIntervalSec} {
-		if value < MinPingIntervalSec || value > MaxPingIntervalSec {
-			return fmt.Errorf("ping interval must be between %d and %d seconds", MinPingIntervalSec, MaxPingIntervalSec)
+	if err := s.validatePingIntervals(); err != nil {
+		return err
+	}
+	return s.validateMonitoringSettings()
+}
+
+func (s Settings) validatePingIntervals() error {
+	for _, interval := range []struct {
+		field string
+		value int
+	}{{"setup_ping_interval_sec", s.SetupPingIntervalSec}, {"rehearsal_ping_interval_sec", s.RehearsalPingIntervalSec}} {
+		if interval.value < MinPingIntervalSec || interval.value > MaxPingIntervalSec {
+			return fmt.Errorf("%s: must be between %d and %d seconds", interval.field, MinPingIntervalSec, MaxPingIntervalSec)
 		}
 	}
 	return nil

@@ -1,9 +1,10 @@
 import { t } from '../i18n';
 import React from 'react';
 
-export function Dialog({ title, close, children }: {
+export function Dialog({ title, close, closeDisabled, children }: {
   title: string;
   close: () => void;
+  closeDisabled?: boolean;
   children: React.ReactNode;
 }) {
   return <div
@@ -17,7 +18,7 @@ export function Dialog({ title, close, children }: {
         <h2 className="text-xl font-bold">
           {title}
         </h2>
-        <button onClick={close}>{t('ui.m117')}</button>
+        <button disabled={closeDisabled} onClick={close}>{t('ui.m117')}</button>
       </div>
       {children}
     </section>

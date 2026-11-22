@@ -5,12 +5,13 @@ import { asArray } from '../format';
 import type { SwitchConfig } from '../types';
 import { Dialog } from './Common';
 type Run = (f: () => Promise<void>) => void;
-export function SwitchForm({ value, close, run, busy, groups = [] }: {
+export function SwitchForm({ value, close, run, busy, groups = [], onSaved }: {
   value?: SwitchConfig;
   close: () => void;
   run: Run;
   busy: boolean;
   groups?: string[];
+  onSaved?: () => Promise<void>;
 }) {
   const listId = useId();
   const [form, setForm] = useState<Partial<SwitchConfig>>(value ? {
@@ -30,7 +31,9 @@ export function SwitchForm({ value, close, run, busy, groups = [] }: {
   });
   const group = form.group_tag?.trim() || '';
   const invalidGroup = ['*', '.', '..'].includes(group);
+  const missingCredentials = value?.needs_credentials && (!form.community || form.community === '****');
   return <Dialog title={value ? t('ui.m190') : t('ui.m191')} close={close}>
+    {value?.needs_credentials && <p role="status">{t('configFile.credentialsNote')}</p>}
     <div className="grid gap-2">
       {asArray((['name', 'ip', 'community', 'web_url'] as const)).map(k => <label key={k}>
         {k}
@@ -51,10 +54,14 @@ export function SwitchForm({ value, close, run, busy, groups = [] }: {
         {t('ui.m009')}</label>
     </div>
     <button
-      disabled={busy || invalidGroup}
+      disabled={busy || invalidGroup || missingCredentials}
       onClick={() => run(async () => {
-        await api(value ? `/api/switches/${value.id}` : '/api/switches', json(value ? 'PUT' : 'POST', { ...form, group_tag: group }));
+        const request = json(value ? 'PUT' : 'POST', { ...form, group_tag: group });
+        const headers = new Headers(request.headers);
+        if (value) headers.set('X-AVLine-Profile', String(value.profile_id));
+        await api(value ? `/api/switches/${value.id}` : '/api/switches', { ...request, headers });
         close();
+        await onSaved?.();
       })}
     >{t('ui.m187')}</button>
   </Dialog>;

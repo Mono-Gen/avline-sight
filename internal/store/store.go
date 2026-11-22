@@ -292,6 +292,10 @@ func (s *Store) ProfileJSON(id int64, col string, dst any) error {
 }
 
 func (s *Store) SetProfileJSON(id int64, col string, v any) error {
+	return setProfileJSON(s.DB, id, col, v)
+}
+
+func setProfileJSON(db sqlExecer, id int64, col string, v any) error {
 	if !validJSONCol(col) {
 		return fmt.Errorf("不正な列 %s", col)
 	}
@@ -299,7 +303,7 @@ func (s *Store) SetProfileJSON(id int64, col string, v any) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.Exec(`UPDATE profiles SET `+col+`=? WHERE id=?`, string(b), id)
+	_, err = db.Exec(`UPDATE profiles SET `+col+`=? WHERE id=?`, string(b), id)
 	return err
 }
 
@@ -356,16 +360,20 @@ func (s *Store) SaveSwitch(c *model.SwitchConfig) error {
 		c.SNMPPort = 161
 	}
 	if c.ID == 0 {
-		r, err := s.DB.Exec(`INSERT INTO switches(profile_id,name,group_tag,ip,snmp_port,community_ro,enabled,web_url) VALUES(?,?,?,?,?,?,?,?)`,
-			c.ProfileID, c.Name, c.GroupTag, c.IP, c.SNMPPort, c.Community, c.Enabled, c.WebURL)
-		if err != nil {
-			return err
-		}
-		c.ID, err = r.LastInsertId()
-		return err
+		return insertSwitch(s.DB, c)
 	}
 	_, err := s.DB.Exec(`UPDATE switches SET name=?,group_tag=?,ip=?,snmp_port=?,community_ro=?,enabled=?,web_url=? WHERE id=?`,
 		c.Name, c.GroupTag, c.IP, c.SNMPPort, c.Community, c.Enabled, c.WebURL, c.ID)
+	return err
+}
+
+func insertSwitch(db sqlExecer, c *model.SwitchConfig) error {
+	r, err := db.Exec(`INSERT INTO switches(profile_id,name,group_tag,ip,snmp_port,community_ro,enabled,web_url) VALUES(?,?,?,?,?,?,?,?)`,
+		c.ProfileID, c.Name, c.GroupTag, c.IP, c.SNMPPort, c.Community, c.Enabled, c.WebURL)
+	if err != nil {
+		return err
+	}
+	c.ID, err = r.LastInsertId()
 	return err
 }
 
@@ -409,7 +417,11 @@ func (s *Store) PortSettings(switchID int64) (map[int]PortSetting, error) {
 }
 
 func (s *Store) SavePortSetting(switchID int64, ifIndex int, p PortSetting) error {
-	_, err := s.DB.Exec(`INSERT INTO ports(switch_id,if_index,monitor_excluded,expected_speed_mbps,expected_av_role,manual_memo) VALUES(?,?,?,?,?,?)
+	return savePortSetting(s.DB, switchID, ifIndex, p)
+}
+
+func savePortSetting(db sqlExecer, switchID int64, ifIndex int, p PortSetting) error {
+	_, err := db.Exec(`INSERT INTO ports(switch_id,if_index,monitor_excluded,expected_speed_mbps,expected_av_role,manual_memo) VALUES(?,?,?,?,?,?)
 		ON CONFLICT(switch_id,if_index) DO UPDATE SET monitor_excluded=excluded.monitor_excluded, expected_speed_mbps=excluded.expected_speed_mbps,
 		expected_av_role=excluded.expected_av_role, manual_memo=excluded.manual_memo`, switchID, ifIndex, p.Excluded, p.ExpectedSpeed, p.AVRole, p.Memo)
 	return err
@@ -457,11 +469,15 @@ func (s *Store) AliasesContext(ctx context.Context, profileID int64) ([]Alias, e
 }
 
 func (s *Store) SaveAlias(profileID int64, a Alias) error {
+	return saveAlias(s.DB, profileID, a)
+}
+
+func saveAlias(db sqlExecer, profileID int64, a Alias) error {
 	if a.Label == "" {
-		_, err := s.DB.Exec(`DELETE FROM device_aliases WHERE profile_id=? AND match_type=? AND match_key=?`, profileID, a.MatchType, a.MatchKey)
+		_, err := db.Exec(`DELETE FROM device_aliases WHERE profile_id=? AND match_type=? AND match_key=?`, profileID, a.MatchType, a.MatchKey)
 		return err
 	}
-	_, err := s.DB.Exec(`INSERT INTO device_aliases(profile_id,match_type,match_key,label,note,planned_ip) VALUES(?,?,?,?,?,?)
+	_, err := db.Exec(`INSERT INTO device_aliases(profile_id,match_type,match_key,label,note,planned_ip) VALUES(?,?,?,?,?,?)
 		ON CONFLICT(profile_id,match_type,match_key) DO UPDATE SET label=excluded.label, note=excluded.note, planned_ip=excluded.planned_ip`, profileID, a.MatchType, a.MatchKey, a.Label, a.Note, a.PlannedIP)
 	return err
 }

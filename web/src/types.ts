@@ -63,6 +63,7 @@ export interface Settings {
   thresholds: Record<string, number>;
   setup_ping_interval_sec: number;
   rehearsal_ping_interval_sec: number;
+  expert_display_default?: boolean;
   views: ViewPreset[];
 }
 export interface ViewPreset {
@@ -88,6 +89,8 @@ export interface Status {
     error: string;
   };
   web_addr: string;
+  config_startup_error?: string;
+  credentials_pending?: number;
   phase?: import('./operationTypes').Phase;
 }
 export interface Finding {

@@ -1429,3 +1429,81 @@ test('The post-show report failure is visible inside the settings dialog and cle
   assert.equal(downloaded, true);
   assert.equal(error, '');
 });
+
+test('設定ファイルの選択とドロップは同じ入口を使い、ロック中は受け付けない', () => {
+  const file = { name: 'avline-sight.config.json', size: 64 };
+  const files = [file];
+  const received = [];
+  let dragging = false;
+  let prevented = 0;
+  const { ConfigFilePicker } = sourceWith('../src/components/ConfigImportDialog.tsx', {
+    react: { useState: () => [dragging, value => { dragging = value; }] },
+  });
+  const draw = disabled => ConfigFilePicker({ disabled, onFiles: value => received.push(value) });
+  const event = { preventDefault: () => { prevented++; }, dataTransfer: { files } };
+  draw(false).props.onDragOver(event);
+  assert.equal(event.dataTransfer.dropEffect, 'copy');
+  assert.equal(dragging, true);
+  draw(false).props.onDrop(event);
+  assert.equal(dragging, false);
+  const input = elements(draw(false), node => node.type === 'input')[0];
+  assert.equal(input.props.type, 'file');
+  const currentTarget = { files, value: file.name };
+  input.props.onChange({ currentTarget });
+  assert.equal(currentTarget.value, '');
+  assert.deepEqual(received, [files, files]);
+  draw(true).props.onDragOver(event);
+  draw(true).props.onDrop(event);
+  assert.equal(event.dataTransfer.dropEffect, 'none');
+  assert.equal(prevented, 4);
+  assert.deepEqual(received, [files, files]);
+});
+
+test('設定ファイルの要約と差分を表示し、適用時だけ確認済みのファイルを送る', async context => {
+  context.after(() => setLang('ja'));
+  setLang('ja');
+  const file = { name: 'avline-sight.config.json', size: 128 };
+  const preview = { profile_id: 7, revision: 'preview-token', switch_count: 2, group_count: 1, changes: [
+    { field: 'settings.setup_ping_interval_sec', before: 60, after: 30 },
+    { field: 'settings.expert_display_default', before: false, after: true },
+  ] };
+  const requests = [];
+  let state = { phase: 'idle' };
+  const action = {};
+  const { ConfigImportDialog, ConfigImportPreview } = sourceWith('../src/components/ConfigImportDialog.tsx', {
+    react: { useState: () => [state, value => { state = value; }], useRef: () => action, useEffect: noop },
+    '../api': { api: async (url, options) => { requests.push({ url, options }); return preview; }, message: error => error.message },
+  }, { AbortController });
+  let cancelled = 0;
+  let applied = 0;
+  const draw = locked => ConfigImportDialog({ locked, close: () => { cancelled++; }, onApplied: async () => { applied++; } });
+  const button = (key, locked = false) => elements(draw(locked), node => node.type === 'button' && node.props.children === t(key))[0];
+  const pick = () => elements(draw(false), node => node.type?.name === 'ConfigFilePicker')[0].props.onFiles([file]);
+  assert.equal(button('configFile.apply').props.disabled, true);
+  const pending = pick();
+  assert.equal(state.phase, 'previewing');
+  assert.equal(button('configFile.apply').props.disabled, true);
+  await pending;
+  const confirm = elements(draw(false), node => node.type === ConfigImportPreview)[0];
+  assert.equal(confirm.props.preview, preview);
+  const html = render(ConfigImportPreview, confirm.props);
+  assert.match(html, /スイッチ 2 台、グループ 1 件、変更項目 2 件/);
+  assert.match(html, /現在の設定との差分/);
+  assert.match(html, /現在<\/strong><pre[^>]*>60<\/pre>[^]*読込後<\/strong><pre[^>]*>30<\/pre>/);
+  assert.match(html, /オフ[^]*オン/);
+  assert.equal(button('configFile.apply', true).props.disabled, true);
+  await button('configFile.apply', true).props.onClick();
+  button('checklist.cancel').props.onClick();
+  assert.equal(cancelled, 1);
+  assert.deepEqual(requests.map(request => request.url), ['/api/profiles/import/preview']);
+  state = { phase: 'idle' };
+  await pick();
+  const writing = button('configFile.apply').props.onClick();
+  assert.equal(button('checklist.cancel').props.disabled, true);
+  await writing;
+  assert.equal(applied, 1);
+  assert.deepEqual(requests.map(request => request.url), ['/api/profiles/import/preview', '/api/profiles/import/preview', '/api/profiles/import']);
+  assert.equal(requests[2].options.body, file);
+  assert.equal(requests[2].options.headers['X-AVLine-Profile'], '7');
+  assert.equal(requests[2].options.headers['X-AVLine-Config-Revision'], 'preview-token');
+});
