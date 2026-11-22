@@ -312,6 +312,7 @@ type SwitchConf struct {
 type Event struct {
 	ID         int64          `json:"id"`
 	TS         time.Time      `json:"ts"`
+	ClearedAt  *time.Time     `json:"cleared_at"`
 	SwitchID   int64          `json:"switch_id"`
 	IfIndex    int            `json:"if_index"`
 	Category   string         `json:"category"` // TRAP/ANOMALY/CONNECT/SYSLOG/BASELINE/MARKER/SYSTEM

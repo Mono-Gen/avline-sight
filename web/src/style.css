@@ -42,7 +42,7 @@ td {
 
 
 .phase-control { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
-.phase-pill {
+.phase-pill, .phase-selector {
   display: inline-block;
   border: 1px solid currentColor;
   border-radius: 999px;
@@ -50,6 +50,8 @@ td {
   font-weight: 700;
   white-space: nowrap;
 }
+.phase-selector { background: #1e293b; }
+.phase-selector option { color: #f1f5f9; }
 .phase-setup { color: #93c5fd; }
 .phase-rehearsal { color: #fde68a; }
 .phase-show { color: #86efac; }
@@ -229,9 +231,11 @@ td {
 .wall-content, .wall-main { flex: 1; min-width: 0; min-height: 0; }
 .wall-main { height: 100%; padding: .35rem .7rem; }
 .wall-main .rack-overview { height: 100%; display: flex; flex-direction: column; gap: .28rem; }
-.wall-main .alert-band { flex-shrink: 0; padding: .2rem .5rem; }
-.wall-main .alert-list { max-height: 4.4rem; font-size: .84em; }
-.wall-main .rack-groups { min-height: 0; overflow: auto; gap: 2px; }
+.wall-main .alert-band { flex-shrink: 0; max-height: 60%; overflow: hidden; padding: .2rem .5rem; }
+.wall-main .alert-list { position: relative; max-height: none; overflow: visible; font-size: .84em; }
+.wall-alert-overflow { position: absolute; inset: 0 0 auto; visibility: hidden; pointer-events: none; }
+.wall-alert-more { font-weight: 700; }
+.wall-main .rack-groups { flex: 1; min-height: 0; overflow: auto; align-content: start; gap: 2px; }
 .wall-main .rack-group-header { line-height: 1; padding: 2px 5px; font-size: .79em; gap: 5px; }
 .wall-main .rack-row { min-height: 34px; padding: 1px 5px; gap: 5px; grid-template-columns: minmax(9rem, 15rem) minmax(0, 1fr) auto; }
 .wall-main .rack-identity { flex-wrap: nowrap; font-size: .87em; }

@@ -81,7 +81,9 @@ func (e *Engine) recordLinkFlap(ev model.Event) {
 		count = 1
 	}
 	e.mu.Lock()
-	counted, err := e.st.CountRecentLinkFlap(ev.SwitchID, ev.IfIndex, count, ev.TS.Add(-linkFlapWindow), ev.TS)
+	a := alertFromEvent(ev)
+	suppressed := e.suppressedByLocked(a, time.Now()) != ""
+	counted, err := e.st.CountRecentLinkFlap(ev.SwitchID, ev.IfIndex, count, ev.TS.Add(-linkFlapWindow), ev.TS, suppressed)
 	if err != nil {
 		e.mu.Unlock()
 		slog.Warn("リンクフラップの件数更新に失敗", "err", err)
@@ -95,9 +97,8 @@ func (e *Engine) recordLinkFlap(ev model.Event) {
 		ev.Detail = map[string]any{}
 	}
 	ev.Detail["count"] = count
-	a := alertFromEvent(ev)
-	suppressed := e.suppressedByLocked(a, ev.TS) != ""
 	ev.Detail["_suppressed"] = suppressed
+	ev.ClearedAt = &ev.TS
 	inserted, err := e.st.InsertEvent(&ev)
 	if err != nil {
 		e.mu.Unlock()

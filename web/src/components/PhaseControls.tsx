@@ -18,11 +18,10 @@ export function PhaseControls({ phase, locked, busy, wall, run, onPhase }: {
   run: (action: () => Promise<void>) => void; onPhase: (phase: Phase) => void;
 }) {
   return <div className="phase-control">
-    <span className={`phase-pill phase-${phase || 'unknown'}`}>{t('rack.phase')} · {phase ? t(`rack.${phase}`) : '—'}</span>
-    {!wall && !locked && phase && <select data-action="phase" aria-label={t('rack.phase')} value={phase} disabled={busy}
+    {!wall && !locked && phase ? <select className={`phase-selector phase-${phase}`} data-action="phase" aria-label={t('rack.phase')} value={phase} disabled={busy}
       onChange={event => changePhase(event.target.value as Phase, run, onPhase)}>
-      {phases.map(value => <option key={value} value={value}>{t(`rack.${value}`)}</option>)}
-    </select>}
+      {phases.map(value => <option key={value} value={value}>{t('rack.phase')} · {t(`rack.${value}`)}</option>)}
+    </select> : <span className={`phase-pill phase-${phase || 'unknown'}`}>{t('rack.phase')} · {phase ? t(`rack.${phase}`) : '—'}</span>}
   </div>;
 }
 

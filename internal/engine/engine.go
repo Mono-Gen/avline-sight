@@ -264,10 +264,8 @@ func (e *Engine) OnState(st *model.SwitchState, tier string) {
 		return
 	}
 	cfg := e.portCfg[st.ID]
-	prev := e.states[st.ID]
-	if prev != nil && st.GroupTag == "" {
-		st.GroupTag = prev.GroupTag
-	}
+	// 改名・統合後も古いワーカー出力で登録グループを巻き戻さない。
+	st.GroupTag = e.switchGroups[st.ID]
 	for _, p := range st.Ports {
 		if c, ok := cfg[p.IfIndex]; ok {
 			p.Excluded, p.ExpectedSpeed, p.AVRole, p.Memo = c.Excluded, c.ExpectedSpeed, c.AVRole, c.Memo
@@ -354,12 +352,24 @@ func (e *Engine) OnEvent(ev model.Event) {
 	if ev.Code == "SWITCH_RECOVERED" {
 		e.clearMatching(func(a *Alert) bool { return a.SwitchID == ev.SwitchID && a.Code == "SWITCH_UNREACHABLE" })
 	}
+	if (ev.Severity == model.SevCritical || ev.Severity == model.SevWarning) && ev.Category != "SYSLOG" {
+		e.recordTransientEvent(ev)
+		return
+	}
 	e.persistEvent(&ev)
 }
 
 func (e *Engine) persistEvent(ev *model.Event) bool {
 	if ev.TS.IsZero() {
 		ev.TS = time.Now().UTC()
+	}
+	if ev.Severity == model.SevCritical || ev.Severity == model.SevWarning {
+		if ev.Detail == nil {
+			ev.Detail = map[string]any{}
+		}
+		e.mu.RLock()
+		ev.Detail["_suppressed"] = e.suppressedByLocked(alertFromEvent(*ev), time.Now()) != ""
+		e.mu.RUnlock()
 	}
 	ok, err := e.st.InsertEvent(ev)
 	if err != nil {
@@ -407,6 +417,9 @@ func (e *Engine) raise(seen map[string]bool, key string, ev model.Event) {
 	}
 	if a := e.active[key]; a != nil {
 		changed := !a.Active || a.SwitchID != ev.SwitchID || a.IfIndex != ev.IfIndex
+		if !a.Active {
+			e.saveClearedAtLocked([]int64{a.EventID}, nil)
+		}
 		a.Active, a.ClearedAt = true, nil
 		a.SwitchID, a.SwitchName, a.IfIndex = ev.SwitchID, ev.SwitchName, ev.IfIndex
 		e.mu.Unlock()

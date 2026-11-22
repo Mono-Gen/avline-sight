@@ -36,7 +36,7 @@ export function PortDetail({ switchId, switchName, port, devices, alerts, close,
       <h3>{alert.severity === 'CRITICAL' ? '✖' : '▲'} {eventTitle(alert)}</h3>
       <p>{eventHint(alert)}</p>
       <p>{t('rack.raised')}: <time dateTime={alert.ts}>{pcTimestamp(alert.ts)}</time></p>
-      <p>{t('rack.cleared')}: {alert.cleared_at ? <time dateTime={alert.cleared_at}>{pcTimestamp(alert.cleared_at)}</time> : '—'}</p>
+      <p>{t('rack.cleared')}: {alert.cleared_at ? <time dateTime={alert.cleared_at}>{pcTimestamp(alert.cleared_at)}</time> : alert.active ? '—' : t('rack.unknownTime')}</p>
       <p>{t('rack.acked')}: {alert.acked_at ? <time dateTime={alert.acked_at}>{pcTimestamp(alert.acked_at)}</time> : '—'}</p>
     </article>)}
     <h3 className="mt-4 font-bold">{t('rack.bandwidth')}</h3>

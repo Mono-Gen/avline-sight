@@ -38,9 +38,49 @@ func eventKey(ev model.Event) string {
 	return fmt.Sprintf("%d|%s|%s|%d", ev.SwitchID, ev.Severity, ev.Code, ev.IfIndex)
 }
 
+func transientKey(ev model.Event) string {
+	return eventKey(ev) + "|once|" + strconv.FormatInt(ev.ID, 10)
+}
+
+func (e *Engine) recordTransientEvent(ev model.Event) {
+	if ev.TS.IsZero() {
+		ev.TS = time.Now().UTC()
+	}
+	if ev.Detail == nil {
+		ev.Detail = map[string]any{}
+	}
+	e.mu.Lock()
+	a := alertFromEvent(ev)
+	suppressed := e.suppressedByLocked(a, time.Now()) != ""
+	ev.Detail["_suppressed"], ev.Detail["_one_shot"], ev.Detail["_profile_id"] = suppressed, true, e.profileID
+	// 継続条件のない障害は検知時点で完結した発生として、確認まで保持する。
+	ev.ClearedAt = &ev.TS
+	inserted, err := e.st.InsertEvent(&ev)
+	if err != nil {
+		e.mu.Unlock()
+		slog.Warn("一過性アラートの保存に失敗", "code", ev.Code, "err", err)
+		return
+	}
+	if !inserted {
+		e.mu.Unlock()
+		return
+	}
+	if !suppressed {
+		e.active[transientKey(ev)] = alertFromEvent(ev)
+	}
+	e.snapDirty = true
+	e.mu.Unlock()
+	if e.hub != nil {
+		e.hub.Broadcast("event_pushed", ev)
+	}
+	if !suppressed {
+		e.broadcastAlerts()
+	}
+}
+
 func alertFromEvent(ev model.Event) *Alert {
 	a := &Alert{EventID: ev.ID, SwitchID: ev.SwitchID, SwitchName: ev.SwitchName, IfIndex: ev.IfIndex,
-		Severity: ev.Severity, Code: ev.Code, Title: ev.Title, TS: ev.TS, Acked: ev.Acked}
+		Severity: ev.Severity, Code: ev.Code, Title: ev.Title, TS: ev.TS, Acked: ev.Acked, ClearedAt: ev.ClearedAt}
 	a.MAC, _ = ev.Detail["mac"].(string)
 	a.MAC = strings.ToUpper(a.MAC)
 	a.DeviceName, _ = ev.Detail["name"].(string)
@@ -103,6 +143,9 @@ func (e *Engine) restoreAlerts() {
 		if a.Code == "LINK_FLAP" {
 			key = linkFlapKey(ev)
 			identity = key
+		} else if oneShot, _ := ev.Detail["_one_shot"].(bool); oneShot {
+			key = transientKey(ev)
+			identity = key
 		}
 		if seen[identity] {
 			continue
@@ -111,8 +154,6 @@ func (e *Engine) restoreAlerts() {
 		if suppressed, _ := ev.Detail["_suppressed"].(bool); suppressed || e.suppressedByLocked(a, time.Now()) != "" {
 			continue
 		}
-		cleared := ev.TS
-		a.ClearedAt = &cleared
 		e.active[key] = a
 	}
 }
@@ -162,25 +203,48 @@ func (e *Engine) broadcastAlerts() {
 func (e *Engine) clearKeys(match func(string, *Alert) bool) {
 	changed := false
 	flags := map[string]bool{}
+	var clearedIDs []int64
+	now := time.Now().UTC()
 	e.mu.Lock()
 	for k, a := range e.active {
 		if !match(k, a) {
 			continue
 		}
 		flags[strconv.FormatInt(a.EventID, 10)] = e.suppressedByLocked(a, time.Now()) != ""
+		if a.Active {
+			clearedIDs = append(clearedIDs, a.EventID)
+		}
 		if a.Acked || e.suppressedByLocked(a, time.Now()) != "" {
 			delete(e.active, k)
 			changed = true
 		} else if a.Active {
-			now := time.Now().UTC()
 			a.Active, a.ClearedAt = false, &now
 			changed = true
 		}
 	}
+	e.saveClearedAtLocked(clearedIDs, &now)
 	e.saveSuppressionLocked(flags)
 	e.mu.Unlock()
 	if changed {
 		e.broadcastAlerts()
+	}
+}
+
+// 復旧・再発生の遷移だけを保存し、再評価のたびに復旧時刻を変えない。
+func (e *Engine) saveClearedAtLocked(ids []int64, at *time.Time) {
+	if len(ids) == 0 {
+		return
+	}
+	var cleared any
+	if at != nil {
+		cleared = at.UnixMilli()
+	}
+	b, err := json.Marshal(ids)
+	if err == nil {
+		_, err = e.st.DB.Exec(`UPDATE events SET cleared_at=? WHERE id IN (SELECT value FROM json_each(?))`, cleared, string(b))
+	}
+	if err != nil {
+		slog.Warn("アラート復旧時刻の保存に失敗", "err", err)
 	}
 }
 
@@ -231,6 +295,7 @@ func (e *Engine) Ack(id int64, all bool) error {
 
 func (e *Engine) reconcileStateAlerts(s *model.SwitchState) {
 	changed := false
+	var reactivated []int64
 	e.mu.Lock()
 	for _, a := range e.active {
 		if a.SwitchID != s.ID || a.Active {
@@ -246,9 +311,11 @@ func (e *Engine) reconcileStateAlerts(s *model.SwitchState) {
 		}
 		if on {
 			a.Active, a.ClearedAt = true, nil
+			reactivated = append(reactivated, a.EventID)
 			changed = true
 		}
 	}
+	e.saveClearedAtLocked(reactivated, nil)
 	e.mu.Unlock()
 	if changed {
 		e.broadcastAlerts()

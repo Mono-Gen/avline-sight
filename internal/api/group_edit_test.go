@@ -127,3 +127,31 @@ func TestLegacyReservedGroupCanBeRenamedWithoutTouchingAll(t *testing.T) {
 		t.Fatal(w.Body)
 	}
 }
+
+func TestRenamedGroupInventoryAndCSVSurvivePolling(t *testing.T) {
+	s, h := newDevicesServer(t)
+	sws, err := s.Store.Switches(s.Engine.ProfileID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sw := sws[0]
+	sw.GroupTag = "Audio"
+	if err := s.Store.SaveSwitch(&sw); err != nil {
+		t.Fatal(err)
+	}
+	s.Engine.Reload()
+	if w := do(h, "PUT", "/api/groups/Audio", `{"new_name":"Video"}`); w.Code != 200 {
+		t.Fatal(w.Body)
+	}
+	s.Engine.OnState(&model.SwitchState{ID: sw.ID, Name: sw.Name, GroupTag: "Audio", Reachable: true,
+		Ports: []*model.Port{{IfIndex: 1, Name: "1/0/1", Devices: []model.Device{{MAC: "00:11:22:33:44:55", IP: "192.0.2.10"}}}}}, "slow")
+	w := do(h, "GET", "/api/devices?group=Video", "")
+	var rows []engine.InventoryRow
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &rows) != nil || len(rows) != 1 || rows[0].GroupTag != "Video" || rows[0].IP != "192.0.2.10" {
+		t.Fatalf("絞込と一括Pingに使う宛先一覧: %s", w.Body)
+	}
+	w = do(h, "GET", "/api/devices/export.csv?group=Video&lang=en", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "00:11:22:33:44:55") || !strings.Contains(w.Body.String(), "192.0.2.10") {
+		t.Fatalf("改名後のCSVから機器が消えた: %s", w.Body)
+	}
+}

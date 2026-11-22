@@ -551,7 +551,7 @@ func (e *Engine) RecordPing(results map[string]PingMark) {
 		return
 	}
 	e.mu.Lock()
-	defer e.mu.Unlock()
+	recovered := map[string]bool{}
 	known := map[string]bool{}
 	for _, r := range rows {
 		known[r.MAC] = true
@@ -565,7 +565,13 @@ func (e *Engine) RecordPing(results map[string]PingMark) {
 		for _, r := range rows {
 			if r.IP == ip || r.PlannedIP == ip {
 				e.pingResults[r.MAC] = DevicePing{OK: m.Status == "ok", RTTms: m.RTTms, TS: m.At, Source: "manual", Status: m.Status}
+				if m.Status == "ok" {
+					e.pingFails[r.MAC] = 0
+					recovered[r.MAC] = true
+				}
 			}
 		}
 	}
+	e.mu.Unlock()
+	e.clearMatching(func(a *Alert) bool { return a.Code == "PING_FAIL" && recovered[a.MAC] })
 }

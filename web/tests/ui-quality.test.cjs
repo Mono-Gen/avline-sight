@@ -22,3 +22,4 @@ for (const extension of ['.ts', '.tsx']) {
 require('./ui-regressions.cjs');
 require('./live-regressions.cjs');
 require('./rack-quality.cjs');
+require('./fix-round1.cjs');

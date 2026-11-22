@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, switch_id INTEGER NOT NULL DEFAULT 0, switch_name TEXT NOT NULL DEFAULT '',
   if_index INTEGER NOT NULL DEFAULT 0, category TEXT NOT NULL, severity TEXT NOT NULL, code TEXT NOT NULL,
   title TEXT NOT NULL, detail_json TEXT NOT NULL DEFAULT '{}', hint_text TEXT NOT NULL DEFAULT '',
-  acked INTEGER NOT NULL DEFAULT 0, acked_at INTEGER, dedupe_key TEXT);
+  acked INTEGER NOT NULL DEFAULT 0, acked_at INTEGER, dedupe_key TEXT, cleared_at INTEGER);
 CREATE INDEX IF NOT EXISTS ix_ev_ts ON events(ts);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_ev_dedupe ON events(switch_id, dedupe_key) WHERE dedupe_key IS NOT NULL;
 CREATE TABLE IF NOT EXISTS state_snapshots (
@@ -113,6 +113,17 @@ func Open(path string, readOnly bool) (*Store, error) {
 		if err := migrateBindingsProfile(db); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("DB移行に失敗: %w", err)
+		}
+		var clearedColumn int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('events') WHERE name='cleared_at'`).Scan(&clearedColumn); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("復旧時刻列の確認に失敗: %w", err)
+		}
+		if clearedColumn == 0 {
+			if _, err := db.Exec(`ALTER TABLE events ADD COLUMN cleared_at INTEGER`); err != nil {
+				db.Close()
+				return nil, fmt.Errorf("復旧時刻列の移行に失敗: %w", err)
+			}
 		}
 		var n int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('device_aliases') WHERE name='planned_ip'`).Scan(&n); err != nil {
@@ -777,8 +788,12 @@ func (s *Store) InsertEvent(e *model.Event) (bool, error) {
 	if e.Dedupe != "" {
 		dk = e.Dedupe
 	}
-	r, err := s.DB.Exec(`INSERT OR IGNORE INTO events(ts,switch_id,switch_name,if_index,category,severity,code,title,detail_json,hint_text,acked,dedupe_key)
-		VALUES(?,?,?,?,?,?,?,?,?,?,0,?)`, ms(e.TS), e.SwitchID, e.SwitchName, e.IfIndex, e.Category, e.Severity, e.Code, e.Title, string(det), e.Hint, dk)
+	var cleared any
+	if e.ClearedAt != nil {
+		cleared = ms(*e.ClearedAt)
+	}
+	r, err := s.DB.Exec(`INSERT OR IGNORE INTO events(ts,switch_id,switch_name,if_index,category,severity,code,title,detail_json,hint_text,acked,dedupe_key,cleared_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,0,?,?)`, ms(e.TS), e.SwitchID, e.SwitchName, e.IfIndex, e.Category, e.Severity, e.Code, e.Title, string(det), e.Hint, dk, cleared)
 	if err != nil {
 		return false, err
 	}
@@ -824,7 +839,17 @@ func (s *Store) Events(f EventFilter) ([]model.Event, error) {
 	if !f.To.IsZero() {
 		conds, args = append(conds, "ts<=?"), append(args, ms(f.To))
 	}
-	q := `SELECT id,ts,switch_id,switch_name,if_index,category,severity,code,title,detail_json,hint_text,acked FROM events`
+	cleared := "cleared_at"
+	if s.readOnly {
+		var n int
+		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('events') WHERE name='cleared_at'`).Scan(&n); err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			cleared = "NULL"
+		}
+	}
+	q := `SELECT id,ts,switch_id,switch_name,if_index,category,severity,code,title,detail_json,hint_text,acked,` + cleared + ` FROM events`
 	if len(conds) > 0 {
 		q += " WHERE " + strings.Join(conds, " AND ")
 	}
@@ -844,11 +869,16 @@ func (s *Store) Events(f EventFilter) ([]model.Event, error) {
 	for rows.Next() {
 		var e model.Event
 		var ts int64
+		var clearedAt sql.NullInt64
 		var det string
-		if err := rows.Scan(&e.ID, &ts, &e.SwitchID, &e.SwitchName, &e.IfIndex, &e.Category, &e.Severity, &e.Code, &e.Title, &det, &e.Hint, &e.Acked); err != nil {
+		if err := rows.Scan(&e.ID, &ts, &e.SwitchID, &e.SwitchName, &e.IfIndex, &e.Category, &e.Severity, &e.Code, &e.Title, &det, &e.Hint, &e.Acked, &clearedAt); err != nil {
 			return nil, err
 		}
 		e.TS = fromMS(ts)
+		if clearedAt.Valid {
+			at := fromMS(clearedAt.Int64)
+			e.ClearedAt = &at
+		}
 		json.Unmarshal([]byte(det), &e.Detail)
 		out = append(out, e)
 	}
@@ -866,9 +896,10 @@ func (s *Store) AckAll() error {
 }
 
 // CountRecentLinkFlap はイベントの発生時刻を基準とした重複排除窓の件数を増やす。
-func (s *Store) CountRecentLinkFlap(id int64, ifIndex, count int, after, through time.Time) (bool, error) {
+func (s *Store) CountRecentLinkFlap(id int64, ifIndex, count int, after, through time.Time, suppressed bool) (bool, error) {
 	res, err := s.DB.Exec(`UPDATE events SET detail_json=json_set(detail_json,'$.count',COALESCE(json_extract(detail_json,'$.count'),1)+?)
-		WHERE id=(SELECT id FROM events WHERE switch_id=? AND if_index=? AND code='LINK_FLAP' AND ts>? AND ts<=? ORDER BY ts DESC,id DESC LIMIT 1)`, count, id, ifIndex, ms(after), ms(through))
+		WHERE id=(SELECT id FROM events WHERE switch_id=? AND if_index=? AND code='LINK_FLAP' AND ts>? AND ts<=? ORDER BY ts DESC,id DESC LIMIT 1)
+		AND COALESCE(json_extract(detail_json,'$._suppressed'),0)=?`, count, id, ifIndex, ms(after), ms(through), suppressed)
 	if err != nil {
 		return false, err
 	}

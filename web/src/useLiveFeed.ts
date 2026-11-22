@@ -29,7 +29,7 @@ export function useLiveFeed({ muted, replay, settings, setOverview, setState, se
       setEvents(old => [message.data, ...asArray(old).filter(item => item.id !== message.data.id)].slice(0, LIVE_EVENT_LIMIT));
       setOverview(previous => pushRecentEvent(previous, message.data));
       const current = preferences.current;
-      if (message.data.severity !== 'CRITICAL' || current.replay || current.muted || !current.settings?.alert_sound) return;
+      if (message.data.severity !== 'CRITICAL' || message.data.detail?._suppressed === true || current.replay || current.muted || !current.settings?.alert_sound) return;
       try {
         const context = new AudioContext();
         const oscillator = context.createOscillator();
