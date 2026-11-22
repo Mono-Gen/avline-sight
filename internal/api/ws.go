@@ -140,8 +140,9 @@ func (s *Server) wsTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer sess.Close()
+	protocol := strings.ToUpper(proto)
 	s.Engine.OnEvent(model.Event{SwitchID: id, SwitchName: cfg.Name, Category: "SYSTEM", Severity: model.SevInfo, Code: "TERMINAL_OPEN",
-		Title: "内蔵ターミナル接続（" + strings.ToUpper(proto) + "）"})
+		Title: terminalOpenTitle(protocol), Detail: map[string]any{"protocol": protocol}})
 	if fp != "" {
 		conn.Write(ctx, websocket.MessageText, []byte("\r\n[AVLine-Sight] SSHホスト鍵 "+fp+" — 実機の鍵と一致するか確認してください\r\n"))
 	}

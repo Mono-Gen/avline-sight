@@ -1,4 +1,4 @@
-import { eventHint, eventTitle, t } from '../i18n';
+import { eventHint, eventTitle, isRecommendationEvent, t } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { acknowledgeEvents } from '../acknowledge';
@@ -33,7 +33,8 @@ export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert }:
       <summary>{syslog}</summary>
       <pre>{event.title}</pre>
     </details> : syslog) : <>{eventTitle(event)} {eventHint(event)}
-      {expert && <AlertTechnicalDetails counters={event.detail?.raw_counters} />}</>}</td>
+      {expert && <AlertTechnicalDetails event={event} counters={event.detail?.raw_counters}
+        observed={event.code === 'PRE_SHOW_CHECKLIST_REMAINDER' ? event.title : undefined} />}</>}</td>
     <td className="whitespace-nowrap">{event.acked && event.severity !== 'INFO' ? t('ui.m269') : canAcknowledgeEvent(event, ackable) ? <button
       className="button-primary" data-action="ack" disabled={disabled} onClick={() => onAcknowledge(event.id)}
     >{t('ui.m268')}</button> : '—'}</td>
@@ -89,7 +90,7 @@ export function Logs(props: ViewProps) {
     };
   }, [refreshSearch]);
   const rows = logRows(result.data || [], props.events, filter, ackable)
-    .filter(event => inGroupScope(event, visibleIds, groupFiltered));
+    .filter(event => inGroupScope(event, visibleIds, groupFiltered) && (props.expert || !isRecommendationEvent(event.code)));
   const switches = new Map(groupMembers.map(item => [String(item.id), item.name]));
   for (const event of [...asArray(result.data), ...asArray(props.events)]) {
     const id = String(event.switch_id);

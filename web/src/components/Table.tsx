@@ -1,13 +1,18 @@
-import { eventHint, eventTitle, getLang, t } from '../i18n';
+import { eventHint, eventTitle, getLang, isRecommendationEvent, t } from '../i18n';
 import React from 'react';
 import { asArray, decimal, formatBps, formatTime } from '../format';
 import { Badge } from './Badge';
 import { columnLabels } from './columnLabels';
+import { AlertTechnicalDetails } from './AlertTechnicalDetails';
 
-function cellValue(key: string, value: unknown, row: Record<string, unknown>): React.ReactNode {
-  if ((key === 'title' || key === 'hint') && typeof row.code === 'string' && typeof value === 'string') {
+function cellValue(key: string, value: unknown, row: Record<string, unknown>, expert: boolean): React.ReactNode {
+  if ((key === 'title' || key === 'hint') && typeof row.code === 'string') {
     const detail = row.detail && typeof row.detail === 'object' ? row.detail as Record<string, unknown> : undefined;
-    return key === 'title' ? eventTitle({ code: row.code, title: value, detail }) : eventHint({ code: row.code, hint: value, detail });
+    const text = typeof value === 'string' ? value : undefined;
+    if (key === 'hint') return eventHint({ code: row.code, hint: text, detail });
+    const event = { code: row.code, title: text, detail };
+    return <>{eventTitle(event)}{expert && <AlertTechnicalDetails event={event}
+      observed={isRecommendationEvent(event.code) ? undefined : text} />}</>;
   }
   if (value == null) return '—';
   if (key === 'severity') return <Badge text={String(value)} />;
@@ -23,12 +28,13 @@ function cellValue(key: string, value: unknown, row: Record<string, unknown>): R
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
-export function Table({ rows, labels = {}, first = [], hide = [], values = {} }: {
+export function Table({ rows, labels = {}, first = [], hide = [], values = {}, expert = false }: {
   rows: object[];
   labels?: Record<string, string>;
   first?: readonly string[];
   hide?: readonly string[];
   values?: Record<string, (value: unknown) => React.ReactNode>;
+  expert?: boolean;
 }) {
   const list = asArray(rows).filter(row => row && typeof row === 'object');
   if (!list.length) return <p>{t('ui.m195')}</p>;
@@ -45,7 +51,7 @@ export function Table({ rows, labels = {}, first = [], hide = [], values = {} }:
               {keys.map(key => {
                 const record = row as Record<string, unknown>;
                 const formatValue = Object.prototype.hasOwnProperty.call(values, key) ? values[key] : undefined;
-                return <td key={key}>{formatValue?.(record[key]) ?? cellValue(key, record[key], record)}</td>;
+                return <td key={key}>{formatValue?.(record[key]) ?? cellValue(key, record[key], record, expert)}</td>;
               })}
             </tr>
           ))}

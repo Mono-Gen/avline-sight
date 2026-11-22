@@ -1,7 +1,7 @@
 import { api } from '../api';
 import { PollingStatus } from '../components/PollingStatus';
 import { asArray } from '../format';
-import { t } from '../i18n';
+import { eventDetails, eventTitle, isRecommendationEvent, t } from '../i18n';
 import type { Audit, PortRecommendation } from '../types';
 import { TOPOLOGY_REFRESH_MS, usePolling } from '../usePolling';
 import type { ViewProps } from './props';
@@ -19,11 +19,15 @@ export function RecommendationTable({ rows, names }: {
         const mtu = row.code === 'QSYS_MTU' || row.code === 'UPLINK_MTU_MISMATCH';
         const recommended = row.code === 'QSYS_MTU' ? t('expert.qsysMtu', { frame: row.recommended })
           : row.code === 'UPLINK_MTU_MISMATCH' ? t('expert.peerMtu', { frame: row.recommended }) : row.recommended;
-        const source = row.source ? t('expert.source', { name: [row.source, row.reference].filter(Boolean).join(' · ') })
-          : t('expert.noSource');
+        const event = { code: row.code, detail: { pause: row.current, trust: row.current, max_frame: row.current, lpi: row.lpi } };
+        const recommendation = isRecommendationEvent(row.code);
+        const source = row.source && row.version
+          ? t('expert.source', { name: row.source, version: row.version }) : t('expert.noSource');
         return <tr key={`${row.switch_id}/${row.port}/${row.code}/${index}`}>
-          <td>{names.get(row.switch_id)}</td><td>{row.port}</td><td>{t(`expert.rules.${row.code}`)}</td>
-          <td>{mtu ? `${row.current} B` : row.current}</td><td>{recommended}</td><td>{source}</td>
+          <td>{names.get(row.switch_id)}</td><td>{row.port}</td>
+          <td>{recommendation ? eventTitle(event) : t(`expert.rules.${row.code}`)}</td>
+          <td>{mtu ? `${row.current} B` : row.current}</td><td>{recommended}</td>
+          <td>{recommendation && <p>{eventDetails(event)}</p>}{source}</td>
         </tr>;
       })}</tbody>
     </table>

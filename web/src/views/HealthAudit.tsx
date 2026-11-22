@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { isRecommendationEvent, t } from '../i18n';
 import { useState } from 'react';
 import { api, json } from '../api';
 import { Chart, Table } from '../components/Common';
@@ -83,7 +83,8 @@ export function HealthAudit(p: ViewProps) {
       <PollingStatus {...metrics} />
       <PollingStatus {...report} />
       <h2>{t('ui.m256')}</h2>
-      <Table {...findingColumns} rows={asArray(audit?.findings).filter(row => inGroupScope(row, visibleIds, filtered))} />
+      <Table {...findingColumns} expert={p.expert} rows={asArray(audit?.findings).filter(row =>
+        inGroupScope(row, visibleIds, filtered) && (p.expert || !isRecommendationEvent(row.code)))} />
       <h2>{t('ui.m257')}</h2>
       <Table
         rows={asArray(Object.entries(audit?.fw_versions || {})).map(([version, switches]) => ({

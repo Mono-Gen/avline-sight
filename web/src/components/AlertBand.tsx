@@ -22,7 +22,7 @@ export function AlertEntry({ alert, busy, ack, expert }: { alert: Alert; busy: b
       </div>
       <p>{eventTitle(alert)}</p>
       {hint && <p className="alert-hint">{hint}</p>}
-      {expert && <AlertTechnicalDetails counters={alert.raw_counters ?? alert.detail?.raw_counters} />}
+      {expert && <AlertTechnicalDetails event={alert} counters={alert.raw_counters ?? alert.detail?.raw_counters} />}
     </div>
     {ack && canAcknowledgeAlert(alert) && <button className="button-primary" data-action="ack" disabled={busy} onClick={() => ack(alert.event_id)}>{t('rack.ack')}</button>}
   </article>;

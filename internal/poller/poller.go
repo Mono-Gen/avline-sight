@@ -170,6 +170,7 @@ func newWorker(cfg model.SwitchConfig, iv Intervals, sink Sink, alias AliasFunc,
 }
 
 func (w *worker) emit(ev model.Event) {
+	ev.Hint = model.EventHintJa(ev.Code)
 	ev.SwitchID = w.cfg.ID
 	ev.SwitchName = w.cfg.Name
 	if ev.TS.IsZero() {
@@ -344,7 +345,7 @@ func (w *worker) poll(ctx context.Context, tier string, collect func() error) bo
 			}
 			if wasUp || w.failures == 1 {
 				w.emit(model.Event{Category: "ANOMALY", Severity: model.SevCritical, Code: "SWITCH_UNREACHABLE",
-					Title: "スイッチからSNMP応答がありません", Hint: "電源断・LAN切断・IP/コミュニティ設定誤り・SNMP無効化を確認してください",
+					Title:  "スイッチからSNMP応答がありません",
 					Detail: map[string]any{"error": w.st.LastError}})
 			}
 			tier = "error"
@@ -416,7 +417,7 @@ func (w *worker) observeLinkFlap(p *model.Port, oper string, signals linkSignals
 		w.flapChange[p.IfIndex] = cur
 	}
 	w.emit(model.Event{Category: "ANOMALY", Severity: model.SevWarning, Code: "LINK_FLAP", IfIndex: p.IfIndex,
-		Title: p.Name + " 短時間のリンク断を検知", Hint: "LANケーブルやコネクタの接触、対向機器の電源を確認してください",
+		Title:  p.Name + " 短時間のリンク断を検知",
 		Detail: map[string]any{"port": p.Name, "source": source, "count": count}})
 }
 
@@ -430,17 +431,17 @@ func (w *worker) onLinkChange(p *model.Port, oper string, spd int) {
 		// LinkDown → 低速で再接続（例 1G→100M）は芯線断線の典型（仕様3.6）
 		if prev := w.lastUpSpeed[p.IfIndex]; prev > 0 && spd > 0 && spd < prev {
 			w.emit(model.Event{Category: "ANOMALY", Severity: model.SevCritical, Code: "RELINK_SLOWER", IfIndex: p.IfIndex,
-				Title: fmt.Sprintf("%s 再接続後に速度低下 %dM → %dM", p.Name, prev, spd), Hint: "LANケーブル芯線断線（4芯落ち）・コネクタ圧着不良・オートネゴ不整合の疑い",
+				Title:  fmt.Sprintf("%s 再接続後に速度低下 %dM → %dM", p.Name, prev, spd),
 				Detail: map[string]any{"from": prev, "to": spd}})
 		}
 		w.emit(model.Event{Category: "CONNECT", Severity: model.SevInfo, Code: "LINK_UP", IfIndex: p.IfIndex,
 			Title: fmt.Sprintf("%s リンクアップ（%dMbps）", p.Name, spd), Detail: map[string]any{"port": p.Name, "speed": spd}})
 	case p.SpeedMbps != spd:
-		sev, hint := model.SevInfo, ""
+		sev := model.SevInfo
 		if spd < p.SpeedMbps {
-			sev, hint = model.SevCritical, "LANケーブル芯線断線（4芯落ち）・コネクタ圧着不良・オートネゴ不整合の疑い"
+			sev = model.SevCritical
 		}
-		w.emit(model.Event{Category: "CONNECT", Severity: sev, Code: "SPEED_CHANGE", IfIndex: p.IfIndex, Hint: hint,
+		w.emit(model.Event{Category: "CONNECT", Severity: sev, Code: "SPEED_CHANGE", IfIndex: p.IfIndex,
 			Title: fmt.Sprintf("%s 速度変化 %dM → %dM", p.Name, p.SpeedMbps, spd), Detail: map[string]any{"from": p.SpeedMbps, "to": spd}})
 	}
 }
@@ -456,7 +457,7 @@ func (w *worker) onPoEChange(p *model.Port, prev, cur *model.PoE, cols map[strin
 	}
 	if cur.OverloadCnt > prev.OverloadCnt || cur.DeniedCnt > prev.DeniedCnt || cur.ShortCnt > prev.ShortCnt {
 		w.emit(model.Event{Category: "ANOMALY", Severity: model.SevCritical, Code: "POE_FAULT", IfIndex: p.IfIndex,
-			Title: fmt.Sprintf("%s PoE障害（Overload/Denied/Short）", p.Name), Hint: "PoE電力不足または受電機器側の異常・短絡の疑い",
+			Title: fmt.Sprintf("%s PoE障害（Overload/Denied/Short）", p.Name),
 			Detail: map[string]any{"overload": cur.OverloadCnt, "denied": cur.DeniedCnt, "short": cur.ShortCnt,
 				"raw_counters": captureCounters(nil, cols, poeCounters)}})
 	}

@@ -28,6 +28,6 @@ export function DhcpView(props: ViewProps) {
     <h2>{t('ui.m252')}</h2>
     <Table {...switchColumn} first={['switch_name', 'ip']} rows={filter(data?.conflicts)} />
     <h2>{t('ui.m253')}</h2>
-    <Table {...findingColumns} rows={filter(data?.findings)} />
+    <Table {...findingColumns} expert={props.expert} rows={filter(data?.findings)} />
   </section>;
 }

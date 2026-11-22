@@ -727,7 +727,8 @@ func (s *Server) marker(w http.ResponseWriter, r *http.Request) {
 	if len([]rune(note)) > 200 {
 		note = string([]rune(note)[:200])
 	}
-	ev := model.Event{TS: time.Now().UTC(), Category: "MARKER", Severity: model.SevInfo, Code: "MARKER", Title: "★ " + note}
+	ev := model.Event{TS: time.Now().UTC(), Category: "MARKER", Severity: model.SevInfo, Code: "MARKER",
+		Title: "★ " + note, Detail: map[string]any{"note": note}}
 	s.Engine.OnEvent(ev)
 	evs, _ := s.Store.Events(store.EventFilter{Category: "MARKER", Limit: 1})
 	if len(evs) > 0 {
@@ -1230,7 +1231,9 @@ func (s *Server) simFault(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "障害を注入できません", err.Error(), "")
 		return
 	}
-	s.Engine.OnEvent(model.Event{Category: "SYSTEM", Severity: model.SevInfo, Code: "LAB_FAULT", Title: fmt.Sprintf("【ラボ】障害注入: %s → AV-SW-%02d", in.Scenario, in.SwitchIndex+1)})
+	target := fmt.Sprintf("AV-SW-%02d", in.SwitchIndex+1)
+	s.Engine.OnEvent(model.Event{Category: "SYSTEM", Severity: model.SevInfo, Code: "LAB_FAULT",
+		Title: labFaultTitle(in.Scenario, target), Detail: map[string]any{"scenario": in.Scenario, "target": target}})
 	writeJSON(w, 200, map[string]any{"injected": in.Scenario})
 }
 

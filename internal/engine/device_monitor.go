@@ -84,7 +84,7 @@ func (e *Engine) SetPinger(p Pinger) {
 func deviceKey(code, mac string) string { return "device|" + code + "|" + strings.ToUpper(mac) }
 
 func (e *Engine) deviceEvent(code string, r InventoryRow) model.Event {
-	return model.Event{SwitchID: r.SwitchID, SwitchName: r.SwitchName, IfIndex: r.IfIndex, Category: "ANOMALY", Severity: model.SevWarning, Code: code,
+	return model.Event{SwitchID: r.SwitchID, SwitchName: r.SwitchName, IfIndex: r.IfIndex, Category: "ANOMALY", Severity: model.SevWarning, Code: code, Hint: model.EventHintJa(code),
 		Title: fmt.Sprintf("%s: %s (%s)", code, r.Label, r.MAC), Detail: map[string]any{"mac": r.MAC, "name": r.Label, "port": r.Port, "last_ip": r.IP, "planned_ip": r.PlannedIP}}
 }
 

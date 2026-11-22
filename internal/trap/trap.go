@@ -159,6 +159,7 @@ func Decode(p *gosnmp.SnmpPacket) model.Event {
 	} else {
 		ev.Code, ev.Title = "UNKNOWN_TRAP", "未定義Trap "+trapOID
 	}
+	ev.Hint = model.EventHintJa(ev.Code)
 	if ev.IfIndex > 0 {
 		ev.Title = fmt.Sprintf("%s（ifIndex %d）", ev.Title, ev.IfIndex)
 	}

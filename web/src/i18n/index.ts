@@ -1,10 +1,11 @@
 import { useSyncExternalStore } from 'react';
 import { ja } from './ja';
 import { en } from './en';
+import type { EventCopy } from './eventJa';
 
 export type Language = 'ja' | 'en';
 export type Widen<T> = { [K in keyof T]: T[K] extends string ? string : Widen<T[K]> };
-export type Dictionary = Widen<typeof ja>;
+export type Dictionary = Omit<Widen<typeof ja>, 'events'> & { events: Record<keyof typeof ja.events, EventCopy> };
 type Paths<T> = { [K in keyof T & string]: T[K] extends string ? K : `${K}.${Paths<T[K]>}` }[keyof T & string];
 export type TranslationKey = Paths<typeof ja>;
 
@@ -46,21 +47,48 @@ function translation(key: TranslationKey): string {
 export function t(key: TranslationKey, params: Record<string, unknown> = {}): string {
   return translation(key).replace(/\{(\w+)\}/g, (_, name: string) => params[name] == null ? '' : String(params[name]));
 }
-interface LocalizedEvent {
+export interface LocalizedEvent {
   code: string;
   title?: string;
   hint?: string;
   detail?: Record<string, unknown>;
 }
+
+function copyFor(code: string): EventCopy | undefined {
+  if (!Object.prototype.hasOwnProperty.call(ja.events, code)) return undefined;
+  return (language === 'en' ? en : ja).events[code as keyof typeof ja.events];
+}
+
+function renderEventCopy(template: string, params: Record<string, unknown> = {}): string | undefined {
+  if ([...template.matchAll(/\{(\w+)\}/g)].some(([, name]) => params[name] == null)) return undefined;
+  return template.replace(/\{(\w+)\}/g, (_, name: string) => String(params[name]));
+}
+
+const recommendationCodes = new Set([
+  'EEE_ON_AV_PORT', 'FLOWCTRL_ON_AV_PORT', 'NDI4_NEEDS_FLOWCTRL', 'DSCP_TRUST', 'QSYS_MTU',
+  'STORM_CTRL_UPLINK', 'BCAST_STORM_CTRL_UPLINK', 'MCAST_STORM_CTRL_UPLINK', 'UPLINK_MTU_MISMATCH',
+  'STP_MSTP', 'FW_MISMATCH', 'STP_PRIORITY_DEFAULT', 'STP_EDGE_ROOT', 'QUERIER_ON_EDGE', 'DAISY_CHAIN', 'VLAN_CROWDED',
+]);
+
+export function isRecommendationEvent(code: string): boolean {
+  return recommendationCodes.has(code);
+}
+
 export function eventTitle(event: LocalizedEvent): string {
-  if (event.code === 'PORT_CONFIG_CHANGED' && typeof event.detail?.field === 'string') {
-    return t('configChanges.change', { ...event.detail, field: configFieldName(event.detail.field) });
+  const copy = copyFor(event.code);
+  if (!copy) return event.title || event.code;
+  if (event.code === 'MARKER' && event.detail?.note == null && event.title) return event.title;
+  const title = renderEventCopy(copy.title, eventParams(event)) ?? copy.fallbackTitle ?? event.title ?? event.code;
+  const vlan = event.detail?.vlan;
+  return !isRecommendationEvent(event.code) && typeof vlan === 'number' ? `VLAN ${vlan} · ${title}` : title;
+}
+
+function eventParams(event: LocalizedEvent): Record<string, unknown> | undefined {
+  const detail = event.detail;
+  if (event.code === 'PORT_CONFIG_CHANGED' && typeof detail?.field === 'string') {
+    return { ...detail, field: configFieldName(detail.field) };
   }
-  if (!Object.prototype.hasOwnProperty.call(ja.events, event.code)) return event.title || event.code;
-  const key = `events.${event.code}.title` as TranslationKey;
-  const variables = [...translation(key).matchAll(/\{(\w+)\}/g)];
-  if (variables.some(([, name]) => event.detail?.[name] == null) && event.title) return event.title;
-  return t(key, event.detail);
+  return detail;
 }
 
 export function configFieldName(field: string): string {
@@ -69,6 +97,17 @@ export function configFieldName(field: string): string {
     : field;
 }
 export function eventHint(event: LocalizedEvent): string {
-  if (!Object.prototype.hasOwnProperty.call(ja.events, event.code)) return event.hint || '';
-  return t(`events.${event.code}.hint` as TranslationKey, event.detail) || event.hint || '';
+  const copy = copyFor(event.code);
+  return copy ? renderEventCopy(copy.hint, event.detail) ?? '' : event.hint || '';
+}
+
+export function eventDetails(event: LocalizedEvent): string {
+  const template = copyFor(event.code)?.details;
+  if (!template) return '';
+  const detail = eventParams(event);
+  if (event.code === 'PORT_CONFIG_CHANGED' && typeof detail?.field === 'string') {
+    const change = renderEventCopy(translation('configChanges.change'), detail);
+    if (change) return change;
+  }
+  return renderEventCopy(template, detail) ?? '';
 }

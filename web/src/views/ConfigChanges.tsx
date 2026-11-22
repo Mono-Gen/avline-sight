@@ -2,7 +2,8 @@ import { api } from '../api';
 import { PollingStatus } from '../components/PollingStatus';
 import { SEARCH_EVENT_LIMIT } from '../events';
 import { asArray } from '../format';
-import { eventTitle, t } from '../i18n';
+import { eventHint, eventTitle, t } from '../i18n';
+import { AlertTechnicalDetails } from '../components/AlertTechnicalDetails';
 import { pcTimestamp } from '../pcTime';
 import type { Event } from '../types';
 import { TOPOLOGY_REFRESH_MS, usePolling } from '../usePolling';
@@ -54,7 +55,8 @@ export function ConfigChanges(p: ViewProps) {
       <h2>{t('configChanges.recent')}</h2>
       <PollingStatus {...history} />
       {history.data && (events.length ? <ul className="list-disc pl-5">{events.map(event => <li key={event.id}>
-        <time dateTime={event.ts}>{pcTimestamp(event.ts, true)}</time> · {event.switch_name} · {eventTitle(event)}
+        <time dateTime={event.ts}>{pcTimestamp(event.ts, true)}</time> · {event.switch_name} · {eventTitle(event)} {eventHint(event)}
+        {p.expert && <AlertTechnicalDetails event={event} />}
       </li>)}</ul> : <p>{t('configChanges.noEvents')}</p>)}
     </section>
   </section>;

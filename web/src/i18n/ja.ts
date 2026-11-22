@@ -29,7 +29,7 @@ export const ja = {
     noRecommendations: '表示対象のポートに推奨との差はありません。',
     technical: '技術詳細', mibName: 'MIB名', rawCounter: 'カウンタ生値',
     port: 'ポート', field: '設定項目', current: '現在値', recommended: '推奨値', reference: '出典',
-    source: '参考: {name}（版未登録）', noSource: '出典未登録',
+    source: '参考: {name}（{version}）', noSource: '出典未登録',
     qsysMtu: 'MTU 1500（最大フレーム {frame} B）', peerMtu: '対向ポートと揃える（対向 {frame} B）',
     rules: {
       EEE_ON_AV_PORT: 'EEE', FLOWCTRL_ON_AV_PORT: 'フロー制御（動作状態）', NDI4_NEEDS_FLOWCTRL: 'フロー制御（NDI4の動作状態）',

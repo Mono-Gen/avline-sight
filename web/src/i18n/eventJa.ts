@@ -1,263 +1,273 @@
+export interface EventCopy {
+  title: string;
+  hint: string;
+  details?: string;
+  fallbackTitle?: string;
+}
+
 export const eventJa = {
-  "CLOCK_SKEW": {
-    "title": "監視PCとの時刻差 {offset_seconds}秒",
-    "hint": "スイッチと監視PCの時刻同期を確認してください。"
-  },
   "DEVICE_MISSING": {
-    "title": "登録機器が見つかりません: {name} ({mac})",
-    "hint": "機器の電源・ケーブル・接続先を確認してください。"
+    "title": "登録機器が未検出になりました: {name}",
+    "hint": "対象機器の電源が入っているか確認してください。LANケーブルの抜け・緩みを確認して差し直す。",
+    "details": "登録済みMAC ({mac}) が一度観測された後、連続ポーリングで未検出",
+    "fallbackTitle": "登録機器が未検出になりました"
   },
   "PING_FAIL": {
-    "title": "Ping無応答: {name} ({last_ip})",
-    "hint": "電源・経路・ICMP応答設定を確認してください。"
+    "title": "Ping応答がありません: {name} ({last_ip})",
+    "hint": "機器の電源とLANケーブル接続を確認してください。動作に問題がないのに出る場合は、機器のICMP応答設定やネットワーク経路を確認してください。",
+    "details": "{last_ip} へのPing (ICMP) が無応答",
+    "fallbackTitle": "Ping応答がありません"
   },
   "IP_MISMATCH": {
-    "title": "予定IPと不一致: {name} ({last_ip} → {planned_ip})",
-    "hint": "機器のIP設定と予定IPを確認してください。"
+    "title": "IPアドレスが予定IPと一致しません: {name} ({last_ip} ≠ 予定 {planned_ip})",
+    "hint": "機器本体のIPアドレス設定が予定表どおりか確認してください。別のポートや別VLANに差し間違えていないか確認してください。",
+    "details": "観測IP {last_ip} と登録済み予定IP {planned_ip} が不一致",
+    "fallbackTitle": "IPアドレスが予定IPと一致しません"
   },
   "LINK_DOWN": {
-    "title": "リンク断",
-    "hint": "ケーブル・コネクタ・接続機器の電源を確認してください。"
+    "title": "リンク断が発生しました",
+    "hint": "ケーブルの両端が奥まで刺さっているか確認して差し直す。接続機器の電源が入っているか確認してください。",
+    "details": "ポートのリンクダウンを検知"
   },
   "LINK_UP": {
-    "title": "リンク復帰",
-    "hint": "接続機器の状態を確認してください。"
+    "title": "リンクが復帰しました",
+    "hint": "接続機器の音声・映像・制御が正常に戻ったか確認してください。切断を繰り返す場合は予備ケーブルに交換する。",
+    "details": "ポートのリンクアップを検知"
   },
   "LINK_FLAP": {
-    "title": "一過性のリンク断 ({count}回)",
-    "hint": "ケーブル・コネクタ・機器の電源を確認してください。"
+    "title": "リンクフラップ（瞬断と復帰）を検知しました ({count}回)",
+    "hint": "コネクタの緩み・ツメ折れ・ケーブルの踏まれを確認してください。予備ケーブルへの交換と接続機器の電源を確認してください。",
+    "details": "linkDown → linkUp のSNMP Trap、またはifLastChangeの変化からリンクフラップを検知しました。",
+    "fallbackTitle": "リンクフラップ（瞬断と復帰）を検知しました"
   },
   "SWITCH_UNREACHABLE": {
-    "title": "スイッチ応答なし",
-    "hint": "スイッチの電源・接続・SNMP設定を確認してください。"
+    "title": "スイッチとSNMP通信できません",
+    "hint": "スイッチの電源ランプと電源ケーブルを確認してください。アップリンク（スイッチ間リンク）と管理ネットワークの接続・SNMP設定を確認してください。",
+    "details": "スイッチへのSNMPポーリングが到達不能・無応答"
   },
   "SWITCH_RECOVERED": {
-    "title": "スイッチ応答復帰",
-    "hint": "スイッチの状態と障害履歴を確認してください。"
+    "title": "スイッチとのSNMP通信が復帰しました",
+    "hint": "このスイッチに接続された機器が正常に動作しているか確認してください。電源ケーブルやアップリンクの緩み・履歴を確認してください。",
+    "details": "スイッチへのSNMP到達性が復帰"
   },
   "SWITCH_REBOOT": {
-    "title": "スイッチ再起動",
-    "hint": "電源と再起動原因を確認してください。"
+    "title": "スイッチが再起動しました",
+    "hint": "電源ケーブルの抜け・瞬停・誤操作がなかったか確認してください。接続機器が正常に復帰しているか確認してください。",
+    "details": "sysUpTimeの巻き戻りを検知しました。電源瞬断、クラッシュ、手動再起動の可能性があります。"
   },
   "HIGH_UTIL": {
-    "title": "帯域使用率が高い",
-    "hint": "輻輳・Storm Control・QoSを確認してください。"
+    "title": "ポートの帯域使用率がしきい値を超えています",
+    "hint": "意図しない映像・音声ストリームが集中していないか確認してください。帯域配分とQoSを確認してください。",
+    "details": "ポート送受信帯域使用率がしきい値以上"
   },
   "DISCARDS": {
-    "title": "パケットドロップ +{delta}",
-    "hint": "輻輳・Storm Control・QoSを確認してください。"
+    "title": "パケットドロップ (Discards) が増加しています (+{delta})",
+    "hint": "音切れや映像の乱れを確認してください。増加が続く場合はStorm ControlとQoSを確認してください。",
+    "details": "パケットドロップ (Discards) 増加 (+{delta})・輻輳/Storm Control/QoSキュー溢れの疑い",
+    "fallbackTitle": "パケットドロップ (Discards) が増加しています"
   },
   "SPEED_BELOW_EXPECTED": {
-    "title": "期待速度未満",
-    "hint": "ケーブル芯線・コネクタ・オートネゴを確認してください。"
+    "title": "リンク速度が期待速度を下回っています",
+    "hint": "LANケーブルを抜き差しし、改善しなければ予備ケーブルに交換する。中継アダプタ・ケーブル規格・オートネゴシエーション設定を確認してください。",
+    "details": "リンク速度が期待速度未満・芯線断線(4芯落ち)/圧着不良/オートネゴ不整合の疑い"
   },
   "RELINK_SLOWER": {
-    "title": "再接続後に速度低下",
-    "hint": "ケーブル芯線・コネクタ・オートネゴを確認してください。"
+    "title": "再リンク後にリンク速度が低下しました",
+    "hint": "コネクタの破損や緩みを確認し、予備ケーブルに交換する。接続機器側のポートやオートネゴシエーション設定が変わっていないか確認してください。",
+    "details": "再リンク後にリンク速度が以前より低下・芯線断線/コネクタ不良/オートネゴ不整合の疑い"
   },
   "SPEED_CHANGE": {
-    "title": "リンク速度変更",
-    "hint": "期待速度とケーブルを確認してください。"
+    "title": "リンク速度が変化しました",
+    "hint": "接続機器の音声・映像・制御に問題がないか確認してください。意図しない変化なら期待速度とケーブル状態を確認し、必要なら交換する。",
+    "details": "ポートのリンク速度変更を検知"
   },
   "POE_PORT_FAULT": {
-    "title": "PoEポート障害",
-    "hint": "PoE予算と受電機器・ケーブルの短絡を確認してください。"
+    "title": "このポートでPoE障害が発生しています",
+    "hint": "対象ポートのLANケーブルを抜き、破損・水濡れ・挟まれ・短絡がないか確認してください。予備ケーブルでも改善しない場合は受電機器とPoEバジェットを確認してください。",
+    "details": "ポートのPoE障害を検知・PoE電力不足/受電機器異常/ケーブル短絡の疑い"
   },
   "POE_FAULT": {
-    "title": "PoE障害",
-    "hint": "PoE予算と受電機器・ケーブルの短絡を確認してください。"
+    "title": "PoE障害が発生しました",
+    "hint": "PoE受電機器とLANケーブルを確認してください。PoEバジェットを確認してください。",
+    "details": "PoE障害を検知・PoEバジェット不足/受電機器異常/ケーブル短絡の疑い"
   },
   "POE_STATE": {
-    "title": "PoE状態変更",
-    "hint": "受電機器と電源状態を確認してください。"
+    "title": "PoE給電状態が変化しました",
+    "hint": "接続機器の電源ランプと動作状態を確認してください。給電が止まっている場合はケーブルを差し直し、PoEポート設定を確認してください。",
+    "details": "ポートのPoE給電状態変更を検知"
   },
   "PHY_ERRORS": {
-    "title": "物理エラー増加 FCS+{fcs} Symbol+{symbol} Align+{align}",
-    "hint": "ケーブル・コネクタ・SFPの汚れや劣化を確認してください。"
+    "title": "物理エラーが増加しています (FCS+{fcs} / Symbol+{symbol} / Align+{align})",
+    "hint": "ケーブルを差し直し、可能なら予備ケーブルに交換する。SFP（光リンク）の場合は光端面を清掃し、強い曲げがないか確認してください。",
+    "details": "物理層エラー増加 (FCS+{fcs} / Symbol+{symbol} / Align+{align})・正常時は完全ゼロが基準",
+    "fallbackTitle": "物理エラーが増加しています"
   },
   "MTU_MISMATCH": {
-    "title": "MTU不一致の疑い",
-    "hint": "接続機器と対向スイッチのMTUを合わせてください。"
+    "title": "MTU不一致の疑いがあります（フレーム長超過を検知）",
+    "hint": "接続機器と対向スイッチのMTU設定が一致しているか確認してください。",
+    "details": "FrameTooLongsカウンタ増加・接続機器または対向スイッチとのMTU不一致の疑い"
   },
   "DUPLEX": {
-    "title": "Half-Duplex / Late Collision",
-    "hint": "両端のDuplex設定とオートネゴを確認してください。"
+    "title": "Half-Duplex動作またはLate Collisionを検知しました",
+    "hint": "LANケーブルを差し直してください。改善しない場合は両端のDuplexとオートネゴシエーションを確認してください。",
+    "details": "Half-Duplex動作またはLate Collision増加・片側固定/片側オートのDuplex不整合疑い"
   },
   "COS_DROP": {
-    "title": "CoSキュードロップ",
-    "hint": "帯域飽和・マイクロバースト・QoS優先度を確認してください。"
+    "title": "CoSキュードロップが増加しています",
+    "hint": "音切れや映像の乱れを確認してください。帯域使用率とQoS優先度を確認してください。",
+    "details": "CoSキュードロップ増加・帯域飽和/マイクロバースト/QoS優先度設定の要確認"
   },
   "PAUSE_FRAMES": {
-    "title": "PAUSEフレーム増加",
-    "hint": "Flow Controlを確認してください（NDI4以外のAVでは無効化推奨）。"
-  },
-  "EEE_ON_AV_PORT": {
-    "title": "AVポートでEEE有効",
-    "hint": "省電力イーサネットを無効にして同期への影響を確認してください。"
+    "title": "PAUSEフレームが増加しています",
+    "hint": "音声・映像の遅延や途切れを確認してください。このポートのFlow Control設定を確認してください。",
+    "details": "PAUSEフレーム受信/送信カウンタ増加・Flow Control作動によるストリーム遅延の恐れ"
   },
   "SFP_LOS": {
-    "title": "SFP光信号喪失 / 送信障害",
-    "hint": "光端面清掃・曲げ・断線・モジュールを確認してください。"
+    "title": "SFPの光信号喪失 (LOS) または送信障害 (TxFault) を検知しました",
+    "hint": "光ファイバの抜け・強い曲げ・断線がないか確認してください。光端面を清掃して差し直し、直らなければSFPモジュールを交換する。",
+    "details": "SFP光信号喪失 (LOS) または送信障害 (TxFault) を検知"
   },
   "SFP_LOW_RX": {
-    "title": "SFP受信光低下 {rx_dbm} dBm",
-    "hint": "光端面清掃・曲げ・断線・モジュールを確認してください。"
+    "title": "SFPの受信光パワーが低下しています ({rx_dbm} dBm)",
+    "hint": "光ファイバが強く曲がったり踏まれたりしていないか確認してください。差し直せるタイミングで光端面を清掃して再挿抜し、改善しなければSFPやケーブルを交換する。",
+    "details": "SFP受信光パワーがしきい値未満 ({rx_dbm} dBm)",
+    "fallbackTitle": "SFPの受信光パワーが低下しています"
   },
   "SFP_RX_DROP": {
-    "title": "SFP受信光がベースラインから低下",
-    "hint": "光端面清掃・曲げ・断線・モジュールを確認してください。"
+    "title": "SFPの受信光パワーがベースライン（基準値）から低下しています",
+    "hint": "光ファイバに新たな曲げ・引っ張り・踏まれがかかっていないか確認してください。コネクタの緩みや汚れを確認し、安全なタイミングで清掃・再挿抜する。",
+    "details": "SFP受信光パワーが記録済みベースラインからしきい値以上低下"
   },
   "MSRP_RESV_FAILED": {
-    "title": "AVB / Milan帯域予約失敗",
-    "hint": "帯域不足・AVB対応・VLAN設定を確認してください。"
+    "title": "AVB / Milan の MSRP 帯域予約に失敗しています",
+    "hint": "経路上の機器がAVBに対応しているか確認してください。空き帯域とVLAN設定を確認してください。",
+    "details": "AVB / Milan のMSRP帯域予約失敗を検知・帯域不足/非対応機器/VLAN不一致の疑い"
   },
   "MVR_RX_FAIL": {
-    "title": "MVR IGMP受信失敗",
-    "hint": "ソース・レシーバーポートとMVR VLANを確認してください。"
+    "title": "MVR の IGMP パケット受信失敗が増加しています",
+    "hint": "受信側で音声・映像の途切れを確認してください。MVRのポートとVLAN設定を確認してください。",
+    "details": "MVR IGMPパケット受信失敗カウンタ増加・ソース/レシーバーポートやMVR VLAN不整合の疑い"
   },
   "CPU_HIGH": {
-    "title": "CPU使用率が高い",
-    "hint": "スイッチ負荷・冷却・電源を確認してください。"
+    "title": "スイッチのCPU使用率がしきい値を超えています",
+    "hint": "物理ループや異常なトラフィックがないか確認してください。",
+    "details": "スイッチCPU使用率 (5秒平均) がしきい値以上"
   },
   "MEM_LOW": {
-    "title": "空きメモリ低下",
-    "hint": "スイッチ負荷と稼働状態を確認してください。"
+    "title": "スイッチの空きメモリが低下しています",
+    "hint": "スイッチや接続機器の応答を確認してください。空きメモリの推移を確認してください。",
+    "details": "スイッチ空きメモリ率がしきい値以下"
   },
   "TEMP_HIGH": {
-    "title": "温度異常",
-    "hint": "通風・冷却・周囲温度を確認してください。"
+    "title": "スイッチの温度が異常です",
+    "hint": "ラックの吸気・排気口が物や布で塞がれていないか確認してください。扉を開ける・送風するなど冷却し、周囲温度を下げる。",
+    "details": "スイッチ内部温度しきい値超過または温度ステータス異常 (warning/critical/shutdown)"
   },
   "FAN_FAIL": {
-    "title": "ファン異常",
-    "hint": "冷却ファンと電源を確認してください。"
+    "title": "スイッチのファンに異常があります",
+    "hint": "スイッチの冷却ファンが回っているか、異物で止まっていないか確認してください。温度上昇に注意し、外部送風や予備スイッチを準備する。",
+    "details": "スイッチ内蔵ファン異常 (failed / nopower / notpowering / incompatible)"
   },
   "PSU_FAIL": {
-    "title": "電源異常",
-    "hint": "電源・ケーブル・電源ユニットを確認してください。"
+    "title": "スイッチのPSU（電源ユニット）に異常があります",
+    "hint": "電源ケーブルが奥まで刺さっているか、コンセントに通電しているか確認してください。冗長PSU構成なら異常側を確認し、予備手配を検討する。",
+    "details": "スイッチ電源ユニット (PSU) 異常 (failed / nopower / notpowering / incompatible)"
   },
   "MBUF_ALLOC_FAIL": {
-    "title": "Mbuf確保失敗",
-    "hint": "輻輳・マイクロバースト・QoSを確認してください。"
+    "title": "Mbuf（スイッチ内部のパケットバッファ）の確保に失敗しています",
+    "hint": "音切れや映像の乱れを確認してください。帯域使用率とQoS設定を確認してください。",
+    "details": "Mbuf確保失敗カウンタ増加・輻輳/マイクロバースト/QoS設定の要確認"
   },
   "POE_BUDGET": {
-    "title": "PoE予算使用率が高い",
-    "hint": "給電容量と機器の消費電力を確認してください。"
+    "title": "PoEバジェット（給電容量上限）の使用率が上限に近づいています",
+    "hint": "このスイッチにPoE受電機器を追加で接続しない。可能なら一部機器をACアダプタ給電または別スイッチへ移す。",
+    "details": "スイッチ全体のPoEバジェット使用率がしきい値以上"
   },
   "UDLD": {
-    "title": "片方向リンク障害",
-    "hint": "光ファイバ両芯とTx/Rxを確認してください。"
+    "title": "UDLD（片方向リンク検知）によりポートが遮断されました",
+    "hint": "光ファイバ2芯のうち片方が抜けていないか、折れていないか確認してください。端面を清掃して差し直すか、予備の光ファイバ・SFPに交換する。",
+    "details": "UDLD片方向リンク障害によりポート遮断・光ファイバ片芯断線/Tx・Rx異常の疑い"
   },
   "STP_BLOCKING": {
-    "title": "STP Blocking",
-    "hint": "物理ループとSTP状態を確認してください。"
-  },
-  "STP_MSTP": {
-    "title": "MSTPが稼働中",
-    "hint": "ProAVのRSTP推奨設定を確認してください。"
+    "title": "STP Blocking によりポートが遮断中です",
+    "hint": "ループ接続がないか確認してください。抜線する前に意図した冗長経路か確認してください。",
+    "details": "リンクアップ中にSTP状態がdiscarding (Blocking)・物理ループまたは冗長経路遮断"
   },
   "STP_TCN_BURST": {
-    "title": "STPトポロジー変更急増",
-    "hint": "物理ループとリンク断を確認してください。"
+    "title": "STPトポロジー変更 (TCN) が急増しています",
+    "hint": "リンクフラップやループ接続がないか確認してください。",
+    "details": "STPトポロジー変更通知 (TCN) の急増を検知・物理ループやリンク断続の疑い"
   },
   "DHCP_ROGUE": {
-    "title": "不正DHCPサーバーの疑い",
-    "hint": "持込ルーター・二重DHCP・固定IP重複を確認してください。"
+    "title": "不正DHCPサーバーのメッセージが増加しています",
+    "hint": "意図しないルーターやDHCPサーバーがないか確認してください。",
+    "details": "不正DHCPサーバーメッセージ増加・持込ルーター/二重DHCPの疑い"
   },
   "IP_CONFLICT": {
-    "title": "IPアドレス衝突",
-    "hint": "固定IPとDHCP割当の重複を解消してください。"
+    "title": "IPアドレスが衝突しています",
+    "hint": "直前に追加・変更した機器を確認してください。固定IPとDHCP割当の重複を確認してください。",
+    "details": "固定IPとDHCP割当などのIPアドレス衝突を検知"
   },
   "AUDIT_PENDING": {
-    "title": "全スイッチ初回取得待ち",
-    "hint": "Slow周期が一巡すると監査結果が表示されます。"
-  },
-  "FW_MISMATCH": {
-    "title": "ファームウェア不一致",
-    "hint": "各スイッチのファームウェアを統一してください。"
-  },
-  "STP_PRIORITY_DEFAULT": {
-    "title": "STP優先度が全台既定値",
-    "hint": "コア0・予備コア8192の優先度設定を確認してください。"
-  },
-  "STP_EDGE_ROOT": {
-    "title": "エッジがSTP Root Bridge",
-    "hint": "コアと予備コアのSTP優先度を確認してください。"
+    "title": "全スイッチの初回設定情報を取得中です",
+    "hint": "初回のSlow周期が終わるまでお待ちください。続く場合はSNMP応答を確認してください。",
+    "details": "全スイッチの初回Slow周期取得待ちのため横断監査を保留中"
   },
   "DHCP_DOUBLE": {
-    "title": "複数DHCPサーバー",
-    "hint": "意図しないDHCPサーバーを停止してください。"
-  },
-  "QUERIER_ON_EDGE": {
-    "title": "エッジがIGMPクエリア",
-    "hint": "コアへのクエリア配置とIP優先度を確認してください。"
+    "title": "複数のスイッチでDHCPサーバーが稼働しています",
+    "hint": "DHCPサーバーの設定とVLANごとの割当範囲を確認してください。",
+    "details": "複数スイッチでDHCPサーバー機能が有効（VLAN別構成の判定は未実施）"
   },
   "SNOOP_MISMATCH": {
-    "title": "IGMP Snooping不一致",
-    "hint": "VLANごとのSnooping設定を統一してください。"
+    "title": "同一VLAN内で IGMP Snooping のON/OFFがスイッチ間で不一致です",
+    "hint": "同じVLANのIGMP Snooping設定を各スイッチで確認してください。",
+    "details": "同一VLAN内でIGMP Snooping有効スイッチと無効スイッチが混在"
   },
   "QUERIER_ABSENT": {
-    "title": "IGMPクエリア不在",
-    "hint": "コアスイッチでIGMPクエリアを有効にしてください。"
+    "title": "IGMP Snooping 有効VLANに IGMPクエリアが不在です",
+    "hint": "コアスイッチなどのIGMPクエリア設定をすぐ確認してください。",
+    "details": "IGMP Snooping有効VLANでIGMPクエリア不在（1〜5分後にマルチキャスト途絶の恐れ）"
   },
   "QUERIER_CONFLICT": {
-    "title": "複数クエリアIPを観測",
-    "hint": "外部機器のクエリ送信とクエリア選出を確認してください。"
+    "title": "同一VLAN内で複数のIGMPクエリアIPを観測しました",
+    "hint": "IGMPクエリの送信元とIGMPクエリアの選出状態を確認してください。",
+    "details": "同一VLAN内で複数のIGMPクエリアIPを観測"
   },
   "IGMP_VERSION_MIX": {
-    "title": "IGMPバージョン混在",
-    "hint": "IGMPバージョンとAV機器の要件を確認してください。"
-  },
-  "FLOWCTRL_ON_AV_PORT": {
-    "title": "AVポートでFlow Control有効",
-    "hint": "NDI4を除きAVポートのFlow Control無効化を検討してください。"
-  },
-  "NDI4_NEEDS_FLOWCTRL": {
-    "title": "NDI4でFlow Control無効",
-    "hint": "NDI4ポートのFlow Controlを有効にしてください。"
-  },
-  "DSCP_TRUST": {
-    "title": "AVポートのQoS TrustがDSCP以外",
-    "hint": "Dante/AES67/PTP用にTrust DSCPを確認してください。"
-  },
-  "STORM_CTRL_UPLINK": {
-    "title": "アップリンクでStorm Control有効",
-    "hint": "高帯域マルチキャストへのドロップ影響を確認してください。"
-  },
-  "QSYS_MTU": {
-    "title": "Q-SYSポートのMTU設定",
-    "hint": "Q-SYSのMTU 1500要件を確認してください。"
+    "title": "同一VLAN内で複数のIGMPバージョンが混在しています",
+    "hint": "AV機器の受信状態と必要なIGMPバージョンを確認してください。",
+    "details": "同一VLAN内で複数のIGMPバージョンを観測"
   },
   "UPLINK_MTU_MISMATCH": {
-    "title": "アップリンク両端のMTU不一致",
-    "hint": "アップリンク両端のMTUを統一してください。"
-  },
-  "DAISY_CHAIN": {
-    "title": "多段デイジーチェーン",
-    "hint": "PTP同期用にはコアからのスター接続を確認してください。"
-  },
-  "VLAN_CROWDED": {
-    "title": "VLANに200台超",
-    "hint": "VLAN分割を検討してください。"
+    "title": "アップリンク両端のMTUが不一致です。",
+    "hint": "",
+    "details": "大きなフレームを通す場合は、LLDPで隣接する両端の設定を揃える構成が推奨される場合があります。"
   },
   "QUERIER_CHANGED": {
-    "title": "IGMPクエリアIP変更",
-    "hint": "クエリア選出と外部機器のクエリ送信を確認してください。"
+    "title": "IGMPクエリアのIPが切り替わりました",
+    "hint": "マルチキャスト配信の状態とIGMPクエリの送信元を確認してください。",
+    "details": "VLAN内のIGMPクエリアIPが変化・クエリア選出変動や外部機器クエリ送信の疑い"
   },
   "MCAST_FLOOD": {
-    "title": "マルチキャストフラッディングの疑い",
-    "hint": "IGMP Snoopingとクエリアを確認してください。"
+    "title": "未登録ポートへマルチキャストがフラッディングしている疑いがあります",
+    "hint": "IGMP SnoopingとIGMPクエリアの状態を確認してください。",
+    "details": "IGMPグループ未登録の過半(2ポート以上)へ20,000 pps超のマルチキャスト送出・フラッディング疑い"
   },
   "DEVICE_NEW": {
-    "title": "機器を検出",
-    "hint": "接続先と機器名を確認してください。"
+    "title": "新しい機器（MACアドレス）を検出しました",
+    "hint": "心当たりのある機器が予定どおりのポートに接続されているか確認してください。覚えのない機器なら現場で接続先の実物を確認してください。",
+    "details": "新規MACアドレス／機器をFDB上で検出"
   },
   "DEVICE_GONE": {
-    "title": "機器の観測終了",
-    "hint": "接続先・電源・FDBのエージングを確認してください。"
+    "title": "接続していた機器がFDB（MACアドレステーブル）から消えました",
+    "hint": "対象機器の電源やLANケーブルが抜かれていないか確認してください。意図して外した場合は対応不要。",
+    "details": "FDBからMACアドレスの観測終了（電源断・抜線・FDBエージング）"
   },
   "PHASE_CHANGED": {
-    "title": "運用フェーズ変更: {phase}",
-    "hint": "フェーズに応じたPingと抑止設定を確認してください。"
+    "title": "運用フェーズが変更されました: {phase}",
+    "hint": "現在の現場フェーズ（設営・リハ・本番）と表示が一致しているか確認してください。誤操作ならヘッダーから元の運用フェーズに戻す。",
+    "details": "運用フェーズ変更 ({phase})・フェーズ連動の定期Pingおよびアラート抑止を切替",
+    "fallbackTitle": "運用フェーズが変更されました"
   },
   "WORK_STARTED": {
     "title": "作業中を開始: {group}",
@@ -268,19 +278,301 @@ export const eventJa = {
     "hint": "対象グループの監視を再開しました。"
   },
   "linkDown": {
-    "title": "リンク断",
-    "hint": "ケーブル・コネクタ・接続機器の電源を確認してください。"
+    "title": "リンク断が発生しました（SNMP Trap）",
+    "hint": "ケーブルの両端が奥まで刺さっているか確認して差し直す。接続機器の電源が入っているか確認してください。",
+    "details": "SNMP Trap (linkDown) によりポートのリンク断を検知"
   },
   "linkUp": {
-    "title": "リンク復帰",
-    "hint": "接続機器の状態を確認してください。"
+    "title": "リンクが復帰しました（SNMP Trap）",
+    "hint": "接続機器の音声・映像・制御が正常に戻ったか確認してください。切断を繰り返す場合は予備ケーブルに交換する。",
+    "details": "SNMP Trap (linkUp) によりポートのリンク復帰を検知"
   },
   "coldStart": {
-    "title": "スイッチ再起動",
-    "hint": "電源と再起動原因を確認してください。"
+    "title": "スイッチが電源投入から再起動しました（SNMP Trap）",
+    "hint": "電源ケーブルの抜けや瞬停がなかったか確認してください。接続機器が正常に復帰したか確認してください。",
+    "details": "SNMP Trap (coldStart) 受信・電源投入／コールドブートによる再起動"
   },
   "warmStart": {
-    "title": "スイッチ再起動",
-    "hint": "電源と再起動原因を確認してください。"
+    "title": "スイッチが再起動しました（SNMP Trap）",
+    "hint": "再起動や設定反映の履歴を確認してください。接続機器の動作を確認してください。",
+    "details": "SNMP Trap (warmStart) 受信・ソフトウェア／ウォームリスタートによる再起動"
+  },
+  "CLOCK_SKEW": {
+    "title": "監視PCとの時刻差 {offset_seconds}秒",
+    "hint": "スイッチと監視PCの時刻同期を確認してください。",
+    "details": "Slow周期で取得したスイッチの時刻を監視PCと比較しました。",
+    "fallbackTitle": "監視PCとの時刻差を検知しました"
+  },
+  "PORT_CONFIG_CHANGED": {
+    "title": "{port} の {field} が変わりました",
+    "hint": "意図した設定変更か確認してください。",
+    "details": "変更前と変更後の値を比較してください。",
+    "fallbackTitle": "ポート設定が変わりました"
+  },
+  "PRE_SHOW_CHECKLIST_REMAINDER": {
+    "title": "本番開始時に確認が残っていました（{count}項目）",
+    "hint": "本番前チェックの残項目を確認してください。",
+    "details": "確認が残った状態で本番を開始したときの記録です。",
+    "fallbackTitle": "本番開始時に確認が残っていました"
+  },
+  "BASELINE_SAVED": {
+    "title": "ベースラインを保存しました: {name}",
+    "hint": "",
+    "details": "保存した状態を設定差分の比較に使えます。",
+    "fallbackTitle": "ベースラインを保存しました"
+  },
+  "LAB_FAULT": {
+    "title": "ラボで模擬障害を発生させました",
+    "hint": "",
+    "details": "対象 {target} / シナリオ {scenario}"
+  },
+  "TERMINAL_OPEN": {
+    "title": "スイッチのターミナルを開きました",
+    "hint": "",
+    "details": "接続方式: {protocol}"
+  },
+  "MARKER": {
+    "title": "マーカー: {note}",
+    "hint": "",
+    "details": "",
+    "fallbackTitle": "マーカー"
+  },
+  "SWITCH_LOG": {
+    "title": "スイッチのログを受信しました",
+    "hint": "",
+    "details": ""
+  },
+  "UNKNOWN_TRAP": {
+    "title": "未定義のSNMP Trapを受信しました",
+    "hint": "送信元を確認してください。",
+    "details": "受信した通知のOIDが登録されていません。OID: {trap_oid}"
+  },
+  "authenticationFailure": {
+    "title": "SNMP認証失敗",
+    "hint": "SNMP設定を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "lldpRemTablesChange": {
+    "title": "LLDP隣接機器の変化",
+    "hint": "接続先と配線を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "pethPsePortOnOffNotification": {
+    "title": "PoE給電状態の変化",
+    "hint": "受電機器の電源を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "pethMainPowerUsageOnNotification": {
+    "title": "PoE電力使用量がしきい値超過",
+    "hint": "PoEバジェットと接続機器を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "pethMainPowerUsageOffNotification": {
+    "title": "PoE電力使用量がしきい値未満に回復",
+    "hint": "PoEバジェットの余裕を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "boxsFanStateChange": {
+    "title": "ファン状態の変化",
+    "hint": "ファンの動作を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "boxsPowSupplyStateChange": {
+    "title": "電源ユニット状態の変化",
+    "hint": "電源ケーブルとPSUを確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "boxsTemperatureChange": {
+    "title": "温度の変化",
+    "hint": "温度と通気を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "boxsThermalShutdown": {
+    "title": "温度異常によるシャットダウン",
+    "hint": "通気と周囲温度を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "boxsTemperatureStateChange": {
+    "title": "温度状態の変化",
+    "hint": "温度と通気を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "boxsDyingGaspEventChange": {
+    "title": "電源喪失（Dying Gasp）",
+    "hint": "電源ケーブルとコンセントを確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "broadcastStormStartTrap": {
+    "title": "ブロードキャストストーム開始",
+    "hint": "ループ接続と送信元を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "broadcastStormEndTrap": {
+    "title": "ブロードキャストストーム終了",
+    "hint": "スイッチと接続機器の動作を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "linkFailureTrap": {
+    "title": "リンク障害",
+    "hint": "ケーブルと対向機器を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "fanFailureTrap": {
+    "title": "ファン障害",
+    "hint": "ファンの動作と温度を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "stpInstanceNewRootTrap": {
+    "title": "STPルートブリッジ変更",
+    "hint": "STP Root Bridgeの選出結果を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "stpInstanceTopologyChangeTrap": {
+    "title": "STPトポロジー変更",
+    "hint": "リンクフラップやループ接続を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "powerSupplyStatusChangeTrap": {
+    "title": "電源ユニット状態の変化",
+    "hint": "電源ケーブルとPSUを確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "failedUserLoginTrap": {
+    "title": "スイッチへのログイン認証失敗",
+    "hint": "ログイン操作と認証設定を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "daiIntfErrorDisabledTrap": {
+    "title": "DAIによるポートErrDisable",
+    "hint": "接続機器とDAI設定を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "stpInstanceLoopInconsistentStartTrap": {
+    "title": "STPループ不整合検知",
+    "hint": "配線とSTP設定を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "stpInstanceLoopInconsistentEndTrap": {
+    "title": "STPループ不整合解消",
+    "hint": "該当ポートの通信を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "dhcpSnoopingIntfErrorDisabledTrap": {
+    "title": "DHCP SnoopingによるポートErrDisable",
+    "hint": "DHCP Snooping設定とDHCPメッセージの送信元を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "agentSwitchIpAddressConflictTrap": {
+    "title": "IPアドレス重複検知",
+    "hint": "固定IPとDHCP割当の重複を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "agentSwitchCpuRisingThresholdTrap": {
+    "title": "CPU使用率上昇しきい値超過",
+    "hint": "物理ループや異常なトラフィックを確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "agentSwitchCpuFallingThresholdTrap": {
+    "title": "CPU使用率が回復",
+    "hint": "スイッチの応答を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "agentSwitchCpuFreeMemBelowThresholdTrap": {
+    "title": "空きメモリ低下",
+    "hint": "スイッチの応答と空きメモリを確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "agentSwitchMbufRisingThresholdTrap": {
+    "title": "Mbuf使用率上昇",
+    "hint": "帯域使用率とQoS設定を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "agentSwitchMbufFallingThresholdTrap": {
+    "title": "Mbuf使用率回復",
+    "hint": "音声・映像の受信状態を確認してください。",
+    "details": "SNMP Trapを受信しました。"
+  },
+  "EEE_ON_AV_PORT": {
+    "title": "このポートで EEE（省電力イーサネット / 802.3az）が有効です（LPI遷移: +{lpi}）。",
+    "hint": "",
+    "details": "Dante / PTP 等の同期系 AV 用途では EEE 無効が推奨される場合があります。",
+    "fallbackTitle": "このポートで EEE（省電力イーサネット / 802.3az）が有効です。"
+  },
+  "FLOWCTRL_ON_AV_PORT": {
+    "title": "このポートで Flow Control (PAUSE) が有効です（設定値: {pause}）。",
+    "hint": "",
+    "details": "NDI 4 を除く AV 用途では Flow Control 無効が推奨される場合があります。",
+    "fallbackTitle": "このポートで Flow Control (PAUSE) が有効です。"
+  },
+  "NDI4_NEEDS_FLOWCTRL": {
+    "title": "ロール ndi4 のポートで Flow Control が無効です。",
+    "hint": "",
+    "details": "NDI 4 構成では Flow Control 有効が推奨／要件とされる場合があります。"
+  },
+  "DSCP_TRUST": {
+    "title": "このポートの QoS Trust 設定は {trust} です（trustIpDscp 以外）。",
+    "hint": "",
+    "details": "Dante / AES67 / PTP の DSCP 優先制御を使う場合は Trust DSCP が推奨される場合があります。",
+    "fallbackTitle": "このポートの QoS Trust 設定は trustIpDscp 以外です。"
+  },
+  "QSYS_MTU": {
+    "title": "ロール qsys のポートで最大フレーム長が {max_frame}（1522超）です。",
+    "hint": "",
+    "details": "Q-SYS 環境では MTU 1500（最大フレーム長 1522）が要件とされる場合があります。",
+    "fallbackTitle": "ロール qsys のポートで最大フレーム長が1522を超えています。"
+  },
+  "STORM_CTRL_UPLINK": {
+    "title": "アップリンクポートで Storm Control（マルチキャスト／ブロードキャスト）が有効です。",
+    "hint": "",
+    "details": "高帯域マルチキャストや gigaACE / CobraNet のアップリンクではドロップ要因になり得るため無効が推奨される場合があります。"
+  },
+  "STP_MSTP": {
+    "title": "このスイッチの STP バージョンは MSTP で稼働しています。",
+    "hint": "",
+    "details": "ProAV 用途では RSTP が推奨される場合があります。"
+  },
+  "FW_MISMATCH": {
+    "title": "監視中のスイッチ間でファームウェアバージョンが混在しています（{versions}）。",
+    "hint": "",
+    "details": "同一ネットワーク内のスイッチはファームウェア統一が推奨されています。",
+    "fallbackTitle": "監視中のスイッチ間でファームウェアバージョンが混在しています。"
+  },
+  "STP_PRIORITY_DEFAULT": {
+    "title": "監視中の全スイッチで STP 優先度が既定値 32768 のままです。",
+    "hint": "",
+    "details": "意図しない Root Bridge 選出を避けるため、コア=0／予備コア=8192 等の設定が推奨される場合があります。"
+  },
+  "STP_EDGE_ROOT": {
+    "title": "アップリンク1本以下のスイッチが STP Root Bridge に選出されています。",
+    "hint": "",
+    "details": "コアスイッチが STP Root Bridge になる優先度設計が推奨される場合があります。"
+  },
+  "QUERIER_ON_EDGE": {
+    "title": "アップリンク1本以下（非ルート）のスイッチが VLAN {vlan} の IGMP クエリアに選出されています。",
+    "hint": "",
+    "details": "コアスイッチを IGMP クエリアにする配置・IP設計が推奨される場合があります。",
+    "fallbackTitle": "アップリンク1本以下の非ルートスイッチがIGMPクエリアに選出されています。"
+  },
+  "DAISY_CHAIN": {
+    "title": "STP Root Bridge からのスイッチ接続段数が最大 {depth} 段（3段以上）です。",
+    "hint": "",
+    "details": "SMPTE / AES67 / PTPv2 等の同期系ではスター型トポロジーが推奨される場合があります。",
+    "fallbackTitle": "STP Root Bridgeからの接続段数が3段以上です。"
+  },
+  "VLAN_CROWDED": {
+    "title": "VLAN {vlan} 内の非アップリンク接続機器数が {count} 台（200台超）です。",
+    "hint": "",
+    "details": "Q-SYS 等では 1 VLAN あたり 200 台以下が推奨される場合があります。",
+    "fallbackTitle": "VLAN内の非アップリンク接続機器数が200台を超えています。"
+  },
+  "BCAST_STORM_CTRL_UPLINK": {
+    "title": "アップリンクでブロードキャストのStorm Controlが有効です。",
+    "hint": "",
+    "details": "帯域の大きいブロードキャストではドロップ要因になる場合があります。"
+  },
+  "MCAST_STORM_CTRL_UPLINK": {
+    "title": "アップリンクでマルチキャストのStorm Controlが有効です。",
+    "hint": "",
+    "details": "高帯域マルチキャストではドロップ要因になる場合があります。"
   }
-};
+} satisfies Record<string, EventCopy>;

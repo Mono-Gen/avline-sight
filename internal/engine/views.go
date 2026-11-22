@@ -210,10 +210,10 @@ func (e *Engine) DHCP() map[string]any {
 	}
 	for _, s := range e.States() {
 		if s.DHCP.InvalidServerMsgs > 0 {
-			df = append(df, Finding{Severity: model.SevCritical, Code: "DHCP_ROGUE", Title: fmt.Sprintf("不正DHCPサーバーメッセージ累計 %d", s.DHCP.InvalidServerMsgs), Hint: hintDHCP, SwitchID: s.ID, SwitchName: s.Name})
+			df = append(df, Finding{Severity: model.SevCritical, Code: "DHCP_ROGUE", Title: fmt.Sprintf("不正DHCPサーバーメッセージ累計 %d", s.DHCP.InvalidServerMsgs), Hint: model.EventHintJa("DHCP_ROGUE"), SwitchID: s.ID, SwitchName: s.Name})
 		}
 		if len(s.DHCP.Conflicts) > 0 {
-			df = append(df, Finding{Severity: model.SevCritical, Code: "IP_CONFLICT", Title: "IPアドレス衝突: " + strings.Join(s.DHCP.Conflicts, ", "), Hint: hintDHCP, SwitchID: s.ID, SwitchName: s.Name})
+			df = append(df, Finding{Severity: model.SevCritical, Code: "IP_CONFLICT", Title: "IPアドレス衝突: " + strings.Join(s.DHCP.Conflicts, ", "), Hint: model.EventHintJa("IP_CONFLICT"), SwitchID: s.ID, SwitchName: s.Name})
 		}
 	}
 	return map[string]any{"servers": nz(servers), "leases": nz(leases), "conflicts": nz(conflicts), "findings": nzf(df)}

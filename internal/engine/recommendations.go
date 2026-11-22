@@ -1,6 +1,10 @@
 package engine
 
-import "github.com/Mono-Gen/avline-sight/internal/model"
+import (
+	"strconv"
+
+	"github.com/Mono-Gen/avline-sight/internal/model"
+)
 
 func recommendationOnly(code string) bool {
 	switch code {
@@ -19,7 +23,9 @@ type PortRecommendation struct {
 	Current     string `json:"current"`
 	Recommended string `json:"recommended"`
 	Source      string `json:"source,omitempty"`
+	Version     string `json:"version,omitempty"`
 	Reference   string `json:"reference,omitempty"`
+	LPI         string `json:"lpi,omitempty"`
 }
 
 func PortRecommendations(states []*model.SwitchState) []PortRecommendation {
@@ -27,7 +33,11 @@ func PortRecommendations(states []*model.SwitchState) []PortRecommendation {
 	rows := []PortRecommendation{}
 	seen := map[PortRecommendation]bool{}
 	add := func(s *model.SwitchState, p *model.Port, code, current, recommended, source, reference string) {
-		row := PortRecommendation{s.ID, p.Name, code, current, recommended, source, reference}
+		row := PortRecommendation{SwitchID: s.ID, Port: p.Name, Code: code, Current: current,
+			Recommended: recommended, Source: source, Reference: reference}
+		if code == "EEE_ON_AV_PORT" && p.LPIDelta > 0 {
+			row.LPI = strconv.FormatUint(p.LPIDelta, 10)
+		}
 		if !seen[row] {
 			seen[row] = true
 			rows = append(rows, row)

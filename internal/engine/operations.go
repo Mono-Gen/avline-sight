@@ -90,6 +90,7 @@ func (e *Engine) setPhase(phase string, check func() ([]ChecklistItem, error)) e
 		}
 		events = append(events, &model.Event{TS: now, Category: "SYSTEM", Severity: model.SevInfo,
 			Code: "PRE_SHOW_CHECKLIST_REMAINDER", Title: "本番前チェックの残項目: " + strings.Join(reasons, " / "),
+			Hint:   model.EventHintJa("PRE_SHOW_CHECKLIST_REMAINDER"),
 			Detail: map[string]any{"count": len(remaining), "items": remaining}})
 	}
 	e.mu.Lock()

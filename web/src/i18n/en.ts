@@ -30,7 +30,7 @@ export const en: Dictionary = {
     noRecommendations: 'No differences from recommendations on the ports shown.',
     technical: 'Technical details', mibName: 'MIB name', rawCounter: 'Raw counter value',
     port: 'Port', field: 'Setting', current: 'Current value', recommended: 'Recommended value', reference: 'Source',
-    source: 'Reference: {name} (edition not recorded)', noSource: 'Source not recorded',
+    source: 'Reference: {name} ({version})', noSource: 'Source not recorded',
     qsysMtu: 'MTU 1500 (maximum frame {frame} B)', peerMtu: 'Match peer port (peer: {frame} B)',
     rules: {
       EEE_ON_AV_PORT: 'EEE', FLOWCTRL_ON_AV_PORT: 'Flow control (operating mode)', NDI4_NEEDS_FLOWCTRL: 'Flow control (NDI4 operating mode)',

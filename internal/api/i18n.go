@@ -1,11 +1,20 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"unicode"
 )
+
+func labFaultTitle(scenario, target string) string {
+	return fmt.Sprintf("ラボで模擬障害を発生させました: %s（%s）", target, scenario)
+}
+
+func terminalOpenTitle(protocol string) string {
+	return "スイッチのターミナルを開きました（" + protocol + "）"
+}
 
 // 言語は要求ごとに保持し、並行する別ブラウザーの選択に影響させない。
 type languageWriter struct {

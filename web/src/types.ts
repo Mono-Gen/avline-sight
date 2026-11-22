@@ -169,6 +169,8 @@ export interface PortRecommendation {
   recommended: string;
   source?: string;
   reference?: string;
+  lpi?: string;
+  version?: string;
 }
 export interface MetricResult {
   resolution: string;

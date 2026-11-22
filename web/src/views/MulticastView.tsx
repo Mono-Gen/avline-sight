@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { isRecommendationEvent, t } from '../i18n';
 import { api } from '../api';
 import { AvStatus } from '../components/AvStatus';
 import { PollingStatus } from '../components/PollingStatus';
@@ -90,7 +90,8 @@ export function MulticastView(props: ViewProps) {
       <h2>{t('ui.m273')}</h2>
       {visibleStates.map(state => <AvStatus key={state.id} state={state} />)}
       <h2>{t('ui.m253')}</h2>
-      <Table {...findingColumns} rows={asArray(data?.findings).filter(visible)} />
+      <Table {...findingColumns} expert={props.expert} rows={asArray(data?.findings).filter(row =>
+        visible(row) && (props.expert || !isRecommendationEvent(row.code)))} />
     </div>
   );
 }

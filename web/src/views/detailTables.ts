@@ -17,8 +17,8 @@ export function baselineDiffItem(diff: BaselineDiff) {
   return diff.config_field ? `${diff.item} ${configFieldName(diff.config_field)}` : diff.item;
 }
 export const findingColumns = {
-  first: ['switch_name', 'title', 'severity', 'port', 'hint', 'code'],
-  hide: switchColumn.hide,
+  first: ['switch_name', 'title', 'severity', 'port', 'hint'],
+  hide: [...switchColumn.hide, 'code', 'detail'],
   values: {
     switch_name: (value: unknown) => value === '' ? '—' : undefined,
   },

@@ -30,7 +30,7 @@ const React = require('react');
 const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
-const { setLang, t } = require('../src/i18n/index.ts');
+const { eventDetails, eventHint, eventTitle, isRecommendationEvent, setLang, t } = require('../src/i18n/index.ts');
 const { monitoringStopped, issueAlerts, newIssueAlerts } = require('../src/monitorHealth.ts');
 const { OverallStatus, MonitorStopped } = require('../src/components/MonitorStatus.tsx');
 const { WallSwitchTile } = require('../src/components/WallSwitchTile.tsx');
@@ -48,6 +48,67 @@ const render = (component, props) => renderToStaticMarkup(React.createElement(co
 const noop = () => {};
 const fault = (id, extra = {}) => ({ event_id: id, severity: 'WARNING', suppressed: false, acked: false, code: 'CUSTOM', title: 'Fault', ...extra });
 const headers = html => [...html.matchAll(/<th\b[^>]*>([^<]+)<\/th>/g)].map(match => match[1]);
+
+test('発生元のイベントコードは日英で文言を持ち、通常表示に依頼先を出さない', context => {
+  context.after(() => setLang('ja'));
+  const { eventJa } = require('../src/i18n/eventJa.ts');
+  const { eventEn } = require('../src/i18n/eventEn.ts');
+  const source = name => fs.readFileSync(path.join(__dirname, '../../internal', name), 'utf8');
+  const eventSources = [
+    'api/handlers.go', 'api/ws.go', 'engine/baseline_i18n.go', 'engine/operations.go', 'engine/rules.go',
+    'engine/views.go', 'model/config_i18n.go', 'poller/collect.go', 'poller/poller.go', 'trap/trap.go',
+  ].map(source).join('\n');
+  const codes = new Set([
+    ...[...eventSources.matchAll(/\bCode:\s*"([^"]+)"/g)].map(match => match[1]),
+    ...[...eventSources.matchAll(/\b(?:ev|add)\(\s*(?:model\.Sev\w+|sev),\s*"([^"]+)"/g)].map(match => match[1]),
+    ...[...eventSources.matchAll(/\bconst\s+Code\w+\s*=\s*"([^"]+)"/g)].map(match => match[1]),
+    ...[...eventSources.matchAll(/ev\.Code,\s*ev\.Title\s*=\s*"([^"]+)"/g)].map(match => match[1]),
+    ...[...source('engine/device_monitor.go').matchAll(/\.deviceEvent\("([^"]+)"/g)].map(match => match[1]),
+    ...[...source('engine/recommendations.go').matchAll(/\badd\(\w+,\s*\w+,\s*"([^"]+)"/g)].map(match => match[1]),
+    ...[...source('mib/traps.go').matchAll(/\{"(\w+)",\s*"(?:INFO|WARNING|CRITICAL)",/g)].map(match => match[1]),
+  ]);
+  assert.ok(codes.has('PHY_ERRORS') && codes.has('PORT_CONFIG_CHANGED') && codes.has('linkDown'));
+  const fields = text => [...(text ?? '').matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort();
+  for (const code of codes) {
+    assert.ok(Object.hasOwn(eventJa, code) && eventJa[code].title, `ja / ${code}`);
+    assert.ok(Object.hasOwn(eventEn, code) && eventEn[code].title, `en / ${code}`);
+    for (const field of ['title', 'hint', 'details']) {
+      assert.deepEqual(fields(eventJa[code][field]), fields(eventEn[code][field]), `${code} / ${field}`);
+    }
+  }
+  for (const [, code, hint] of source('model/event_i18n.go').matchAll(/^\s*"([^"]+)":\s*("(?:[^"\\]|\\.)*"),$/gm)) {
+    assert.equal(JSON.parse(hint), eventJa[code]?.hint, `Go / ja / ${code}`);
+  }
+  for (const [lang, dictionary] of [['ja', eventJa], ['en', eventEn]]) {
+    setLang(lang);
+    const forbidden = /(?:担当(?:者|チーム)?[にへ]|確認を依頼|確認してもら|\b(?:ask|contact|notify|report to|escalate to|have)\s+(?:the\s+|your\s+)?(?:network|IT|someone|administrator)\b)/iu;
+    for (const code of Object.keys(dictionary).filter(code => !isRecommendationEvent(code))) {
+      const alert = fault(1, { code, title: 'Stored title', hint: 'Ask the network team' });
+      assert.doesNotMatch(render(AlertEntry, { alert, busy: false }), forbidden, `${lang} / ${code}`);
+    }
+  }
+});
+
+test('日英のプレースホルダーと技術詳細は保存済みイベントも扱う', context => {
+  context.after(() => setLang('ja'));
+  const alert = fault(1, { code: 'DEVICE_MISSING', detail: { name: 'Mixer', mac: '00:11:22:33:44:55' } });
+  const config = { code: 'PORT_CONFIG_CHANGED', detail: { port: '1/0/7', field: 'max_frame', before: '1522', after: '9216' } };
+  for (const [lang, title, shortConfig, detailConfig] of [
+    ['ja', '登録機器が未検出になりました: Mixer', '1/0/7 の 最大フレーム が変わりました', '1/0/7 最大フレーム 1522 → 9216'],
+    ['en', 'Registered device is missing: Mixer', '1/0/7 Maximum frame size changed', '1/0/7 Maximum frame size 1522 → 9216'],
+  ]) {
+    setLang(lang);
+    assert.equal(eventTitle(alert), title);
+    assert.equal(eventTitle(config), shortConfig);
+    assert.equal(eventDetails(config), detailConfig);
+    assert.match(eventTitle({ code: 'DISCARDS', detail: { delta: 0 } }), /\+0/);
+    assert.doesNotMatch(eventTitle({ code: 'DISCARDS', title: 'Stored technical title' }), /\{|Stored technical/);
+    const normal = render(AlertEntry, { alert, busy: false });
+    assert.ok(normal.includes(eventHint(alert)));
+    assert.doesNotMatch(normal, /DEVICE_MISSING|00:11:22:33:44:55/);
+    assert.match(render(AlertEntry, { alert, busy: false, expert: true }), /00:11:22:33:44:55[^]*DEVICE_MISSING/);
+  }
+});
 
 const groupedSwitches = [
   { id: 1, name: 'West', group_tag: 'west', reachable: true },
@@ -284,11 +345,11 @@ test('Details shows the latest baseline diff and recent configuration events in 
     ]) {
       setLang(language);
       loaders.length = 0;
-      const html = render(ConfigChanges, props);
+      const html = render(ConfigChanges, { ...props, expert: true });
       assert.ok(html.includes(heading));
       assert.ok(html.includes('Show'));
       assert.ok(html.includes(`1/0/7 ${field} 1522 → 9216`));
-      assert.equal(html.split(field).length - 1, 2);
+      assert.equal(html.split(field).length - 1, 3);
       assert.match(html, /System-wide/);
       assert.match(html, /West history 28 ·/);
       assert.equal((html.match(/<time\b/g) ?? []).length, 30);
@@ -769,16 +830,19 @@ test('Expert settings, terminal entries and alert details respect the display pr
   assert.match(expert, /18446744073709551615/);
 });
 
-test('Expert recommendations show current and recommended values and available sources', () => {
+test('Expert recommendations show measured values and mark references without a verified edition', () => {
   setLang('ja');
   const { RecommendationTable } = require('../src/views/Recommendations.tsx');
   const rows = [
     { switch_id: 1, port: '1/0/1', code: 'NDI4_NEEDS_FLOWCTRL', current: 'disabled', recommended: 'enable', source: 'NETGEAR ProAV Guide' },
     { switch_id: 1, port: '1/0/2', code: 'QSYS_MTU', current: '9216', recommended: '1522' },
+    { switch_id: 1, port: '1/0/3', code: 'EEE_ON_AV_PORT', current: 'enable', recommended: 'disable', lpi: '12', source: 'Example Guide', version: '2' },
   ];
   const html = render(RecommendationTable, { rows, names: new Map([[1, 'A']]) });
-  assert.match(html, /1\/0\/1[^]*disabled[^]*enable[^]*NETGEAR ProAV Guide/);
+  assert.match(html, /1\/0\/1[^]*Flow Control[^]*disabled[^]*enable[^]*出典未登録/);
   assert.match(html, /1\/0\/2[^]*9216 B[^]*MTU 1500[^]*1522 B[^]*出典未登録/);
+  assert.match(html, /LPI遷移: \+12[^]*参考: Example Guide（2）/);
+  assert.doesNotMatch(html, /TODO|版未登録/);
 });
 
 test('Log search, live rows and export use JST datetime boundaries in a non-JST timezone', async () => {

@@ -17,7 +17,7 @@ var configFieldJa = map[string]string{
 
 func PortConfigChange(p *Port, field, before, after string) Event {
 	return Event{
-		Category: CategoryConfig, Severity: SevInfo, Code: CodePortConfigChanged, IfIndex: p.IfIndex,
+		Category: CategoryConfig, Severity: SevInfo, Code: CodePortConfigChanged, IfIndex: p.IfIndex, Hint: EventHintJa(CodePortConfigChanged),
 		Title:  fmt.Sprintf("%s %s %s → %s", p.Name, configFieldJa[field], before, after),
 		Detail: map[string]any{"port": p.Name, "field": field, "before": before, "after": after},
 	}
