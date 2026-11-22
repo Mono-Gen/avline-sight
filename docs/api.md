@@ -41,7 +41,7 @@
 | GET | `/api/devices/export.csv?…` | 同条件のCSV（BOM付きUTF-8）。列: MAC,名称,メモ,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元。読込は先頭3列のみ使用 |
 | GET | `/api/replay/:sid/devices?ts=RFC3339&…` / `/api/replay/:sid/devices/export.csv?ts=…` | 再生時刻のスナップショット基準の一覧/CSV |
 
-`InventoryRow`: `{mac,label,note,ip,vendor,lldp_name,switch_id?,switch_name,group_tag,port,if_index?,vlan,poe_w?,speed_mbps,seen,last_seen?,source,via_uplink}`
+`InventoryRow`: `{mac,label,note,ip,ip_stale?,vendor,lldp_name,switch_id?,switch_name,group_tag,port,if_index?,vlan,poe_w?,speed_mbps,seen,last_seen?,source,via_uplink}`
 
 ## 監視ビュー
 - `GET /api/overview` → `{switches:[SwitchSummary], alerts:{critical,warning,info}, recent_events:[Event]}`
@@ -57,7 +57,8 @@
 - `GET /api/dhcp` → `{servers:[{switch_id,switch_name,server_on,pools,lease_count,decline_rx,snooping_on,invalid_server_msgs}], leases:[Lease+{switch_id,switch_name}], conflicts:[{switch_id,switch_name,ip}], findings:[Finding]}`
 - `GET /api/audit` → `{findings:[Finding], fw_versions:{"13.0.7.6":["AV-SW-01",...]}}`
   - `Finding`: `{severity, code, title, hint, switch_id, switch_name, port?}`
-- `POST /api/diagnostics/ping` 入力 `{ip}` → `{ok, rtt_ms, output}`（登録スイッチまたは観測済み機器IPのみ）
+- `POST /api/diagnostics/ping` 入力 `{ip}` → `{ok, status, rtt_ms, output, elapsed_ms}`（登録スイッチ・観測済み機器・登録機器の最終IPのみ）
+- `POST /api/diagnostics/ping-bulk` 入力 `{ips?:[...], manual?:"192.168.1.10, 192.168.1.20-40, 10.0.0.0/28"}` → `{results:[{ip,status:"ok"|"timeout"|"unreachable"|"error",rtt_ms,detail,source:"known"|"manual"}], ok, total, elapsed_ms, at}`。`ips` は上記の既知IPのみ（未知は403）。`manual` は閲覧専用ロック中は423。1回256件まで、同時16並列・1宛先最大2回・1秒待ち。ロック中も既知IPへの実行は可
 
 ## イベント・マーカー
 - `GET /api/events?category=&severity=&switch_id=&q=&from=&to=&limit=500` → `[Event]`（新しい順）

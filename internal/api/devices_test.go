@@ -82,3 +82,44 @@ func TestAliasImportFlow(t *testing.T) {
 		t.Fatalf("登録後の名前なし一覧は空のはず: %s", w.Body)
 	}
 }
+
+// 一括Ping: 未知のIPは拒否、手入力はロック中に拒否、短縮範囲と上限、既知IPはロック中でも可
+func TestPingBulk(t *testing.T) {
+	s, h := newDevicesServer(t)
+	// スイッチIP（10.0.0.1）だけが既知。ループバックは手入力でのみ打てる
+	if w := do(h, "POST", "/api/diagnostics/ping-bulk", `{"ips":["127.0.0.1"]}`); w.Code != 403 {
+		t.Fatalf("未知IPを一覧扱いで受理: %d", w.Code)
+	}
+	w := do(h, "POST", "/api/diagnostics/ping-bulk", `{"manual":"127.0.0.1"}`)
+	var res struct {
+		OK, Total int
+		Results   []struct{ IP, Status, Source string }
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if w.Code != 200 || res.Total != 1 || res.OK != 1 || res.Results[0].Source != "manual" {
+		t.Fatalf("手入力: %d %s", w.Code, w.Body)
+	}
+	if w := do(h, "POST", "/api/diagnostics/ping-bulk", `{"manual":"10.1.0.0/23"}`); w.Code != 400 {
+		t.Fatalf("上限超過（510件）を受理: %d", w.Code)
+	}
+	if w := do(h, "POST", "/api/diagnostics/ping-bulk", `{"manual":"bad"}`); w.Code != 400 {
+		t.Fatalf("不正な手入力: %d", w.Code)
+	}
+	s.locked = true
+	if w := do(h, "POST", "/api/diagnostics/ping-bulk", `{"manual":"127.0.0.1"}`); w.Code != http.StatusLocked {
+		t.Fatalf("ロック中の手入力: %d", w.Code)
+	}
+	if w := do(h, "POST", "/api/diagnostics/ping-bulk", `{"ips":["10.0.0.1"]}`); w.Code != 200 {
+		t.Fatalf("ロック中でも既知IPは打てるはず: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestExpandRangeShortForm(t *testing.T) {
+	ips, err := expandRange("192.168.1.10-12")
+	if err != nil || len(ips) != 3 || ips[2] != "192.168.1.12" {
+		t.Fatalf("%v %v", ips, err)
+	}
+	if _, err := expandRange("192.168.1.10-5"); err == nil {
+		t.Fatal("逆順を受理")
+	}
+}

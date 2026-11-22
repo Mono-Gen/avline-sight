@@ -40,7 +40,7 @@ func TestBuildInventoryLocation(t *testing.T) {
 		{MatchType: "mac", MatchKey: "DD:00:00:00:00:02", Label: "一度も見ていない"},
 		{MatchType: "port", MatchKey: "1:5", Label: "ポート名は対象外"},
 	}
-	rows := BuildInventory(invStates(), aliases, map[string]time.Time{"DD:00:00:00:00:01": seenAt}, InventoryOptions{}, now)
+	rows := BuildInventory(invStates(), aliases, map[string]store.LastSeen{"DD:00:00:00:00:01": {TS: seenAt, IP: "10.0.0.99"}}, InventoryOptions{}, now)
 	by := map[string]InventoryRow{}
 	for _, r := range rows {
 		if _, dup := by[r.MAC]; dup {
@@ -62,7 +62,7 @@ func TestBuildInventoryLocation(t *testing.T) {
 	if by["AA:00:00:00:00:01"].PoEW != nil {
 		t.Fatal("複数機器のポートでPoE値を機器に割り当てている")
 	}
-	if d := by["DD:00:00:00:00:01"]; d.Seen || !d.LastSeen.Equal(seenAt) || d.Port != "" {
+	if d := by["DD:00:00:00:00:01"]; d.Seen || !d.LastSeen.Equal(seenAt) || d.Port != "" || d.IP != "10.0.0.99" || !d.IPStale {
 		t.Fatalf("未検出の登録機器: %+v", d)
 	}
 	if d := by["DD:00:00:00:00:02"]; !d.LastSeen.IsZero() {

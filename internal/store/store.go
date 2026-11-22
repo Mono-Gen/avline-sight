@@ -459,21 +459,30 @@ func (s *Store) ApplyMACAliases(profileID int64, rows []Alias, replace, commit b
 	return res, tx.Commit()
 }
 
-// LastSeenByMAC はMACごとの最終観測時刻（接続履歴から）。見えていない登録済み機器の表示用。
-func (s *Store) LastSeenByMAC() (map[string]time.Time, error) {
-	rows, err := s.DB.Query(`SELECT mac, MAX(last_seen_ts) FROM device_bindings GROUP BY mac`)
+// LastSeen は機器の最終観測（時刻と、そのとき使っていたIP）。
+type LastSeen struct {
+	TS time.Time
+	IP string
+}
+
+// LastSeenByMAC はMACごとの最終観測（接続履歴から）。見えていない登録済み機器の表示・Ping用。
+func (s *Store) LastSeenByMAC() (map[string]LastSeen, error) {
+	// MACごとに最新の行を1つ選ぶ（同時刻の重複は rowid の大きい方）
+	rows, err := s.DB.Query(`SELECT mac, last_seen_ts, ip FROM device_bindings b
+		WHERE rowid = (SELECT rowid FROM device_bindings x WHERE x.mac=b.mac ORDER BY last_seen_ts DESC, rowid DESC LIMIT 1)`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]time.Time{}
+	out := map[string]LastSeen{}
 	for rows.Next() {
 		var mac string
 		var ts int64
-		if err := rows.Scan(&mac, &ts); err != nil {
+		var ip sql.NullString
+		if err := rows.Scan(&mac, &ts, &ip); err != nil {
 			return nil, err
 		}
-		out[strings.ToUpper(mac)] = fromMS(ts)
+		out[strings.ToUpper(mac)] = LastSeen{TS: fromMS(ts), IP: ip.String}
 	}
 	return out, rows.Err()
 }

@@ -72,8 +72,8 @@ func (s *Server) replayInventory(w http.ResponseWriter, r *http.Request) ([]engi
 	}
 	// 再生では「その時点で見えていない登録機器」の最終観測は記録期間内の値しか持たない
 	last, _ := rp.st.LastSeenByMAC()
-	for mac, t := range last {
-		if t.After(at) {
+	for mac, ls := range last {
+		if ls.TS.After(at) {
 			delete(last, mac) // 再生時刻より後の観測は「その時点の最終確認」ではない
 		}
 	}

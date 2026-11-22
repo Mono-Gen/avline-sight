@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/csv"
 	"encoding/hex"
@@ -11,10 +10,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,8 +20,10 @@ import (
 
 	"github.com/gosnmp/gosnmp"
 
+	"github.com/Mono-Gen/avline-sight/internal/engine"
 	"github.com/Mono-Gen/avline-sight/internal/mib"
 	"github.com/Mono-Gen/avline-sight/internal/model"
+	"github.com/Mono-Gen/avline-sight/internal/ping"
 	sx "github.com/Mono-Gen/avline-sight/internal/snmpx"
 	"github.com/Mono-Gen/avline-sight/internal/store"
 )
@@ -494,33 +493,131 @@ func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		IP string `json:"ip"`
 	}
-	if err := readJSON(r, &in); err != nil || net.ParseIP(in.IP) == nil || net.ParseIP(in.IP).To4() == nil {
+	if err := readJSON(r, &in); err != nil || net.ParseIP(in.IP).To4() == nil {
 		writeErr(w, 400, "Pingできません", "IPv4アドレスが不正です", "")
 		return
 	}
-	if !s.Engine.KnownIP(in.IP) {
-		writeErr(w, 403, "Pingできません", "登録スイッチまたは観測済み機器のIPではありません", "監視中に検出されたIPのみ実行できます")
+	if !s.pingAllowed()[in.IP] {
+		writeErr(w, 403, "Pingできません", "登録スイッチ・観測済み機器・登録機器の最終IPではありません", "任意のIPは接続機器画面の一括Pingで手入力してください")
 		return
 	}
-	args := []string{"-c", "3", "-W", "1", in.IP}
-	if runtime.GOOS == "windows" {
-		args = []string{"-n", "3", "-w", "1000", in.IP}
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
-	defer cancel()
 	start := time.Now()
-	out, err := exec.CommandContext(ctx, "ping", args...).CombinedOutput()
-	txt := decodeConsole(out)
-	rtt := -1.0
-	if m := regexp.MustCompile(`(?i)(?:time|時間)[=<]\s*([\d.]+)\s*ms`).FindStringSubmatch(txt); m != nil {
-		rtt, _ = strconv.ParseFloat(m[1], 64)
-	}
-	writeJSON(w, 200, map[string]any{"ok": err == nil, "rtt_ms": rtt, "output": txt, "elapsed_ms": time.Since(start).Milliseconds()})
+	res := ping.One(r.Context(), in.IP, ping.DefaultTimeout)
+	writeJSON(w, 200, map[string]any{"ok": res.Status == ping.StatusOK, "status": res.Status, "rtt_ms": res.RTTms,
+		"output": pingText(res), "elapsed_ms": time.Since(start).Milliseconds()})
 }
 
-// decodeConsole はWindowsコンソール出力（CP932の可能性）を安全に文字列化する（不正バイトは置換）。
-func decodeConsole(b []byte) string {
-	return strings.ToValidUTF8(string(b), "?")
+// pingText は1台版の画面表示用の要約文。
+func pingText(r ping.Result) string {
+	switch r.Status {
+	case ping.StatusOK:
+		return fmt.Sprintf("%s から応答: %.0f ms", r.IP, r.RTTms)
+	case ping.StatusTimeout:
+		return r.IP + " から応答がありません（経路がない・ICMPを遮断している場合も含みます）"
+	case ping.StatusUnreachable:
+		return r.IP + " へ到達できません " + r.Detail
+	}
+	return r.IP + " へPingを送れません: " + r.Detail
+}
+
+// pingAllowed は手入力なしで打ってよいIP（登録スイッチ・現在見えている機器・登録済み機器の最終IP）。
+func (s *Server) pingAllowed() map[string]bool {
+	ok := map[string]bool{}
+	// 登録スイッチは未接続（状態未取得）でも打てるよう、設定のIPも含める
+	if cfgs, err := s.Store.Switches(s.Engine.ProfileID()); err == nil {
+		for _, c := range cfgs {
+			ok[c.IP] = true
+		}
+	}
+	for _, st := range s.Engine.States() {
+		if st.IP != "" {
+			ok[st.IP] = true
+		}
+	}
+	if rows, err := s.Engine.Inventory(engine.InventoryOptions{}); err == nil {
+		for _, r := range rows {
+			if r.IP != "" {
+				ok[r.IP] = true
+			}
+		}
+	}
+	return ok
+}
+
+// maxBulkPing は一括Pingの1回あたり宛先上限。手入力の範囲指定で大量送信しないため。
+const maxBulkPing = 256
+
+// pingBulk は複数宛先へ一括でPingする。ips は監視中に分かっているIPのみ、manual は任意の
+// IP・範囲（a.b.c.d-e / a.b.c.d-a.b.c.e）・CIDR をカンマ/空白区切りで受け付ける（ロック中は不可）。
+func (s *Server) pingBulk(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		IPs    []string `json:"ips"`
+		Manual string   `json:"manual"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, 400, "一括Pingできません", err.Error(), "")
+		return
+	}
+	allowed := s.pingAllowed()
+	seen := map[string]bool{}
+	var targets []string
+	source := map[string]string{}
+	for _, ip := range in.IPs {
+		ip = strings.TrimSpace(ip)
+		if seen[ip] {
+			continue
+		}
+		if !allowed[ip] {
+			writeErr(w, 403, "一括Pingできません", ip+" は監視中に見つかったIPではありません", "任意のIPは手入力欄に入れてください")
+			return
+		}
+		seen[ip] = true
+		targets = append(targets, ip)
+		source[ip] = "known"
+	}
+	if m := strings.TrimSpace(in.Manual); m != "" {
+		if s.isLocked() {
+			writeErr(w, http.StatusLocked, "閲覧専用ロック中は手入力のPingはできません", "", "一覧の機器へのPingは実行できます。手入力はロック解除後に行ってください")
+			return
+		}
+		for _, part := range strings.FieldsFunc(m, func(c rune) bool { return strings.ContainsRune(", \n\t、", c) }) {
+			ips, err := expandRange(part)
+			if err != nil {
+				writeErr(w, 400, "手入力のIPを解釈できません", part+": "+err.Error(), "例: 192.168.1.10、192.168.1.10-50、192.168.1.0/24")
+				return
+			}
+			for _, ip := range ips {
+				if !seen[ip] {
+					seen[ip] = true
+					targets = append(targets, ip)
+					source[ip] = "manual"
+				}
+				if len(targets) > maxBulkPing {
+					writeErr(w, 400, "宛先が多すぎます", fmt.Sprintf("1回の上限は%d件です", maxBulkPing), "範囲を分けて実行してください")
+					return
+				}
+			}
+		}
+	}
+	if len(targets) == 0 {
+		writeErr(w, 400, "Pingの宛先がありません", "", "機器を選ぶか、IPを手入力してください")
+		return
+	}
+	if len(targets) > maxBulkPing {
+		writeErr(w, 400, "宛先が多すぎます", fmt.Sprintf("1回の上限は%d件です", maxBulkPing), "絞り込んでから実行してください")
+		return
+	}
+	start := time.Now()
+	res := ping.Many(r.Context(), targets, ping.DefaultTimeout)
+	out := make([]map[string]any, len(res))
+	okN := 0
+	for i, x := range res {
+		if x.Status == ping.StatusOK {
+			okN++
+		}
+		out[i] = map[string]any{"ip": x.IP, "status": x.Status, "rtt_ms": x.RTTms, "detail": x.Detail, "source": source[x.IP]}
+	}
+	writeJSON(w, 200, map[string]any{"results": out, "ok": okN, "total": len(res), "elapsed_ms": time.Since(start).Milliseconds(), "at": time.Now().UTC()})
 }
 
 // ---- イベント ----
@@ -1007,6 +1104,10 @@ func expandRange(s string) ([]string, error) {
 		}
 	} else if a, b, ok := strings.Cut(s, "-"); ok {
 		ia, ib := net.ParseIP(strings.TrimSpace(a)).To4(), net.ParseIP(strings.TrimSpace(b)).To4()
+		// 短縮形 192.168.1.10-50（末尾オクテットだけ指定）
+		if n, err := strconv.Atoi(strings.TrimSpace(b)); err == nil && ia != nil && n >= 0 && n <= 255 {
+			ib = net.IPv4(ia[0], ia[1], ia[2], byte(n)).To4()
+		}
 		if ia == nil || ib == nil {
 			return nil, fmt.Errorf("範囲を解釈できません")
 		}

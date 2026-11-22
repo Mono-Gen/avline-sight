@@ -35,6 +35,7 @@ type InventoryRow struct {
 	SpeedMbps  int       `json:"speed_mbps"`
 	Seen       bool      `json:"seen"`                // 現在（または再生時刻に）見えているか
 	LastSeen   time.Time `json:"last_seen,omitempty"` // 見えていない登録済み機器の最終観測（不明ならゼロ）
+	IPStale    bool      `json:"ip_stale,omitempty"`  // IP は最終観測時のもの（現在も同じとは限らない）
 	Source     string    `json:"source"`
 	ViaUplink  bool      `json:"via_uplink"` // スイッチ間リンクでしか見えていない（所在は経路上の推定）
 }
@@ -49,8 +50,8 @@ type InventoryOptions struct {
 
 // BuildInventory は状態から MAC ごとに1行の一覧を作る。
 // at は「見えている」機器の最終確認時刻（ライブは現在、再生はスナップショット時刻）。
-// lastSeen は見えていない登録済み機器の最終観測時刻（device_bindings 由来、無ければ欠落）。
-func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen map[string]time.Time, opt InventoryOptions, at time.Time) []InventoryRow {
+// lastSeen は見えていない登録済み機器の最終観測（device_bindings 由来、無ければ欠落）。
+func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen map[string]store.LastSeen, opt InventoryOptions, at time.Time) []InventoryRow {
 	type cand struct {
 		row    InventoryRow
 		uplink bool
@@ -111,7 +112,8 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 		if _, ok := best[mac]; ok {
 			continue
 		}
-		rows = append(rows, InventoryRow{MAC: mac, Label: a.Label, Note: a.Note, LastSeen: lastSeen[mac]})
+		ls := lastSeen[mac]
+		rows = append(rows, InventoryRow{MAC: mac, Label: a.Label, Note: a.Note, LastSeen: ls.TS, IP: ls.IP, IPStale: ls.IP != ""})
 	}
 	out := rows[:0]
 	q := strings.ToLower(strings.TrimSpace(opt.Query))
@@ -205,7 +207,7 @@ func csvSafe(s string) string {
 	if s == "" {
 		return s
 	}
-	if strings.ContainsRune("	", rune(s[0])) {
+	if s[0] == '\t' || s[0] == '\r' {
 		return "'" + s
 	}
 	if strings.ContainsRune("=+-@", rune(s[0])) {
