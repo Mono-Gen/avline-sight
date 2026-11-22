@@ -3,6 +3,19 @@ import { eventEn } from './eventEn';
 import type { Dictionary } from './index';
 import { rackEn } from './rack';
 export const en: Dictionary = {
+  configChanges: {
+    title: 'Configuration changes', latestBaseline: 'Changes from the latest baseline',
+    comparing: 'Comparing with “{name}” ({time}).',
+    noBaseline: 'No baseline has been saved.',
+    noDiff: 'There are no differences for the switches shown.',
+    recent: 'Recent configuration changes', noEvents: 'There are no recent configuration changes for the switches shown.',
+    change: '{port} {field} {before} → {after}',
+    difference: '{item} on {switchName} changed from {before} to {after}.',
+    fields: {
+      alias: 'Port description', pvid: 'PVID', eee: 'EEE', trust: 'Trust', max_frame: 'Maximum frame size',
+      bcast_storm_ctl: 'Broadcast storm control', mcast_storm_ctl: 'Multicast storm control',
+    },
+  },
   logs: { receivedAt: 'PC receive time (JST)', issuesOnly: 'Issues and warnings only', unackedOnly: 'Unacknowledged only', marker: 'Markers' },
   wall: {
     counts: '{active} active / {unacked} unacknowledged', exit: 'Return to normal view',

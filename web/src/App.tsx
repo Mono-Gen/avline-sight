@@ -8,6 +8,7 @@ import { TrapHelp } from './components/TrapHelp';
 import { asArray } from './format';
 import type { Event, Overview, Profile, ReplaySession, ReplaySnapshot, Settings, Status, SwitchState, WatchItem } from './types';
 import { Devices } from './views/Devices';
+import { ConfigChanges } from './views/ConfigChanges';
 import { DhcpView, HealthAudit, Logs, MulticastView } from './views/Monitoring';
 import { SwitchPorts } from './views/SwitchPorts';
 import { SettingsTools } from './components/SettingsTools';
@@ -54,7 +55,7 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = language; }, [language]);
   const [page, setPage] = useState<Page>('monitor');
   const [monitorTarget, setMonitorTarget] = useState<PortMonitorTarget>();
-  const [detailTab, setDetailTab] = useState<'multicast' | 'dhcp' | 'health'>('multicast');
+  const [detailTab, setDetailTab] = useState<'multicast' | 'dhcp' | 'health' | 'config'>('multicast');
   const [theme, setTheme] = useState(() => get('theme', 'dark'));
   const [notifications, setNotifications] = useState(() => get('desktop-notifications', 'false') === 'true');
   const [overview, setOverview] = useState(empty);
@@ -216,7 +217,7 @@ export default function App() {
   const issueCount = replay ? asArray(replay.states).reduce((count, state) => count + (state.alert_counts?.CRITICAL || 0) + (state.alert_counts?.WARNING || 0), 0) : alertSummary.count;
   const critical = replay ? asArray(replay.states).some(state => (state.alert_counts?.CRITICAL || 0) > 0) : alertSummary.active > 0;
   const ready = replay ? !!replay.ts : operations.ready;
-  const activeDetailTab = replay && detailTab === 'dhcp' ? 'multicast' : detailTab;
+  const activeDetailTab = replay && (detailTab === 'dhcp' || detailTab === 'config') ? 'multicast' : detailTab;
   useDesktopNotifications({ enabled: notifications, alerts: operations.alerts, profileId, ready, paused: !!replay || stopped });
   useEffect(() => { document.title = `(${issueCount}) AVLine-Sight`; }, [issueCount]);
   const summary = <OverallStatus count={issueCount} critical={critical} ready={ready} stopped={stopped} replay={!!replay}
@@ -303,13 +304,16 @@ export default function App() {
 
           {!wall && page === 'details' && <>
             <div role="tablist" aria-label={t('cleanup.details')} className="detail-tabs">
-              {(['multicast', 'dhcp', 'health'] as const).map(tab => <button key={tab} role="tab" id={`tab-${tab}`}
-                aria-controls="detail-panel" aria-selected={activeDetailTab === tab} disabled={!!replay && tab === 'dhcp'} onClick={() => setDetailTab(tab)}>{t(`rack.nav.${tab}`)}</button>)}
+              {(['multicast', 'dhcp', 'health', 'config'] as const).map(tab => <button key={tab} role="tab" id={`tab-${tab}`}
+                aria-controls="detail-panel" aria-selected={activeDetailTab === tab} disabled={!!replay && (tab === 'dhcp' || tab === 'config')} onClick={() => setDetailTab(tab)}>
+                {tab === 'config' ? t('configChanges.title') : t(`rack.nav.${tab}`)}
+              </button>)}
             </div>
             <div role="tabpanel" id="detail-panel" aria-labelledby={`tab-${activeDetailTab}`}>
               {activeDetailTab === 'multicast' && <MulticastView {...props} />}
               {activeDetailTab === 'dhcp' && <DhcpView {...props} />}
               {activeDetailTab === 'health' && <HealthAudit {...props} select={setSelected} />}
+              {activeDetailTab === 'config' && <ConfigChanges key={status?.profile.id} {...props} />}
             </div>
           </>}
 

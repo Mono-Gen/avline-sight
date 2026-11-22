@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Mono-Gen/avline-sight/internal/model"
@@ -241,11 +242,13 @@ func nzf(v []Finding) []Finding {
 
 // Diff はベースラインとの差分1件。
 type Diff struct {
-	SwitchName string `json:"switch_name"`
-	Item       string `json:"item"`
-	Before     string `json:"before"`
-	After      string `json:"after"`
-	Severity   string `json:"severity"`
+	SwitchID    int64  `json:"switch_id"`
+	SwitchName  string `json:"switch_name"`
+	Item        string `json:"item"`
+	Before      string `json:"before"`
+	After       string `json:"after"`
+	Severity    string `json:"severity"`
+	ConfigField string `json:"config_field,omitempty"`
 }
 
 // BaselineDiff は保存済みベースラインと現在値を比較する（仕様3.4）。
@@ -255,21 +258,21 @@ func (e *Engine) BaselineDiff(base []*model.SwitchState) []Diff {
 		cur[s.ID] = s
 	}
 	out := []Diff{}
-	add := func(sw, item, b, a, sev string) {
-		if b != a {
-			out = append(out, Diff{sw, item, b, a, sev})
-		}
-	}
 	for _, b := range base {
+		add := func(item, before, after, sev string) {
+			if before != after {
+				out = append(out, Diff{SwitchID: b.ID, SwitchName: b.Name, Item: item, Before: before, After: after, Severity: sev})
+			}
+		}
 		c := cur[b.ID]
 		if c == nil {
-			add(b.Name, "スイッチ", "登録あり", "現在なし", model.SevWarning)
+			add("スイッチ", "登録あり", "現在なし", model.SevWarning)
 			continue
 		}
-		add(b.Name, "到達性", fmt.Sprint(b.Reachable), fmt.Sprint(c.Reachable), model.SevCritical)
-		add(b.Name, "DHCPサーバー", onoff(b.DHCP.ServerOn), onoff(c.DHCP.ServerOn), model.SevWarning)
-		add(b.Name, "STPルート", b.Config.RootID, c.Config.RootID, model.SevWarning)
-		add(b.Name, "ファームウェア", b.FW, c.FW, model.SevInfo)
+		add("到達性", fmt.Sprint(b.Reachable), fmt.Sprint(c.Reachable), model.SevCritical)
+		add("DHCPサーバー", onoff(b.DHCP.ServerOn), onoff(c.DHCP.ServerOn), model.SevWarning)
+		add("STPルート", b.Config.RootID, c.Config.RootID, model.SevWarning)
+		add("ファームウェア", b.FW, c.FW, model.SevInfo)
 		cp := map[int]*model.Port{}
 		for _, p := range c.Ports {
 			cp[p.IfIndex] = p
@@ -280,14 +283,32 @@ func (e *Engine) BaselineDiff(base []*model.SwitchState) []Diff {
 				continue
 			}
 			n := "Port " + bp.Name
-			add(b.Name, n+": リンク", bp.Oper, p.Oper, model.SevWarning)
+			add(n+": リンク", bp.Oper, p.Oper, model.SevWarning)
 			if bp.Oper == "up" && p.Oper == "up" {
-				add(b.Name, n+": 速度", fmt.Sprintf("%dM", bp.SpeedMbps), fmt.Sprintf("%dM", p.SpeedMbps), model.SevCritical)
+				add(n+": 速度", fmt.Sprintf("%dM", bp.SpeedMbps), fmt.Sprintf("%dM", p.SpeedMbps), model.SevCritical)
 			}
-			add(b.Name, n+": 接続MAC", macs(bp), macs(p), model.SevWarning)
-			add(b.Name, n+": PoE給電", poeOn(bp), poeOn(p), model.SevWarning)
+			add(n+": 接続MAC", macs(bp), macs(p), model.SevWarning)
+			add(n+": PoE給電", poeOn(bp), poeOn(p), model.SevWarning)
 			if bp.SFP != nil && p.SFP != nil && bp.SFP.RxDBm-p.SFP.RxDBm >= 1 {
-				out = append(out, Diff{b.Name, n + ": SFP Rx", fmt.Sprintf("%.2fdBm", bp.SFP.RxDBm), fmt.Sprintf("%.2fdBm (%.1fdB低下)", p.SFP.RxDBm, bp.SFP.RxDBm-p.SFP.RxDBm), model.SevWarning})
+				add(n+": SFP Rx", fmt.Sprintf("%.2fdBm", bp.SFP.RxDBm), fmt.Sprintf("%.2fdBm (%.1fdB低下)", p.SFP.RxDBm, bp.SFP.RxDBm-p.SFP.RxDBm), model.SevWarning)
+			}
+			if !b.Reachable || !c.Reachable {
+				continue
+			}
+			baselineSettings := bp.ConfigSettings
+			if baselineSettings == nil {
+				baselineSettings = legacyPortSettings(bp)
+			}
+			fields := make([]string, 0, len(baselineSettings))
+			for field := range baselineSettings {
+				fields = append(fields, field)
+			}
+			sort.Strings(fields)
+			for _, field := range fields {
+				before, after := baselineSettings[field], p.ConfigSettings[field]
+				if before != "" && after != "" && before != after {
+					out = append(out, Diff{SwitchID: b.ID, SwitchName: b.Name, Item: bp.Name, Before: before, After: after, Severity: model.SevInfo, ConfigField: field})
+				}
 			}
 		}
 		bv := map[int]model.VlanIGMP{}
@@ -296,23 +317,53 @@ func (e *Engine) BaselineDiff(base []*model.SwitchState) []Diff {
 		}
 		for _, v := range c.IGMP.Vlans {
 			if o, ok := bv[v.VLAN]; ok {
-				add(b.Name, fmt.Sprintf("VLAN %d: Querier IP", v.VLAN), o.LastQuerier, v.LastQuerier, model.SevCritical)
-				add(b.Name, fmt.Sprintf("VLAN %d: Snooping", v.VLAN), onoff(o.Snooping), onoff(v.Snooping), model.SevWarning)
+				add(fmt.Sprintf("VLAN %d: Querier IP", v.VLAN), o.LastQuerier, v.LastQuerier, model.SevCritical)
+				add(fmt.Sprintf("VLAN %d: Snooping", v.VLAN), onoff(o.Snooping), onoff(v.Snooping), model.SevWarning)
 			}
 		}
-		add(b.Name, "参加グループ数", fmt.Sprint(len(b.IGMP.Groups)), fmt.Sprint(len(c.IGMP.Groups)), model.SevInfo)
+		add("参加グループ数", fmt.Sprint(len(b.IGMP.Groups)), fmt.Sprint(len(c.IGMP.Groups)), model.SevInfo)
 		if c.Health.TempMaxC-b.Health.TempMaxC >= 10 {
-			out = append(out, Diff{b.Name, "温度", fmt.Sprintf("%.0f℃", b.Health.TempMaxC), fmt.Sprintf("%.0f℃", c.Health.TempMaxC), model.SevWarning})
+			add("温度", fmt.Sprintf("%.0f℃", b.Health.TempMaxC), fmt.Sprintf("%.0f℃", c.Health.TempMaxC), model.SevWarning)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return sevRank(out[i].Severity) < sevRank(out[j].Severity) })
 	return out
 }
 
+func legacyPortSettings(p *model.Port) map[string]string {
+	settings := make(map[string]string)
+	if strings.TrimSpace(p.Alias) != "" {
+		settings["alias"] = p.Alias
+	}
+	if p.PVID > 0 {
+		settings["pvid"] = strconv.Itoa(p.PVID)
+	}
+	if p.MaxFrame > 0 {
+		settings["max_frame"] = strconv.Itoa(p.MaxFrame)
+	}
+	if p.EEE == "enable" || p.EEE == "disable" {
+		settings["eee"] = p.EEE
+	}
+	if p.Trust != "" && !strings.HasPrefix(p.Trust, "unknown") {
+		settings["trust"] = p.Trust
+	}
+	if p.BcastCtl {
+		settings["bcast_storm_ctl"] = "enabled"
+	}
+	if p.McastCtl {
+		settings["mcast_storm_ctl"] = "enabled"
+	}
+	return settings
+}
+
 // SetSFPBaseline はベースラインのSFP Rx値をアラート判定基準に登録する。
 func (e *Engine) SetSFPBaseline(base []*model.SwitchState) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.setSFPBaselineLocked(base)
+}
+
+func (e *Engine) setSFPBaselineLocked(base []*model.SwitchState) {
 	e.baseline = map[string]float64{}
 	for _, s := range base {
 		for _, p := range s.Ports {
@@ -321,6 +372,31 @@ func (e *Engine) SetSFPBaseline(base []*model.SwitchState) {
 			}
 		}
 	}
+}
+
+func (e *Engine) CreateBaseline(name string) (int64, error) {
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
+	e.mu.Lock()
+	id, err := e.saveBaselineLocked(name, "")
+	e.mu.Unlock()
+	if err == nil {
+		e.OnEvent(baselineSavedEvent(name))
+	}
+	return id, err
+}
+
+func (e *Engine) saveBaselineLocked(name, phase string) (id int64, err error) {
+	states := e.statesLocked()
+	if phase != "" {
+		id, err = e.st.SavePhaseBaseline(phase, e.profileID, name, states)
+	} else {
+		id, err = e.st.SaveBaseline(e.profileID, name, states)
+	}
+	if err == nil {
+		e.setSFPBaselineLocked(states)
+	}
+	return id, err
 }
 
 func onoff(b bool) string {

@@ -1017,11 +1017,35 @@ type BaselineInfo struct {
 }
 
 func (s *Store) SaveBaseline(profileID int64, name string, states []*model.SwitchState) (int64, error) {
+	return insertBaseline(s.DB, profileID, name, states)
+}
+
+func (s *Store) SavePhaseBaseline(phase string, profileID int64, name string, states []*model.SwitchState) (int64, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(UpdatePhaseSQL, phase); err != nil {
+		return 0, err
+	}
+	id, err := insertBaseline(tx, profileID, name, states)
+	if err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
+}
+
+const UpdatePhaseSQL = `INSERT INTO meta(k,v) VALUES('op_phase',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`
+
+func insertBaseline(db interface {
+	Exec(string, ...any) (sql.Result, error)
+}, profileID int64, name string, states []*model.SwitchState) (int64, error) {
 	b, err := gz(states)
 	if err != nil {
 		return 0, err
 	}
-	r, err := s.DB.Exec(`INSERT INTO baselines(profile_id,name,captured_ts,snapshot_gz) VALUES(?,?,?,?)`, profileID, name, ms(time.Now()), b)
+	r, err := db.Exec(`INSERT INTO baselines(profile_id,name,captured_ts,snapshot_gz) VALUES(?,?,?,?)`, profileID, name, ms(time.Now()), b)
 	if err != nil {
 		return 0, err
 	}

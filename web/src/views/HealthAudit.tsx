@@ -9,10 +9,11 @@ import { METRICS_REFRESH_MS, TOPOLOGY_REFRESH_MS, usePolling } from '../usePolli
 import { useSwitchState } from '../useSwitchState';
 import type { ViewProps } from './props';
 import { groupSwitches, hasGroupFilter } from './props';
-import { findingColumns, localizedStatus } from './detailTables';
+import { baselineDiffItem, findingColumns, localizedStatus } from './detailTables';
+import type { BaselineDiff } from './detailTables';
 
 export function HealthAudit(p: ViewProps) {
-  const [diff, setDiff] = useState<{ switch_name: string }[]>([]);
+  const [diff, setDiff] = useState<BaselineDiff[]>([]);
   const switches = groupSwitches(p);
   const filtered = hasGroupFilter(p);
   const selected = !filtered || switches.some(sw => sw.id === p.selected) ? p.selected : 0;
@@ -106,7 +107,7 @@ export function HealthAudit(p: ViewProps) {
         <button
           onClick={() => p.run(async () => {
             const r = await api<{
-              diffs: { switch_name: string }[];
+              diffs: BaselineDiff[];
             }>(`/api/baselines/${b.id}/diff`);
             setDiff(r.diffs || []);
           })}
@@ -124,8 +125,9 @@ export function HealthAudit(p: ViewProps) {
         >{t('ui.m263')}</button>
       </div>)}
       <Table first={['switch_name', 'item', 'before', 'after', 'severity']}
+        hide={['switch_id', 'config_field']}
         values={{ ...findingColumns.values, before: localizedStatus, after: localizedStatus }}
-        rows={diff.filter(row => !filtered || visibleNames.has(row.switch_name))} />
+        rows={diff.filter(row => !filtered || visibleIds.has(row.switch_id)).map(row => ({ ...row, item: baselineDiffItem(row) }))} />
     </>}
   </section>;
 }

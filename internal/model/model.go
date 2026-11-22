@@ -107,6 +107,8 @@ type Port struct {
 	Devices       []Device  `json:"devices"`
 	Cable         *Cable    `json:"cable,omitempty"`
 	LastChange    time.Time `json:"last_change"`
+
+	ConfigSettings map[string]string `json:"config_settings"`
 }
 
 // PoE はポートのPoE状態。

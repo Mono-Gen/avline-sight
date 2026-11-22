@@ -116,6 +116,12 @@ func TestPollerAgainstSim(t *testing.T) {
 	if !sink.has("SWITCH_UNREACHABLE") || !sink.has("SWITCH_LOG") {
 		t.Error("到達不能イベントまたは内部ログが生成されていない")
 	}
+	if sink.has(model.CodePortConfigChanged) {
+		t.Fatal("configuration change recorded before settings changed")
+	}
+	if err := lab.Inject(0, "av-landmines"); err != nil {
+		t.Fatal(err)
+	}
 
 	// 障害注入: 再起動とリンク速度低下を検知できる
 	if err := lab.Inject(1, "chassis"); err != nil {
@@ -129,5 +135,17 @@ func TestPollerAgainstSim(t *testing.T) {
 		if !sink.has(code) {
 			t.Errorf("%s が検知されていない", code)
 		}
+	}
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	var changes []model.Event
+	for _, event := range sink.events {
+		if event.Code == model.CodePortConfigChanged {
+			changes = append(changes, event)
+		}
+	}
+	if len(changes) != 1 || changes[0].SwitchID != 1 || changes[0].Severity != model.SevInfo ||
+		changes[0].Detail["field"] != "eee" || changes[0].Detail["before"] != "disable" || changes[0].Detail["after"] != "enable" {
+		t.Fatalf("want one EEE change and no operational changes, got %+v", changes)
 	}
 }

@@ -141,6 +141,7 @@ type worker struct {
 	events       []model.Event
 	ifLastChange map[int]uint64
 	flapChange   map[int]uint64
+	configRead   map[int]map[string]string
 
 	c           *sx.Client
 	st          *model.SwitchState
@@ -314,6 +315,7 @@ func (w *worker) run(ctx context.Context) {
 
 func (w *worker) poll(ctx context.Context, tier string, collect func() error) bool {
 	w.mu.Lock()
+	w.configRead = nil
 	err := collect()
 	if ctx.Err() != nil {
 		w.events = nil
@@ -328,6 +330,9 @@ func (w *worker) poll(ctx context.Context, tier string, collect func() error) bo
 			w.failures++
 			w.st.Reachable = false
 			w.st.LastError = friendlyErr(err)
+			for _, p := range w.st.Ports {
+				clear(p.ConfigSettings)
+			}
 			if wasUp || w.failures == 1 {
 				w.emit(model.Event{Category: "ANOMALY", Severity: model.SevCritical, Code: "SWITCH_UNREACHABLE",
 					Title: "スイッチからSNMP応答がありません", Hint: "電源断・LAN切断・IP/コミュニティ設定誤り・SNMP無効化を確認してください",
@@ -344,6 +349,7 @@ func (w *worker) poll(ctx context.Context, tier string, collect func() error) bo
 	}
 	if err == nil {
 		w.st.LastOK = w.st.LastPoll
+		w.finishConfigCollection(tier)
 	}
 	snap, events := w.snapshot(), w.events
 	w.events = nil

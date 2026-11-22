@@ -15,7 +15,8 @@ import type { LiveMessage } from '../ws';
 import type { ViewProps } from './props';
 import { groupSwitches, hasGroupFilter } from './props';
 
-const categories = ['ANOMALY', 'CONNECT', 'TRAP', 'SYSLOG', 'BASELINE', 'MARKER', 'SYSTEM'];
+const categories = ['ANOMALY', 'CONNECT', 'TRAP', 'SYSLOG', 'BASELINE', 'CONFIG', 'MARKER', 'SYSTEM'];
+const categoryLabel = (category: string) => category === 'CONFIG' ? t('configChanges.title') : category;
 const severities = { CRITICAL: 'ui.m005', WARNING: 'ui.m006', INFO: 'ui.m007' } as const;
 
 export function LogEventRow({ event, ackable, disabled, onAcknowledge }: {
@@ -24,7 +25,7 @@ export function LogEventRow({ event, ackable, disabled, onAcknowledge }: {
   const syslog = event.category === 'SYSLOG';
   return <tr>
     <td className="whitespace-nowrap"><time dateTime={event.ts}>{pcTimestamp(event.ts, true)}</time></td>
-    <td><Badge text={event.severity} /></td><td>{event.category}</td>
+    <td><Badge text={event.severity} /></td><td>{categoryLabel(event.category)}</td>
     <td>{event.switch_name}</td>
     <td>{syslog ? <details className="log-message">
       <summary>{syslogMessage(event.title)}</summary>
@@ -107,7 +108,7 @@ export function Logs(props: ViewProps) {
       <div className="flex flex-wrap gap-2">
         <label>{t('ui.m083')} <select value={filter.category} onChange={event => changeFilter('category', event.target.value)}>
           <option value="">{t('rack.all')}</option>
-          {categories.map(category => <option key={category}>{category}</option>)}
+          {categories.map(category => <option key={category} value={category}>{categoryLabel(category)}</option>)}
         </select></label>
         <label>{t('ui.m026')} <select value={filter.severity} onChange={event => changeFilter('severity', event.target.value)}>
           <option value="">{t('rack.all')}</option>

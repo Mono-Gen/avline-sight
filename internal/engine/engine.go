@@ -523,6 +523,10 @@ func (e *Engine) clearPrefix(prefix string, seen map[string]bool) {
 func (e *Engine) States() []*model.SwitchState {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+	return e.statesLocked()
+}
+
+func (e *Engine) statesLocked() []*model.SwitchState {
 	out := make([]*model.SwitchState, 0, len(e.order))
 	for _, id := range e.order {
 		if s := e.states[id]; s != nil {

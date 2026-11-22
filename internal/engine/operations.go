@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Mono-Gen/avline-sight/internal/model"
+	"github.com/Mono-Gen/avline-sight/internal/store"
 )
 
 func (e *Engine) loadOperations() {
@@ -48,7 +49,15 @@ func (e *Engine) SetPhase(phase string) error {
 		e.mu.Unlock()
 		return nil
 	}
-	if _, err := e.st.DB.Exec(`INSERT INTO meta(k,v) VALUES('op_phase',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`, phase); err != nil {
+	var name string
+	var err error
+	if phase == "show" {
+		name = productionBaselineName(time.Now())
+		_, err = e.saveBaselineLocked(name, phase)
+	} else {
+		_, err = e.st.DB.Exec(store.UpdatePhaseSQL, phase)
+	}
+	if err != nil {
 		e.mu.Unlock()
 		return err
 	}
@@ -59,6 +68,9 @@ func (e *Engine) SetPhase(phase string) error {
 	e.pingFails = map[string]int{}
 	e.exposeActiveAlertsLocked()
 	e.mu.Unlock()
+	if name != "" {
+		e.OnEvent(baselineSavedEvent(name))
+	}
 	select {
 	case e.phaseWake <- struct{}{}:
 	default:

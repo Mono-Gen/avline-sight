@@ -53,11 +53,20 @@ interface LocalizedEvent {
   detail?: Record<string, unknown>;
 }
 export function eventTitle(event: LocalizedEvent): string {
+  if (event.code === 'PORT_CONFIG_CHANGED' && typeof event.detail?.field === 'string') {
+    return t('configChanges.change', { ...event.detail, field: configFieldName(event.detail.field) });
+  }
   if (!Object.prototype.hasOwnProperty.call(ja.events, event.code)) return event.title || event.code;
   const key = `events.${event.code}.title` as TranslationKey;
   const variables = [...translation(key).matchAll(/\{(\w+)\}/g)];
   if (variables.some(([, name]) => event.detail?.[name] == null) && event.title) return event.title;
   return t(key, event.detail);
+}
+
+export function configFieldName(field: string): string {
+  return Object.prototype.hasOwnProperty.call(ja.configChanges.fields, field)
+    ? t(`configChanges.fields.${field as keyof typeof ja.configChanges.fields}`)
+    : field;
 }
 export function eventHint(event: LocalizedEvent): string {
   if (!Object.prototype.hasOwnProperty.call(ja.events, event.code)) return event.hint || '';

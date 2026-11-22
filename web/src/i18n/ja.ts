@@ -2,6 +2,19 @@ import { operationsJa } from './operations';
 import { eventJa } from './eventJa';
 import { rackJa } from './rack';
 export const ja = {
+  configChanges: {
+    title: '設定変更', latestBaseline: '最新ベースラインとの差分',
+    comparing: '「{name}」（{time}）と比較しています。',
+    noBaseline: '保存済みのベースラインはありません。',
+    noDiff: '表示対象のスイッチに差分はありません。',
+    recent: '最近の設定変更', noEvents: '表示対象のスイッチに最近の設定変更はありません。',
+    change: '{port} {field} {before} → {after}',
+    difference: '{switchName} の {item} が {before} から {after} に変わりました。',
+    fields: {
+      alias: 'ポートの説明', pvid: 'PVID', eee: 'EEE', trust: 'Trust', max_frame: '最大フレーム',
+      bcast_storm_ctl: 'ブロードキャストストーム制御', mcast_storm_ctl: 'マルチキャストストーム制御',
+    },
+  },
   logs: { receivedAt: 'PC受信時刻 (JST)', issuesOnly: '異常・警告のみ', unackedOnly: '未確認のみ', marker: 'マーカー' },
   wall: {
     counts: '発生中 {active}件 / 未確認 {unacked}件', exit: '通常表示に戻る',

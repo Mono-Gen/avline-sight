@@ -48,6 +48,64 @@ const noop = () => {};
 const fault = (id, extra = {}) => ({ event_id: id, severity: 'WARNING', suppressed: false, acked: false, code: 'CUSTOM', title: 'Fault', ...extra });
 const headers = html => [...html.matchAll(/<th\b[^>]*>([^<]+)<\/th>/g)].map(match => match[1]);
 
+test('Details shows the latest baseline diff and recent configuration events in both languages', async () => {
+  const captured = '2026-01-01T00:00:00Z';
+  const baseline = { id: 9, name: 'Show', captured_ts: captured };
+  const diff = { switch_id: 1, switch_name: 'West', item: '1/0/7', config_field: 'max_frame', before: '1522', after: '9216' };
+  const event = {
+    id: 12, ts: captured, switch_id: 1, switch_name: 'West', category: 'CONFIG', severity: 'INFO',
+    code: 'PORT_CONFIG_CHANGED', detail: { port: '1/0/7', field: 'max_frame', before: '1522', after: '9216' },
+  };
+  const baselines = '/api/baselines';
+  const latestDiff = '/api/baselines/9/diff?read_only=1';
+  const history = '/api/events?category=CONFIG&severity=INFO&active_profile=1&limit=30';
+  const responses = {
+    [baselines]: [baseline, { id: 3, name: 'Old' }],
+    [latestDiff]: { diffs: [diff, { ...diff, switch_id: 2, after: '8000' }] },
+    [history]: [event, { ...event, id: 13, switch_id: 2, switch_name: 'East' }],
+  };
+  const calls = [];
+  const results = [];
+  const loaders = [];
+  const { ConfigChanges } = sourceWith('../src/views/ConfigChanges.tsx', {
+    '../api': { api: async (url, { signal }) => {
+      assert.ok(signal instanceof AbortSignal);
+      calls.push(url);
+      assert.ok(Object.hasOwn(responses, url));
+      return responses[url];
+    } },
+    '../usePolling': { usePolling: load => {
+      const index = loaders.length;
+      loaders.push(load);
+      return { data: results[index] };
+    } },
+  });
+  const props = { group: 'west', overview: { switches: [{ id: 1, name: 'West', group_tag: 'west' }] } };
+  render(ConfigChanges, props);
+  for (const load of loaders) results.push(await load(new AbortController().signal));
+  assert.deepEqual(calls, [baselines, latestDiff, history]);
+  try {
+    for (const [language, heading, field] of [
+      ['ja', '最新ベースラインとの差分', '最大フレーム'],
+      ['en', 'Changes from the latest baseline', 'Maximum frame size'],
+    ]) {
+      setLang(language);
+      loaders.length = 0;
+      const html = render(ConfigChanges, props);
+      assert.ok(html.includes(heading));
+      assert.ok(html.includes('Show'));
+      assert.ok(html.includes(`1/0/7 ${field} 1522 → 9216`));
+      assert.equal(html.split(field).length - 1, 2);
+      assert.doesNotMatch(html, /8000|East|data-action="ack"/);
+      const log = render(LogEventRow, { event, ackable: new Set([event.id]), onAcknowledge: noop });
+      assert.ok(log.includes(field));
+      assert.doesNotMatch(log, /<button/);
+    }
+  } finally {
+    setLang('ja');
+  }
+});
+
 test('ラックの手前に5状態の凡例を置き、2桁ポートと状態記号を別にする', () => {
   const { OverviewView } = sourceWith('../src/views/Overview.tsx', {
     '../useRackData': { useRackData: () => ({ data: { ports: [

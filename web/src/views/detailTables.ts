@@ -1,7 +1,21 @@
-import { t } from '../i18n';
+import { configFieldName, t } from '../i18n';
 import type { TranslationKey } from '../i18n';
 
 export const switchColumn = { first: ['switch_name'], hide: ['switch_id'] };
+
+export interface BaselineDiff {
+  switch_id: number;
+  switch_name: string;
+  item: string;
+  before: string;
+  after: string;
+  severity: string;
+  config_field?: string;
+}
+
+export function baselineDiffItem(diff: BaselineDiff) {
+  return diff.config_field ? `${diff.item} ${configFieldName(diff.config_field)}` : diff.item;
+}
 export const findingColumns = {
   first: ['switch_name', 'title', 'severity', 'port', 'hint', 'code'],
   hide: switchColumn.hide,

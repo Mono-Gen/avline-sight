@@ -660,6 +660,9 @@ func (s *Server) eventFilter(r *http.Request) store.EventFilter {
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	filter := s.eventFilter(r)
 	query := r.URL.Query()
+	if query.Get("active_profile") == "1" {
+		filter.ProfileID = s.Engine.ProfileID()
+	}
 	filter.IssuesOnly = query.Get("issues_only") == "1"
 	if query.Get("unacked_only") == "1" {
 		filter.AlertIDs = []int64{}
@@ -750,14 +753,11 @@ func (s *Server) createBaseline(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(in.Name) == "" {
 		in.Name = "ベースライン " + time.Now().Format("01/02 15:04")
 	}
-	states := s.Engine.States()
-	id, err := s.Store.SaveBaseline(s.Engine.ProfileID(), in.Name, states)
+	id, err := s.Engine.CreateBaseline(in.Name)
 	if err != nil {
 		writeErr(w, 500, "ベースラインを保存できません", err.Error(), "")
 		return
 	}
-	s.Engine.SetSFPBaseline(states)
-	s.Engine.OnEvent(model.Event{Category: "BASELINE", Severity: model.SevInfo, Code: "BASELINE_SAVED", Title: "ベースライン保存: " + in.Name})
 	writeJSON(w, 200, map[string]any{"id": id, "name": in.Name})
 }
 
@@ -768,7 +768,9 @@ func (s *Server) baselineDiff(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 404, "ベースラインが見つかりません", err.Error(), "")
 		return
 	}
-	s.Engine.SetSFPBaseline(b)
+	if r.URL.Query().Get("read_only") != "1" {
+		s.Engine.SetSFPBaseline(b)
+	}
 	writeJSON(w, 200, map[string]any{"diffs": s.Engine.BaselineDiff(b)})
 }
 

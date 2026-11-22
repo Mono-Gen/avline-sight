@@ -109,6 +109,7 @@ func (w *worker) collectFast() error {
 		}
 		p.Name = name
 		p.Alias = sx.Str(r.Cols[mib.IfAlias])
+		w.recordSetting(p, "alias", p.Alias)
 		if ifType == 161 || strings.HasPrefix(strings.ToLower(name), "lag") {
 			p.Type = "lag"
 		} else if p.Type == "" || p.Type == "lag" {
@@ -610,6 +611,7 @@ func (w *worker) collectSlow() error {
 		for _, r := range rows {
 			if p := pm[w.basePortToIf(ifIdx(r))]; p != nil {
 				p.PVID = int(sx.Int(r.Cols[mib.Dot1qPvid]))
+				w.recordPositiveSetting(p, "pvid", p.PVID)
 			}
 		}
 	}
@@ -822,7 +824,14 @@ func (w *worker) collectConfig(pm map[int]*model.Port) {
 			}
 		}
 	}
-	perPort([]string{mib.GreenEeeMode}, func(p *model.Port, r sx.Row) { p.EEE = mib.GreenModeEnum.Name(int(sx.Int(r.Cols[mib.GreenEeeMode]))) })
+	perPort([]string{mib.GreenEeeMode}, func(p *model.Port, r sx.Row) {
+		if v := r.Cols[mib.GreenEeeMode]; v.Type == gosnmp.Integer && v.Value != nil {
+			p.EEE = mib.GreenModeEnum.Name(int(sx.Int(v)))
+			if p.EEE != "not-applicable" {
+				w.recordSetting(p, "eee", mib.GreenModeEnum[int(sx.Int(v))])
+			}
+		}
+	})
 	perPort([]string{mib.UdldIntfOperStatus}, func(p *model.Port, r sx.Row) {
 		p.UDLD = mib.UdldOperEnum.Name(int(sx.Int(r.Cols[mib.UdldIntfOperStatus])))
 	})
@@ -831,14 +840,18 @@ func (w *worker) collectConfig(pm map[int]*model.Port) {
 	})
 	perPort([]string{mib.CosMapIntfTrustMode}, func(p *model.Port, r sx.Row) {
 		p.Trust = mib.TrustModeEnum.Name(int(sx.Int(r.Cols[mib.CosMapIntfTrustMode])))
+		w.recordSetting(p, "trust", mib.TrustModeEnum[int(sx.Int(r.Cols[mib.CosMapIntfTrustMode]))])
 	})
 	// agentPortConfigTable（INDEX=basePort。PortCfgIfIndex列でifIndexへ変換）
 	if rows, err := w.c.WalkColumns([]string{mib.PortCfgIfIndex, mib.PortCfgMaxFrameSize, mib.PortCfgBcastCtrlMode, mib.PortCfgMcastCtrlMode}); err == nil {
 		for _, r := range rows {
 			if p := pm[int(sx.Int(r.Cols[mib.PortCfgIfIndex]))]; p != nil {
 				p.MaxFrame = int(sx.Int(r.Cols[mib.PortCfgMaxFrameSize]))
+				w.recordPositiveSetting(p, "max_frame", p.MaxFrame)
 				p.BcastCtl = sx.Int(r.Cols[mib.PortCfgBcastCtrlMode]) == 1
 				p.McastCtl = sx.Int(r.Cols[mib.PortCfgMcastCtrlMode]) == 1
+				w.recordStormSetting(p, "bcast_storm_ctl", sx.Int(r.Cols[mib.PortCfgBcastCtrlMode]))
+				w.recordStormSetting(p, "mcast_storm_ctl", sx.Int(r.Cols[mib.PortCfgMcastCtrlMode]))
 			}
 		}
 	}
