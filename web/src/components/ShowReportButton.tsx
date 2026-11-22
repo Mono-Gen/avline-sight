@@ -1,4 +1,5 @@
-import { download, responseBlob } from '../api';
+import { useState } from 'react';
+import { download, message, responseBlob } from '../api';
 import { t } from '../i18n';
 import { parseJstDateTime } from '../pcTime';
 
@@ -17,11 +18,19 @@ export function ShowReportButton({ run, busy, from, to }: {
   from?: string;
   to?: string;
 }) {
-  return <button type="button" disabled={busy}
+  const [error, setError] = useState('');
+  return <><button type="button" disabled={busy}
     title={t(from || to ? 'checklist.reportSelectedRange' : 'checklist.reportLatest')}
     onClick={() => run(async () => {
-      const csv = await responseBlob(showReportURL(from, to));
-      download(csv, 'avline-sight-show-report.csv');
-    })}>{t('checklist.report')}</button>;
+      setError('');
+      try {
+        const csv = await responseBlob(showReportURL(from, to));
+        download(csv, 'avline-sight-show-report.csv');
+      } catch (cause) {
+        setError(message(cause));
+      }
+    })}>{t('checklist.report')}</button>
+    {error && <p role="alert">⚠ {error}</p>}
+  </>;
 }
 

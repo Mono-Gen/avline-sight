@@ -12,7 +12,8 @@ export async function submitPhase(phase: Phase, onPhase: (phase: Phase) => void,
 
 export function changePhase(phase: Phase, run: (action: () => Promise<void>) => void, onPhase: (phase: Phase) => void,
   current?: Phase, openChecklist?: () => void) {
-  if (current === 'rehearsal' && phase === 'show' && openChecklist) {
+  if (current === phase) return;
+  if (phase === 'show' && openChecklist) {
     openChecklist();
     return;
   }

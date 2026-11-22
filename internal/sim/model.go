@@ -95,6 +95,7 @@ type Switch struct {
 	FanState       int
 	PsuState       int
 	PoeBudgetW     float64
+	clockSkew      time.Duration
 
 	Querier       map[int]*QuerierState // VLAN別
 	DhcpServerOn  bool

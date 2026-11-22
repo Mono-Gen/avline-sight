@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -36,7 +37,14 @@ type ShowReportEntry struct {
 	Kind, Code, Severity, SwitchName, Title, Detail string
 }
 
-func (s *Store) ShowReport(ctx context.Context, window ShowReportRange, visit func(ShowReportEntry) error) error {
+const (
+	showReportMaxRows      = 10_000
+	showReportMaxTextBytes = 16 << 20
+)
+
+var ErrShowReportTooLarge = errors.New("show report exceeds the export size limit")
+
+func (s *Store) ShowReport(ctx context.Context, window ShowReportRange) ([]ShowReportEntry, error) {
 	const query = `
 		WITH timeline(at, id, kind, position) AS (
 			SELECT ts,id,CASE
@@ -54,6 +62,7 @@ func (s *Store) ShowReport(ctx context.Context, window ShowReportRange, visit fu
 			SELECT cleared_at,id,'recovery',1 FROM events
 			WHERE cleared_at BETWEEN ? AND ? AND severity IN ('WARNING','CRITICAL')
 				AND category NOT IN ('TRAP','SYSLOG') AND COALESCE(json_extract(detail_json,'$._suppressed'),0)=0
+				AND cleared_at > ts AND code <> 'LINK_FLAP' AND COALESCE(json_extract(detail_json,'$._one_shot'),0)=0
 			UNION ALL
 			SELECT acked_at,id,'ack',2 FROM events
 			WHERE acked=1 AND acked_at BETWEEN ? AND ? AND severity IN ('WARNING','CRITICAL')
@@ -62,24 +71,34 @@ func (s *Store) ShowReport(ctx context.Context, window ShowReportRange, visit fu
 		SELECT t.at,t.id,t.kind,e.code,e.severity,e.switch_id,e.switch_name,e.if_index,e.title,
 			CASE WHEN t.kind IN ('checklist','phase') THEN e.detail_json ELSE '' END
 		FROM timeline t JOIN events e ON e.id=t.id
-		ORDER BY t.at,t.id,t.position`
+		ORDER BY t.at,t.id,t.position LIMIT ?`
 	from, to := ms(window.From), ms(window.To)
-	rows, err := s.DB.QueryContext(ctx, query, from, to, window.StartID, from, window.StartID, window.EndID, to, window.EndID, from, to, from, to)
+	rows, err := s.DB.QueryContext(ctx, query, from, to, window.StartID, from, window.StartID, window.EndID, to, window.EndID, from, to, from, to, showReportMaxRows+1)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
+	var entries []ShowReportEntry
+	var textBytes int
 	for rows.Next() {
+		if len(entries) == showReportMaxRows {
+			return nil, ErrShowReportTooLarge
+		}
 		var entry ShowReportEntry
 		var at int64
 		if err := rows.Scan(&at, &entry.EventID, &entry.Kind, &entry.Code, &entry.Severity, &entry.SwitchID, &entry.SwitchName,
 			&entry.IfIndex, &entry.Title, &entry.Detail); err != nil {
-			return err
+			return nil, err
 		}
 		entry.At = fromMS(at)
-		if err := visit(entry); err != nil {
-			return err
+		textBytes += len(entry.Kind) + len(entry.Code) + len(entry.Severity) + len(entry.SwitchName) + len(entry.Title) + len(entry.Detail)
+		if textBytes > showReportMaxTextBytes {
+			return nil, ErrShowReportTooLarge
 		}
+		entries = append(entries, entry)
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
 }

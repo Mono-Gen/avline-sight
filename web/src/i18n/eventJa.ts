@@ -1,4 +1,8 @@
 export const eventJa = {
+  "CLOCK_SKEW": {
+    "title": "監視PCとの時刻差 {offset_seconds}秒",
+    "hint": "スイッチと監視PCの時刻同期を確認してください。"
+  },
   "DEVICE_MISSING": {
     "title": "登録機器が見つかりません: {name} ({mac})",
     "hint": "機器の電源・ケーブル・接続先を確認してください。"

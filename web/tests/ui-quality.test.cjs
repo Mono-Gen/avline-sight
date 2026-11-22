@@ -1182,7 +1182,7 @@ test('Pre-show checklist is offered in setup and rehearsal, and hidden during sh
   }
 });
 
-test('Rehearsal to show opens the gate and only explicit confirmation requests remainder logging', async () => {
+test('Setup and rehearsal to show open the gate and only explicit confirmation requests remainder logging', async () => {
   let opened = 0;
   const requests = [];
   const phaseChanges = [];
@@ -1193,10 +1193,12 @@ test('Rehearsal to show opens the gate and only explicit confirmation requests r
     },
   }, { window: { confirm: () => assert.fail('The checklist is the confirmation dialog') } });
   const { PhaseControls: Selector, submitPhase } = phaseControls;
-  const selector = Selector({ phase: 'rehearsal', openChecklist: () => { opened++; },
-    run: () => assert.fail('Opening the checklist must not send a phase change'), onPhase: noop });
-  elements(selector, element => element.type === 'select')[0].props.onChange({ target: { value: 'show' } });
-  assert.equal(opened, 1);
+  for (const phase of ['setup', 'rehearsal', 'show']) {
+    const selector = Selector({ phase, openChecklist: () => { opened++; },
+      run: () => assert.fail('Opening the checklist must not send a phase change'), onPhase: noop });
+    elements(selector, element => element.type === 'select')[0].props.onChange({ target: { value: 'show' } });
+  }
+  assert.equal(opened, 2);
   assert.deepEqual(requests, []);
 
   const result = { data: { items: [{ id: 'clock', state: 'review', reason: 'Clock data unavailable',
@@ -1239,4 +1241,59 @@ test('The post-show report defaults to latest and supports a JST range', () => {
   assert.equal(query.get('from'), '2024-01-02T16:00:00.000Z');
   assert.equal(query.get('to'), '2024-01-02T17:00:00.000Z');
   assert.throws(() => showReportURL('2024-01-03T01:00'));
+});
+
+test('Switch health and the clock warning show the measured offset in both languages', () => {
+  let state;
+  const { HealthAudit } = sourceWith('../src/views/HealthAudit.tsx', {
+    '../usePolling': { usePolling: () => ({}) },
+    '../useSwitchState': { useSwitchState: () => ({ state, polling: {} }) },
+    '../components/Common': { Chart: () => null, Table: () => null },
+  });
+  const { eventTitle } = require('../src/i18n/index.ts');
+  const props = { selected: 1, overview: { switches: [{ id: 1, name: 'Stage', group_tag: '' }] } };
+  try {
+    for (const [language, skew, missing] of [
+      ['ja', /監視PCとの時刻差 -61秒/, /要確認.*測定値/],
+      ['en', /Clock offset from monitoring PC: -61 s/, /needs review.*no measurement/],
+    ]) {
+      setLang(language);
+      state = { id: 1, clock_offset_seconds: -61 };
+      assert.match(render(HealthAudit, props), skew);
+      assert.match(eventTitle({ code: 'CLOCK_SKEW', detail: { offset_seconds: -61 } }), skew);
+      state = { id: 1 };
+      assert.match(render(HealthAudit, props), missing);
+    }
+  } finally {
+    setLang('ja');
+  }
+});
+
+test('The post-show report failure is visible inside the settings dialog and clears on retry', async () => {
+  const { SettingsDialog } = require('../src/components/SettingsDialog.tsx');
+  const failure = 'Report download failed';
+  let error = '';
+  let fail = true;
+  let action;
+  let downloaded = false;
+  const { ShowReportButton } = sourceWith('../src/components/ShowReportButton.tsx', {
+    react: { useState: () => [error, value => { error = value; }] },
+    '../api': {
+      message: cause => cause.message,
+      responseBlob: async () => { if (fail) throw new Error(failure); return {}; },
+      download: () => { downloaded = true; },
+    },
+  });
+  const draw = () => ShowReportButton({ busy: false, run: callback => { action = callback(); } });
+  const click = () => elements(draw(), node => node.type === 'button')[0].props.onClick();
+  click();
+  await action;
+  const html = render(SettingsDialog, { value: { thresholds: {} }, close: noop, run: noop, tools: draw() });
+  assert.match(html, /role="dialog"[^]*role="alert"[^>]*>[^<]*Report download failed/);
+  assert.equal(downloaded, false);
+  fail = false;
+  click();
+  await action;
+  assert.equal(downloaded, true);
+  assert.equal(error, '');
 });

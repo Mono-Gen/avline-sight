@@ -24,6 +24,7 @@ var Scenarios = []Scenario{
 	{"chassis", "CPU高騰・Mbuf確保失敗・温度上昇・電源瞬断"},
 	{"stp-loop", "STP Blocking出現＋MSTP設定＋TCN増加"},
 	{"avb-mvr", "AVB/Milan帯域予約失敗＋MVR IGMP受信失敗"},
+	{"clock-skew", "スイッチの時計が2分進む"},
 }
 
 func vbInt(oid string, v int) extraVB {
@@ -141,6 +142,8 @@ func (l *Lab) Inject(sw int, id string) error {
 		s.AVBDemo = true
 		s.MvrRxFail += 7
 		s.addLog("MSRP: reservation failed for stream 0x28C68E1000000001 (insufficient bandwidth)")
+	case "clock-skew":
+		s.clockSkew = 2 * time.Minute
 	default:
 		return fmt.Errorf("未知のシナリオ %q", id)
 	}
@@ -165,6 +168,7 @@ func (l *Lab) Reset() {
 		s.Querier, s.DhcpServerOn, s.DhcpConflicts = f.Querier, f.DhcpServerOn, nil
 		s.CPU5s, s.MemFreePct, s.TempC, s.StpVersion = f.CPU5s, f.MemFreePct, f.TempC, f.StpVersion
 		s.AVBDemo = false
+		s.clockSkew = 0
 		s.addLog("LAB: faults cleared")
 		s.mu.Unlock()
 	}

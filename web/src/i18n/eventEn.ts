@@ -1,5 +1,9 @@
 import { eventJa } from './eventJa';
 export const eventEn: { [K in keyof typeof eventJa]: { title: string; hint: string } } = {
+  "CLOCK_SKEW": {
+    "title": "Clock offset from monitoring PC: {offset_seconds} s",
+    "hint": "Check time synchronization on the switch and monitoring PC."
+  },
   "DEVICE_MISSING": {
     "title": "Registered device missing: {name} ({mac})",
     "hint": "Check device power, cabling and connection location."

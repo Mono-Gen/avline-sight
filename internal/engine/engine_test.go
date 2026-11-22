@@ -33,6 +33,48 @@ func codes(t *testing.T, st *store.Store) map[string]int {
 	return m
 }
 
+func TestClockSkewWarningAtSlowTierAndRecovery(t *testing.T) {
+	e, st := newTestEngine(t)
+	poll := func(tier string, offset *float64) {
+		e.OnState(&model.SwitchState{ID: 1, Reachable: true, ClockOffsetSeconds: offset}, tier)
+	}
+	skew := func() []model.Event {
+		t.Helper()
+		events, err := st.Events(store.EventFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var warnings []model.Event
+		for _, event := range events {
+			if event.Code == "CLOCK_SKEW" {
+				warnings = append(warnings, event)
+			}
+		}
+		return warnings
+	}
+	minus60, plus60, offset := -60.0, 60.0, -61.0
+	poll("slow", nil)
+	poll("slow", &minus60)
+	poll("slow", &plus60)
+	poll("fast", &offset)
+	if events := skew(); len(events) != 0 {
+		t.Fatalf("unexpected alerts: %v", events)
+	}
+	poll("slow", &offset)
+	poll("slow", &offset)
+	poll("slow", nil)
+	events := skew()
+	if len(events) != 1 || events[0].Severity != model.SevWarning || events[0].IfIndex != 0 ||
+		events[0].Detail["offset_seconds"] != offset || events[0].ClearedAt != nil {
+		t.Fatalf("expected one active warning with the measured offset: %v", events)
+	}
+	poll("slow", &minus60)
+	events = skew()
+	if len(events) != 1 || events[0].ClearedAt == nil {
+		t.Fatalf("warning did not clear at the threshold: %v", events)
+	}
+}
+
 // 期待値は仕様書3.6の判定表から導出（実装出力のコピーではない）。
 func TestRulesFromSpec(t *testing.T) {
 	e, st := newTestEngine(t)

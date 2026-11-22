@@ -70,7 +70,7 @@ func (e *Engine) setPhase(phase string, check func() ([]ChecklistItem, error)) e
 		return nil
 	}
 	var remaining []ChecklistItem
-	if phase == "show" && previous == "rehearsal" && check != nil {
+	if phase == "show" && previous != "show" && check != nil {
 		var err error
 		remaining, err = check()
 		if err != nil {

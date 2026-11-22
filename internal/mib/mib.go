@@ -21,6 +21,19 @@ const (
 	NetgearEnterprise = "1.3.6.1.4.1.4526"
 )
 
+// スイッチ時刻（NETGEAR-TIMEZONE-PRIVATE-MIB）
+const (
+	AgentSystemTime               = NetgearEnterprise + ".10.42.1.1.0"
+	AgentSystemDate               = NetgearEnterprise + ".10.42.1.2.0"
+	AgentSystemTimeSource         = NetgearEnterprise + ".10.42.1.4.0"
+	AgentSystemSummerTimeState    = NetgearEnterprise + ".10.42.1.5.0"
+	AgentTimeZoneHoursOffset      = NetgearEnterprise + ".10.42.2.1.0"
+	AgentTimeZoneMinutesOffset    = NetgearEnterprise + ".10.42.2.2.0"
+	AgentSummerTimeMode           = NetgearEnterprise + ".10.42.3.1.0"
+	AgentStRecurringZoneOffset    = NetgearEnterprise + ".10.42.3.2.10.0"
+	AgentStNonRecurringZoneOffset = NetgearEnterprise + ".10.42.3.3.9.0"
+)
+
 // IF-MIB ifTable / ifXTable（INDEX=ifIndex）
 const (
 	IfDescr       = "1.3.6.1.2.1.2.2.1.2"

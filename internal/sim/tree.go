@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gosnmp/gosnmp"
 
@@ -61,6 +62,21 @@ func (s *Switch) build(lab *Lab) []entry {
 	b.scalar(mib.AgentInventoryMachineModel, OS, []byte(s.Model))
 	b.scalar(mib.AgentInventorySerialNumber, OS, []byte(s.Serial))
 	b.scalar(mib.AgentInventorySoftwareVersion, OS, []byte(s.FW))
+	const clockZoneHours = 9
+	clock := time.Now().In(time.FixedZone("lab", clockZoneHours*3600)).Add(s.clockSkew)
+	b.scalar(mib.AgentSystemTime, OS, []byte(clock.Format("15:04:05")))
+	b.scalar(mib.AgentSystemDate, OS, []byte(clock.Format("Jan 2 2006")))
+	source := 2
+	if s.clockSkew != 0 {
+		source = 0
+	}
+	b.scalar(mib.AgentSystemTimeSource, I, source)
+	b.scalar(mib.AgentTimeZoneHoursOffset, I, clockZoneHours)
+	b.scalar(mib.AgentTimeZoneMinutesOffset, I, 0)
+	b.scalar(mib.AgentSystemSummerTimeState, I, 0)
+	b.scalar(mib.AgentSummerTimeMode, I, 0)
+	b.scalar(mib.AgentStRecurringZoneOffset, I, 0)
+	b.scalar(mib.AgentStNonRecurringZoneOffset, I, 0)
 	for i, n := range []string{"RFC 1213 - MIB-II", "IF-MIB", "EtherLike-MIB", "POWER-ETHERNET-MIB", "LLDP-MIB", "FASTPATH-SWITCHING-MIB", "FASTPATH-BOXSERVICES-PRIVATE-MIB", "FASTPATH-QOS-COS-MIB", "FASTPATH-POWER-ETHERNET-MIB", "FASTPATH-DHCPSERVER-PRIVATE-MIB", "FASTPATH-LOGGING-MIB", "FASTPATH-GREEN-ETHERNET-MIB", "FASTPATH-UDLD-MIB"} {
 		b.add(mib.AgentSupportedMibName, i1(i+1), OS, []byte(n))
 	}

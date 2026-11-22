@@ -6,6 +6,7 @@ export const en: Dictionary = {
   checklist: {
     title: 'Pre-show checklist', pass: 'Pass', review: 'Needs review', pending: 'Pending', other: 'Other checks',
     reach: 'All switches reachable', trap: 'Trap receipt confirmed', clock: 'Clock offset within 60 seconds',
+    clockOffset: 'Clock offset from monitoring PC: {seconds} s', clockUnavailable: 'Clock offset needs review because no measurement is available.',
     devices: 'All registered devices visible', unacked: 'No unacknowledged alerts', active: 'No active alerts (including acknowledged alerts)',
     initial: 'Initial collection complete for all switches', host: 'Trap listener and sleep prevention active',
     excluded: 'Excluded ports', ping: 'Registered device ping and planned IP', recent: 'Recent errors and link interruptions',

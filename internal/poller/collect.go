@@ -648,6 +648,7 @@ func (w *worker) collectSlow() error {
 	if err := w.collectSystem(); err != nil {
 		return err
 	}
+	w.collectClock()
 	pm := w.portMap()
 	// Bridge Port→ifIndex 変換表（仕様4.2: 必ず経由）
 	if rows, err := w.c.WalkColumns([]string{mib.Dot1dBasePortIfIdx}); err == nil {

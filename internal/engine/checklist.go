@@ -290,7 +290,13 @@ func (e *Engine) ShowChecklist(ctx context.Context, trapReady, english bool) (Sh
 			continue
 		}
 		target := ChecklistTarget{SwitchID: a.SwitchID, IfIndex: a.IfIndex, MAC: a.MAC, Label: strings.TrimSpace(a.SwitchName + " " + a.Port)}
-		if a.SwitchID == 0 && a.MAC == "" {
+		if a.Code == "FAN_FAIL" || a.Code == "PSU_FAIL" {
+			target = ChecklistTarget{SwitchID: a.SwitchID, Label: a.SwitchName}
+			if s := byID[a.SwitchID]; s != nil {
+				target = switchTarget(s)
+			}
+		}
+		if target.SwitchID == 0 && target.MAC == "" {
 			target.Destination = "logs"
 		}
 		if target.Label == "" {

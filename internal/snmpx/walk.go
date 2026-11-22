@@ -40,6 +40,14 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// GetWithoutRetry はタイムアウト分が往復時間の計測に混ざるのを防ぐ。
+func (c *Client) GetWithoutRetry(oids []string) (map[string]gosnmp.SnmpPDU, error) {
+	retries := c.g.Retries
+	c.g.Retries = 0
+	defer func() { c.g.Retries = retries }()
+	return c.Get(oids)
+}
+
 // Get はスカラーを取得する。存在しないOIDは結果に含めない。
 func (c *Client) Get(oids []string) (map[string]gosnmp.SnmpPDU, error) {
 	out := map[string]gosnmp.SnmpPDU{}

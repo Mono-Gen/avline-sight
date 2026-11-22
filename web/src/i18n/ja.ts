@@ -5,6 +5,7 @@ export const ja = {
   checklist: {
     title: '本番前チェック', pass: '合格', review: '要確認', pending: '判定中', other: 'その他の注意',
     reach: '全スイッチ到達', trap: 'Trap受信確認', clock: '時刻ずれ60秒以内',
+    clockOffset: '監視PCとの時刻差 {seconds}秒', clockUnavailable: '時刻差は要確認です。取得できた測定値がありません。',
     devices: '登録機器がすべて見えている', unacked: '未確認アラート0件', active: '発生中アラート0件（確認済み含む）',
     initial: '全スイッチの初回取得完了', host: 'Trap待受とスリープ抑止が有効',
     excluded: '監視除外ポートの残り', ping: '登録機器のPing・予定IP一致', recent: '直近数分のエラー・断続',

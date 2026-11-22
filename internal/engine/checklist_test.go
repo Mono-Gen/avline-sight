@@ -10,6 +10,32 @@ import (
 
 const checklistTestMAC = "00:11:22:33:44:55"
 
+func TestChecklistChassisAlertTargetsOnlyTheSwitch(t *testing.T) {
+	e, _ := newTestEngine(t)
+	e.states[1] = &model.SwitchState{ID: 1, Name: "Stage"}
+	for _, code := range []string{"FAN_FAIL", "PSU_FAIL"} {
+		e.active[code] = &Alert{SwitchID: 1, SwitchName: "Stage", IfIndex: 7, Port: "1/0/7", MAC: checklistTestMAC,
+			Code: code, Severity: model.SevCritical, Active: true}
+	}
+	checklist, err := e.ShowChecklist(t.Context(), true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range checklist.Items {
+		if item.ID != "unacked" && item.ID != "active" {
+			continue
+		}
+		if len(item.Findings) != 2 {
+			t.Fatalf("%s: %v", item.ID, item.Findings)
+		}
+		for _, finding := range item.Findings {
+			if want := (ChecklistTarget{SwitchID: 1, Label: "Stage"}); finding.Target != want {
+				t.Errorf("%s: got %+v, want %+v", item.ID, finding.Target, want)
+			}
+		}
+	}
+}
+
 type checklistFixture struct {
 	e         *Engine
 	sw        *model.SwitchState

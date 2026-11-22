@@ -2,6 +2,7 @@ package poller
 
 import (
 	"context"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -89,6 +90,9 @@ func TestPollerAgainstSim(t *testing.T) {
 	}
 	if core.SysName != "AV-SW-01" || core.FW != "13.0.7.6" {
 		t.Errorf("system: %s %s", core.SysName, core.FW)
+	}
+	if offset := core.ClockOffsetSeconds; offset == nil || math.Abs(*offset) > 1 {
+		t.Errorf("Slow clock sample: %v", offset)
 	}
 	if len(core.Ports) != 30 {
 		t.Errorf("ポート数=%d want 30", len(core.Ports))

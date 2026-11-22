@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -175,6 +176,11 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 		}
 	}
 	if tier == "slow" {
+		if offset := st.ClockOffsetSeconds; offset != nil && math.Abs(*offset) > clockToleranceSeconds {
+			e.raise(seen, key(model.SevWarning, "CLOCK_SKEW", 0), ev(model.SevWarning, "CLOCK_SKEW",
+				fmt.Sprintf("監視PCとの時刻差 %.0f秒", *offset), "スイッチと監視PCの時刻同期を確認してください", 0,
+				map[string]any{"offset_seconds": *offset}))
+		}
 		for _, p := range st.Ports {
 			if p.Excluded {
 				continue
@@ -196,6 +202,10 @@ func (e *Engine) evaluate(st *model.SwitchState, tier string, set Settings) {
 	}
 	// 同じTierで今回成立しなかったキーのみ解除する（他Tierのアラートは維持）
 	e.clearKeys(func(k string, a *Alert) bool {
+		if a.Code == "CLOCK_SKEW" {
+			return a.SwitchID == st.ID && tier == "slow" && st.ClockOffsetSeconds != nil &&
+				math.Abs(*st.ClockOffsetSeconds) <= clockToleranceSeconds
+		}
 		return strings.HasPrefix(k, sw+"|") && strings.HasSuffix(k, "|"+tier) && !seen[k]
 	})
 }

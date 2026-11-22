@@ -27,6 +27,7 @@ export interface SwitchState {
   fw: string;
   serial: string;
   uptime_sec: number;
+  clock_offset_seconds?: number;
   base_mac: string;
   ports: Port[];
   health: Health;

@@ -109,6 +109,8 @@ var errorEnglish = map[string]string{
 	"出力期間が不正です":                                                   "Invalid report time range",
 	"開始と終了を指定し、開始を終了より前にしてください":                                   "Set both times and make sure the start is before the end",
 	"本番後レポートを出力できません":                                             "Could not export the post-show report",
+	"本番後レポートが出力上限を超えています":                                         "The post-show report exceeds the export limit",
+	"出力期間を短くしてください":                                               "Select a shorter time range",
 	"プロファイルIDが不正です":                                               "Invalid profile ID",
 	"表示中のプロファイルが変更されました":                                          "The active profile has changed",
 	"画面を更新してから再試行してください":                                          "Refresh the page and try again",

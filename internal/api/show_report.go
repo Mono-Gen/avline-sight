@@ -49,7 +49,9 @@ func (s *Server) showReport(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 	})
 	if err != nil {
-		if !started {
+		if errors.Is(err, store.ErrShowReportTooLarge) {
+			writeErr(w, 422, "本番後レポートが出力上限を超えています", "", "出力期間を短くしてください")
+		} else if !started {
 			writeErr(w, 500, "本番後レポートを出力できません", err.Error(), "時間をおいて再試行してください")
 		} else {
 			slog.Warn("本番後レポートの出力が中断されました", "err", err)
@@ -58,35 +60,29 @@ func (s *Server) showReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeShowReport(ctx context.Context, w io.Writer, st *store.Store, window store.ShowReportRange, start func()) error {
+	entries, err := st.ShowReport(ctx, window)
+	if err != nil {
+		return err
+	}
+	start()
+	if _, err := io.WriteString(w, "\uFEFF"); err != nil {
+		return err
+	}
 	cw := csv.NewWriter(w)
 	jst := time.FixedZone("JST", 9*60*60)
-	headerWritten := false
-	writeHeader := func() error {
-		start()
-		if _, err := io.WriteString(w, "\uFEFF"); err != nil {
-			return err
-		}
-		headerWritten = true
-		return cw.Write([]string{"time (JST)", "type", "event_id", "code", "severity", "switch_id", "switch_name", "if_index", "title", "detail"})
+	if err := cw.Write([]string{"time (JST)", "type", "event_id", "code", "severity", "switch_id", "switch_name", "if_index", "title", "detail"}); err != nil {
+		return err
 	}
-	err := st.ShowReport(ctx, window, func(entry store.ShowReportEntry) error {
-		if !headerWritten {
-			if err := writeHeader(); err != nil {
-				return err
-			}
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		row := []string{entry.At.In(jst).Format("2006-01-02 15:04:05.000"), entry.Kind, strconv.FormatInt(entry.EventID, 10),
 			entry.Code, entry.Severity, strconv.FormatInt(entry.SwitchID, 10), entry.SwitchName, strconv.Itoa(entry.IfIndex), entry.Title, entry.Detail}
 		for i, value := range row {
 			row[i] = csvSafe(value)
 		}
-		return cw.Write(row)
-	})
-	if err != nil {
-		return err
-	}
-	if !headerWritten {
-		if err := writeHeader(); err != nil {
+		if err := cw.Write(row); err != nil {
 			return err
 		}
 	}

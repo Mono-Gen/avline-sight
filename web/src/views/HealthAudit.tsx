@@ -53,6 +53,9 @@ export function HealthAudit(p: ViewProps) {
     {!p.replay && <PollingStatus {...statePolling} />}
     {state && <>
       <h2>{t('ui.m255')}</h2>
+      <p>{state.clock_offset_seconds == null
+        ? t('checklist.clockUnavailable')
+        : t('checklist.clockOffset', { seconds: state.clock_offset_seconds })}</p>
       <Table
         values={{ temp_state: localizedStatus }}
         rows={summary ? [Object.fromEntries(Object.entries(summary).filter(([, value]) => value !== undefined))] : []}
