@@ -13,7 +13,7 @@ export function createPoller<T>(options: PollOptions<T>) {
   let pending: Promise<void> | null = null;
   let controller: AbortController | undefined;
   const refresh = (): Promise<void> => {
-    // 遅い応答が更新周期を超えても、同じ画面から要求を積み重ねない。
+    
     if (!active) return Promise.resolve();
     if (pending) return pending;
     const request = new AbortController();

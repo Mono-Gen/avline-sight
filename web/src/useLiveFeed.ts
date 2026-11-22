@@ -20,10 +20,12 @@ export function useLiveFeed({ muted, replay, settings, setOverview, setState, se
   preferences.current = { muted, replay, settings };
   useEffect(() => {
     const live = new LiveSocket(message => {
+      if (['alerts_changed', 'phase_changed', 'work_changed', 'lock_changed'].includes(message.type)) {
+        window.dispatchEvent(new CustomEvent('live-control', { detail: message }));
+      }
       if (message.type === 'overview_tick') setOverview(previous => mergeOverviewTick(previous, message.data));
       if (message.type === 'switch_state') setState(message.data);
       if (message.type !== 'event_pushed') return;
-      // 長時間稼働時のメモリ増加を抑え、同じIDの再配信でも重複させない。
       setEvents(old => [message.data, ...asArray(old).filter(item => item.id !== message.data.id)].slice(0, LIVE_EVENT_LIMIT));
       setOverview(previous => pushRecentEvent(previous, message.data));
       const current = preferences.current;
@@ -36,7 +38,6 @@ export function useLiveFeed({ muted, replay, settings, setOverview, setState, se
         oscillator.start();
         oscillator.stop(context.currentTime + 0.15);
       } catch {
-        // ブラウザーが音声を制限しても、画面と通知は継続する。
       }
     }, setOnline);
     socket.current = live;

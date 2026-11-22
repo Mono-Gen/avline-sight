@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import React from 'react';
 
 interface Props {
@@ -20,10 +21,10 @@ export class ErrorBoundary extends React.Component<Props, {
     if (!this.state.error) return this.props.children;
     return (
       <section className="panel space-y-3" role="alert">
-        <h2 className="text-xl font-bold">⚠ {this.props.name || 'アプリ'}を表示できませんでした</h2>
-        <p>原因: 受信データまたは画面処理に問題が発生しました。</p>
-        <p>対処: 再読み込みしてください。繰り返す場合はサーバーの状態を確認してください。</p>
-        <button onClick={() => window.location.reload()}>再読み込み</button>
+        <h2 className="text-xl font-bold">⚠ {this.props.name || t('ui.m123')}{t('ui.m124')}</h2>
+        <p>{t('ui.m125')}</p>
+        <p>{t('ui.m126')}</p>
+        <button onClick={() => window.location.reload()}>{t('ui.m127')}</button>
       </section>
     );
   }

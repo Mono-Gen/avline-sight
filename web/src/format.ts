@@ -1,4 +1,5 @@
-// 空配列と不正な応答を同じ安全な描画経路へ通し、監視画面全体の停止を防ぐ。
+import { t } from './i18n';
+
 export function asArray<T>(value: T): (T extends readonly (infer Item)[] ? NonNullable<Item> : never)[] {
   return (Array.isArray(value) ? value.filter(item => item != null) : []) as (T extends readonly (infer Item)[] ? NonNullable<Item> : never)[];
 }
@@ -24,7 +25,7 @@ export function formatBps(value: number): string {
 export function formatUptime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '—';
   const minutes = Math.floor(seconds / 60);
-  return `${Math.floor(minutes / 1440)}日 ${Math.floor(minutes / 60) % 24}時間 ${minutes % 60}分`;
+  return t('ui.m211', { p0: Math.floor(minutes / 1440), p1: Math.floor(minutes / 60) % 24, p2: minutes % 60 });
 }
 
 export function resolveSwitchId(switches: readonly {
@@ -41,13 +42,11 @@ export function labSwitchIndex(name: string): number | null {
 }
 
 export function alertCount(counts: object | null | undefined, severity: string): number {
-  // 実バックエンドの大文字キーとAPI文書の小文字キーの両方を受け入れる。
   const values = (counts || {}) as Record<string, unknown>;
   const value = values[severity.toLowerCase()] ?? values[severity.toUpperCase()];
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-// 仕様2.3-3: 保存はUTC、表示は監視PCのローカル時刻とする
 export function formatTime(value: unknown): string {
   if (typeof value !== 'string' || value === '') return '—';
   const d = new Date(value);

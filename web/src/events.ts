@@ -17,7 +17,7 @@ export interface EventFilters {
 export function mergeOverviewTick(previous: Overview, incoming: Overview): Overview {
   return {
     ...incoming,
-    // 差分tickのnullは「履歴を消去」ではなく「履歴を同送しない」を意味する。
+    
     recent_events: (Array.isArray(incoming.recent_events)
       ? asArray(incoming.recent_events)
       : asArray(previous.recent_events)).slice(0, RECENT_EVENT_LIMIT),
@@ -43,7 +43,7 @@ export function matchesEvent(event: Event, filter: EventFilters): boolean {
 export function logRows(searchResults: Event[], liveEvents: Event[], filter: EventFilters): Event[] {
   const search = asArray(searchResults).slice(0, SEARCH_EVENT_LIMIT).filter(event => matchesEvent(event, filter));
   const live = asArray(liveEvents).slice(0, LIVE_EVENT_LIMIT).filter(event => matchesEvent(event, filter));
-  // 履歴検索とライブは個別に上限を守る。全体を再度切り詰めると古い検索結果が消える。
+  
   return Array.from(new Map([...live, ...search].map(event => [event.id, event])).values())
     .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts));
 }

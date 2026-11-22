@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useEffect, useState } from 'react';
 import { api, download, json, response } from '../api';
 import { asArray, formatTime } from '../format';
@@ -17,10 +18,9 @@ export function ExportDialog({ close, run, busy }: {
   useEffect(() => {
     api<Event[]>('/api/events?category=MARKER').then(setMarkers).catch(() => setMarkers([]));
   }, []);
-  return <Dialog title="ログパックを書き出す" close={close}>
+  return <Dialog title={t('ui.m128')} close={close}>
     <select value={marker} onChange={e => setMarker(e.target.value)}>
-      <option value="">期間指定（空欄は直近1時間）
-      </option>
+      <option value="">{t('ui.m129')}</option>
       {asArray(markers).map(m => <option value={m.id} key={m.id}>
         {formatTime(m.ts)}
 
@@ -28,10 +28,8 @@ export function ExportDialog({ close, run, busy }: {
       </option>)}
     </select>
     {marker ? <select value={minutes} onChange={e => setMinutes(Number(e.target.value))}>
-      {[3, 5, 10].map(n => <option key={n} value={n}>前後
-        {n}
-        分
-      </option>)}
+      {[3, 5, 10].map(n => <option key={n} value={n}>{t('ui.m130')}{n}
+        {t('ui.m131')}</option>)}
     </select> : <div>
       <input type="datetime-local" value={from} onChange={e => setFrom(e.target.value)} />
       ～
@@ -53,7 +51,6 @@ export function ExportDialog({ close, run, busy }: {
         download(await r.blob(), 'export.avsight');
         close();
       })}
-    >書き出す
-    </button>
+    >{t('ui.m132')}</button>
   </Dialog>;
 }

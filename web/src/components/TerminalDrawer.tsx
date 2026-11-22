@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
@@ -53,10 +54,10 @@ export function TerminalDrawer({ id, close }: {
       output.current = (output.current + s).slice(-1000000);
     };
     ws.onclose = e => {
-      term.writeln(`\r\n切断: ${e.reason || '接続終了'}`);
+      term.writeln(t('ui.m197', { p0: e.reason || t('ui.m196') }));
       socket.current = undefined;
     };
-    ws.onerror = () => setError('端末に接続できません（通信エラー）。スイッチと認証情報を確認してください。');
+    ws.onerror = () => setError(t('ui.m198'));
     const input = term.onData(data => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({
         type: 'data',
@@ -82,15 +83,12 @@ export function TerminalDrawer({ id, close }: {
   return <div
     className="fixed inset-x-0 bottom-0 z-40 max-h-[75vh] overflow-auto bg-slate-900 p-3 text-white shadow-xl"
   >
-    <p className="bg-amber-200 p-2 text-black">⚠ Engage / AV UI 管理下のスイッチでCLIから設定変更すると設定不整合・上書きの原因になるため、原則 show 確認用途で使用してください
-    </p>
-    <button onClick={close}>閉じる
-    </button>
+    <p className="bg-amber-200 p-2 text-black">{t('ui.m199')}</p>
+    <button onClick={close}>{t('ui.m117')}</button>
 
     <button
       onClick={() => download(new Blob([output.current], { type: 'text/plain;charset=utf-8' }), 'terminal.txt')}
-    >出力保存
-    </button>
+    >{t('ui.m200')}</button>
     {!active && <form onSubmit={e => {
       e.preventDefault();
       setActive(true);
@@ -101,10 +99,9 @@ export function TerminalDrawer({ id, close }: {
         <option>telnet
         </option>
       </select>
-      <input placeholder="ユーザー" value={user} onChange={e => setUser(e.target.value)} />
-      <input type="password" placeholder="パスワード" value={password} onChange={e => setPassword(e.target.value)} />
-      <button>接続
-      </button>
+      <input placeholder={t('ui.m201')} value={user} onChange={e => setUser(e.target.value)} />
+      <input type="password" placeholder={t('ui.m202')} value={password} onChange={e => setPassword(e.target.value)} />
+      <button>{t('ui.m203')}</button>
     </form>}
     {error && <p role="alert">
       {error}

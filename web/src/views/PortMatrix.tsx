@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useState } from 'react';
 import { api } from '../api';
 import { Table } from '../components/Common';
@@ -22,19 +23,15 @@ export function PortMatrix(p: ViewProps) {
   const preset = asArray(p.settings?.views)?.find(v => v.id === p.part);
   return <section className="panel">
     <PollingStatus {...result} />
-    <input placeholder="機器名 / MAC / IP / VLAN" value={q} onChange={e => setQ(e.target.value)} />
+    <input placeholder={t('ui.m274')} value={q} onChange={e => setQ(e.target.value)} />
     <select value={sort} onChange={e => setSort(e.target.value)}>
-      <option value="err">エラー順
-      </option>
-      <option value="poe">PoE順
-      </option>
-      <option value="bw">帯域順
-      </option>
+      <option value="err">{t('ui.m275')}</option>
+      <option value="poe">{t('ui.m276')}</option>
+      <option value="bw">{t('ui.m277')}</option>
     </select>
     <label>
       <input type="checkbox" checked={anomaly} onChange={e => setAnomaly(e.target.checked)} />
-      異常のみ
-    </label>
+      {t('ui.m278')}</label>
     <Table
       rows={asArray((rows || [])).filter(x => (!anomaly || x.port.err_delta > 0 || x.port.discard_delta > 0) && (!preset?.vlans?.length || asArray(preset.vlans).includes(x.port.pvid))).map(x => ({
         switch: x.switch_name,

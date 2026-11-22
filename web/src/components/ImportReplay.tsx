@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { api, upload } from '../api';
 import type { Timeline } from '../types';
 type Run = (f: () => Promise<void>) => void;
@@ -6,8 +7,7 @@ export function ImportReplay({ run, onImport, disabled }: {
   onImport: (id: string, t: Timeline) => void;
   disabled: boolean;
 }) {
-  return <label className="cursor-pointer rounded border p-1">読込
-    <input
+  return <label className="cursor-pointer rounded border p-1">{t('ui.m140')}<input
       hidden
       type="file"
       accept=".avsight"

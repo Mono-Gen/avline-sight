@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import cytoscape from 'cytoscape';
 import { useEffect, useRef, useState } from 'react';
 import { api, json, upload } from '../api';
@@ -56,9 +57,9 @@ export function Topology(props: ViewProps) {
       <WatchBar items={props.watch} onChange={props.setWatch} run={props.run} disabled={props.locked || props.busy} />
       <PollingStatus {...result} />
       <div className="flex flex-wrap gap-2">
-        <label><input type="checkbox" checked={blocking} onChange={event => setBlocking(event.target.checked)} /> ブロッキングを表示</label>
+        <label><input type="checkbox" checked={blocking} onChange={event => setBlocking(event.target.checked)} /> {t('ui.m302')}</label>
         <select value={group} onChange={event => setGroup(event.target.value)}>
-          <option value="">マルチキャスト経路候補</option>
+          <option value="">{t('ui.m303')}</option>
           {Array.from(new Set(asArray(result.data?.multicast.groups).map(item => item.group))).map(address => <option key={address}>{address}</option>)}
         </select>
         <button
@@ -71,8 +72,8 @@ export function Topology(props: ViewProps) {
             graph.current?.nodes().forEach(node => { positions[node.id()] = node.position(); });
             await api('/api/topology/layout', json('PUT', { positions }));
           })}
-        >配置を保存</button>
-        <label>背景画像 <input
+        >{t('ui.m304')}</button>
+        <label>{t('ui.m305')}<input
           type="file"
           accept="image/*"
           disabled={props.locked || props.busy}
@@ -85,7 +86,7 @@ export function Topology(props: ViewProps) {
           }}
         /></label>
       </div>
-      <p>経路候補は両端のポート名が一致する接続です。方向や外部機器は判定できません。</p>
+      <p>{t('ui.m306')}</p>
       <div
         ref={container}
         className="h-[600px] rounded bg-slate-800"

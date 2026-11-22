@@ -61,7 +61,7 @@ export function updateTopology(
       };
       const existing = core.getElementById(node.id);
       if (existing.length) {
-        // サーバーに保存済みの座標で、未保存のドラッグ操作を巻き戻さない。
+        
         existing.data(data);
       } else {
         core.add({
@@ -90,7 +90,7 @@ export function updateTopology(
       element.toggleClass('hidden', !showBlocking && data.blocking);
     });
   });
-  // 初回だけ自動配置し、それ以降はデータ差分を適用する。
+  
   if (initial && nodes.length) {
     const saved = nodes.some(node => Number.isFinite(node.x) && Number.isFinite(node.y));
     core.layout({ name: saved ? 'preset' : 'grid' }).run();

@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useState } from 'react';
 import { api, json } from '../api';
 import { Chart, Table } from '../components/Common';
@@ -36,24 +37,22 @@ export function HealthAudit(p: ViewProps) {
   } : undefined;
   return <section className="panel space-y-4">
     <select value={p.selected} onChange={e => p.select(Number(e.target.value))}>
-      <option value="0">スイッチを選択
-      </option>
+      <option value="0">{t('ui.m254')}</option>
       {asArray((p.replay || p.overview.switches || [])).map(s => <option key={s.id} value={s.id}>
         {s.name}
       </option>)}
     </select>
     {!p.replay && <PollingStatus {...statePolling} />}
     {state && <>
-      <h2>筐体ヘルス / PoE
-      </h2>
+      <h2>{t('ui.m255')}</h2>
       <Table
         rows={summary ? [Object.fromEntries(Object.entries(summary).filter(([, value]) => value !== undefined))] : []}
       />
-      <h2>ファン</h2>
+      <h2>{t('ui.m059')}</h2>
       <Table rows={asArray(health?.fans)} />
-      <h2>電源</h2>
+      <h2>{t('ui.m060')}</h2>
       <Table rows={asArray(health?.psus)} />
-      <h2>プロセス</h2>
+      <h2>{t('ui.m061')}</h2>
       <Table rows={asArray(health?.processes)} />
       <h2>SFP
       </h2>
@@ -71,30 +70,26 @@ export function HealthAudit(p: ViewProps) {
       />
       <PollingStatus {...metrics} />
       <PollingStatus {...report} />
-      <h2>監査
-      </h2>
+      <h2>{t('ui.m256')}</h2>
       <Table rows={audit?.findings || []} />
-      <h2>ファームウェア
-      </h2>
+      <h2>{t('ui.m257')}</h2>
       <Table
         rows={asArray(Object.entries(audit?.fw_versions || {})).map(([version, switches]) => ({
           version,
           switches
         }))}
       />
-      <h2>ベースライン
-      </h2>
+      <h2>{t('ui.m258')}</h2>
       <button
         disabled={p.locked || p.busy}
         onClick={() => {
-          const name = prompt('ベースライン名');
+          const name = prompt(t('ui.m259'));
           if (name) p.run(async () => {
             await api('/api/baselines', json('POST', { name }));
             await load();
           });
         }}
-      >作成
-      </button>
+      >{t('ui.m260')}</button>
       {asArray((bases || [])).map(b => <div key={b.id}>
         {b.name}
 
@@ -107,19 +102,17 @@ export function HealthAudit(p: ViewProps) {
             }>(`/api/baselines/${b.id}/diff`);
             setDiff(r.diffs || []);
           })}
-        >差分
-        </button>
+        >{t('ui.m261')}</button>
 
         <button
           disabled={p.locked || p.busy}
           onClick={() => {
-            if (confirm(`${b.name} を削除しますか？`)) p.run(async () => {
+            if (confirm(t('ui.m262', { p0: b.name }))) p.run(async () => {
               await api(`/api/baselines/${b.id}`, json('DELETE'));
               await load();
             });
           }}
-        >削除
-        </button>
+        >{t('ui.m263')}</button>
       </div>)}
       <Table rows={diff} />
     </>}

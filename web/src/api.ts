@@ -1,4 +1,4 @@
-/** 既定の応答待ち上限。通常のAPIは数百msで返るため、15秒で打ち切って画面を固めない。 */
+import { getLang, t } from './i18n';
 export const DEFAULT_TIMEOUT_MS = 15000;
 
 async function consumeResponse<T>(path: string, options: RequestInit, consume: (response: Response) => Promise<T>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
@@ -8,8 +8,11 @@ async function consumeResponse<T>(path: string, options: RequestInit, consume: (
   options.signal?.addEventListener('abort', abort, { once: true });
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const headers = new Headers(options.headers);
+    headers.set('Accept-Language', getLang());
     const r = await fetch(path, {
       ...options,
+      headers,
       signal: controller.signal
     });
     if (!r.ok) {
@@ -20,9 +23,9 @@ async function consumeResponse<T>(path: string, options: RequestInit, consume: (
         };
         reason = b.error || reason;
       } catch {
-        /* HTTP状態を使用する。 */
+        reason = `HTTP ${r.status}`;
       }
-      throw new Error(`操作に失敗しました（${reason}）。接続や入力を確認して再試行してください。`);
+      throw new Error(t('rack.error', { reason }));
     }
     return await consume(r);
   } finally {
@@ -36,7 +39,6 @@ export function response(path: string, options: RequestInit = {}): Promise<Respo
 
 export async function api<T>(path: string, options: RequestInit = {}, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   try {
-    // JSON本文の読込中も、画面切替の中断とタイムアウトを有効に保つ。
     return await consumeResponse(path, options, async result => {
       if (result.status === 204) return undefined as T;
       const text = await result.text();
@@ -70,5 +72,7 @@ export function upload(file: File) {
   };
 }
 export function message(e: unknown) {
-  return e instanceof Error && e.message.includes('操作に失敗しました') ? e.message : `操作に失敗しました（${e instanceof Error ? e.message : '原因不明'}）。接続や入力を確認して再試行してください。`;
+  const reason = e instanceof Error ? e.message : t('rack.unknown');
+  return e instanceof Error && (reason.startsWith(t('rack.error', { reason: '' }).split('(')[0].split('（')[0]))
+    ? reason : t('rack.error', { reason });
 }

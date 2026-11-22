@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { asArray } from './format';
 import type { ModelDefinition, Port } from './types';
 
@@ -16,12 +17,12 @@ export function frontPanelRows(ports: Port[], definition?: ModelDefinition): Pan
     const rows: PanelRow[] = definition.rows.map(row => ({
       slots: row.map(name => {
         if (name) assigned.add(name);
-        // 未取得・非表示のポートでも物理配置が詰まらないよう、空き位置を残す。
+        
         return name ? byName.get(name) || null : null;
       }),
     }));
     const extra = list.filter(port => !assigned.has(port.name));
-    if (extra.length) rows.push({ label: 'その他', slots: extra });
+    if (extra.length) rows.push({ label: t('ui.m212'), slots: extra });
     return rows;
   }
   const order = ['rj45', 'sfp', 'lag'];

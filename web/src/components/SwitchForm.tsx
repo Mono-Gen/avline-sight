@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useState } from 'react';
 import { api, json } from '../api';
 import { asArray } from '../format';
@@ -25,7 +26,7 @@ export function SwitchForm({ value, close, run, busy }: {
     ...form,
     [key]: val
   });
-  return <Dialog title={value ? 'スイッチ編集' : 'スイッチ登録'} close={close}>
+  return <Dialog title={value ? t('ui.m190') : t('ui.m191')} close={close}>
     <div className="grid gap-2">
       {asArray((['name', 'ip', 'group_tag', 'community', 'web_url'] as const)).map(k => <label key={k}>
         {k}
@@ -36,13 +37,11 @@ export function SwitchForm({ value, close, run, busy }: {
           onChange={e => change(k, e.target.value)}
         />
       </label>)}
-      <label>SNMPポート
-        <input type="number" value={form.snmp_port} onChange={e => change('snmp_port', Number(e.target.value))} />
+      <label>{t('ui.m192')}<input type="number" value={form.snmp_port} onChange={e => change('snmp_port', Number(e.target.value))} />
       </label>
       <label>
         <input type="checkbox" checked={form.enabled} onChange={e => change('enabled', e.target.checked)} />
-        有効
-      </label>
+        {t('ui.m009')}</label>
     </div>
     <button
       disabled={busy}
@@ -50,7 +49,6 @@ export function SwitchForm({ value, close, run, busy }: {
         await api(value ? `/api/switches/${value.id}` : '/api/switches', json(value ? 'PUT' : 'POST', form));
         close();
       })}
-    >保存
-    </button>
+    >{t('ui.m187')}</button>
   </Dialog>;
 }

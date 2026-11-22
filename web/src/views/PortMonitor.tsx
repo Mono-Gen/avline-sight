@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useEffect, useState } from 'react';
 import { api, json } from '../api';
 import { Chart, FrontPanel, Table } from '../components/Common';
@@ -35,7 +36,7 @@ export function PortMonitor(p: ViewProps) {
   const models = usePolling(signal => api<ModelDefinitions>('/api/models', { signal }), 0);
   const switches = asArray(p.replay || p.overview.switches);
   useEffect(() => {
-    // Overviewから指定された選択を優先し、未選択またはプロファイル変更時だけ補う。
+    
     const next = resolveSwitchId(switches, p.selected);
     if (next && next !== p.selected) p.select(next);
   }, [p.selected, p.replay, p.overview.switches]);
@@ -77,14 +78,12 @@ export function PortMonitor(p: ViewProps) {
           setIdx(0);
         }}
       >
-        <option value="0">スイッチを選択
-        </option>
+        <option value="0">{t('ui.m254')}</option>
         {asArray((p.replay || p.overview.switches || [])).map(x => <option key={x.id} value={x.id}>
           {x.name}
         </option>)}
       </select>
-      <button disabled={!p.selected || p.locked} onClick={() => p.openTerminal(p.selected)}>ターミナル
-      </button>
+      <button disabled={!p.selected || p.locked} onClick={() => p.openTerminal(p.selected)}>{t('ui.m279')}</button>
       <button
         disabled={!p.selected || !!p.replay}
         onClick={() => p.run(async () => {
@@ -92,7 +91,7 @@ export function PortMonitor(p: ViewProps) {
             web_url: string;
           }>(`/api/switches/${p.selected}/access-info`);
           const u = new URL(a.web_url);
-          if (!asArray(['http:', 'https:']).includes(u.protocol)) throw new Error('URLが不正です。設定を確認してください。');
+          if (!asArray(['http:', 'https:']).includes(u.protocol)) throw new Error(t('ui.m280'));
           window.open(u.href, '_blank', 'noopener,noreferrer');
         })}
       >WebUI
@@ -116,8 +115,8 @@ export function PortMonitor(p: ViewProps) {
           {port.speed_mbps}
           Mbps
         </h2>
-        <p>受信 {formatBps(port.rx_bps)} / 送信 {formatBps(port.tx_bps)} · エラー {port.err_delta} · 破棄 {port.discard_delta}</p>
-        <p>マルチキャスト受信 {decimal(port.rx_mc_pps)} pps / 送信 {decimal(port.tx_mc_pps)} pps</p>
+        <p>{t('ui.m281')}{formatBps(port.rx_bps)} {t('ui.m282')}{formatBps(port.tx_bps)} {t('ui.m283')}{port.err_delta} {t('ui.m284')}{port.discard_delta}</p>
+        <p>{t('ui.m285')}{decimal(port.rx_mc_pps)} {t('ui.m286')}{decimal(port.tx_mc_pps)} pps</p>
         <p>EEE
           {port.eee}
           · PAUSE
@@ -130,12 +129,9 @@ export function PortMonitor(p: ViewProps) {
           {port.trust}
         </p>
         <PortHardware port={port} />
-        <h3>接続機器
-        </h3>
-        {(port.devices || []).length > 1 && <p>⚠ 配下にハブ/非管理スイッチあり (
-          {port.devices.length}
-          台)
-        </p>}
+        <h3>{t('ui.m090')}</h3>
+        {(port.devices || []).length > 1 && <p>{t('ui.m287')}{port.devices.length}
+          {t('ui.m288')}</p>}
         {asArray((port.devices || [])).map(d => <div key={d.mac}>
           {d.mac}
 
@@ -158,7 +154,7 @@ export function PortMonitor(p: ViewProps) {
                   rtt_ms: number;
                   output: string;
                 }>('/api/diagnostics/ping', json('POST', { ip: d.ip }));
-                alert(`${r.ok ? '成功' : '失敗'} ${r.rtt_ms}ms ${r.output}`);
+                alert(`${r.ok ? t('ui.m289') : t('ui.m290')} ${r.rtt_ms}ms ${r.output}`);
               })}
             >Ping
             </button>
@@ -171,22 +167,19 @@ export function PortMonitor(p: ViewProps) {
           </>}
         </div>)}
         <div>
-          <label>メモ
-            <input value={memo} onChange={e => setMemo(e.target.value)} />
+          <label>{t('ui.m101')}<input value={memo} onChange={e => setMemo(e.target.value)} />
           </label>
 
           <label>
             <input type="checkbox" checked={excluded} onChange={e => setExcluded(e.target.checked)} />
-            除外
-          </label>
+            {t('ui.m133')}</label>
 
-          <label>期待速度
-            <input type="number" value={speed} onChange={e => setSpeed(Number(e.target.value))} />
+          <label>{t('ui.m291')}<input type="number" value={speed} onChange={e => setSpeed(Number(e.target.value))} />
           </label>
 
           <select value={role} onChange={e => setRole(e.target.value)}>
             {asArray(roles).map(r => <option key={r} value={r}>
-              {r || '役割なし'}
+              {r || t('ui.m292')}
             </option>)}
           </select>
           <button
@@ -199,8 +192,7 @@ export function PortMonitor(p: ViewProps) {
                 av_role: role
               }));
             })}
-          >保存
-          </button>
+          >{t('ui.m187')}</button>
 
           <button
             disabled={p.busy || p.locked}
@@ -216,40 +208,34 @@ export function PortMonitor(p: ViewProps) {
               await api('/api/watchlist', json('PUT', next));
               p.setWatch(next);
             })}
-          >📌 注目
-          </button>
+          >{t('ui.m293')}</button>
         </div>
         <button
           disabled={p.busy || p.locked}
           onClick={() => {
-            if (confirm('カウンターの基準をリセットしますか？')) p.run(async () => {
+            if (confirm(t('ui.m294'))) p.run(async () => {
               await api(`/api/switches/${p.selected}/counters/reset`, json('POST', { if_index: idx }));
               setUntil(Date.now() + 600000);
               setNow(Date.now());
             });
           }}
-        >10分観測開始
-        </button>
+        >{t('ui.m295')}</button>
 
-        {until > now && <span>残り
-          {Math.ceil((until - now) / 1000)}
-          秒 · エラー
-          {port.err_since_reset}
-          / 破棄
-          {port.discard_since_reset}
+        {until > now && <span>{t('ui.m296')}{Math.ceil((until - now) / 1000)}
+          {t('ui.m297')}{port.err_since_reset}
+          {t('ui.m298')}{port.discard_since_reset}
         </span>}
         {!p.replay && <>
           <select value={range} onChange={e => setRange(Number(e.target.value))}>
             {[15, 60, 360, 1440].map(n => <option key={n} value={n}>
-              {n < 60 ? `${n}分` : `${n / 60}時間`}
+              {n < 60 ? t('ui.m299', { p0: n }) : t('ui.m300', { p0: n / 60 })}
             </option>)}
           </select>
           <Chart
             points={metrics.data?.series.points || []}
             keys={['rx_bps', 'tx_bps', 'rx_mc_pps', 'err_delta', 'discard_delta', 'poe_w', 'sfp_rx_dbm']}
           />
-          <h3>ポート履歴
-          </h3>
+          <h3>{t('ui.m301')}</h3>
           <PollingStatus {...metrics} />
           <Table rows={metrics.data?.history || []} />
         </>}

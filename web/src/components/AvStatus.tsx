@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { asArray } from '../format';
 import type { SwitchState } from '../types';
 import { Badge } from './Badge';
@@ -16,7 +17,7 @@ export function AvStatus({ state }: {
   return (
     <details className="rounded border p-3" open={content}>
       <summary className="cursor-pointer font-bold">
-        {state.name} · MVR / AVB {content ? '' : '（データなし）'} {warning && <Badge text="WARNING" />}
+        {state.name} · MVR / AVB {content ? '' : t('ui.m001')} {warning && <Badge text="WARNING" />}
       </summary>
       <div className="space-y-3 pt-3">
         <Table
@@ -28,9 +29,9 @@ export function AvStatus({ state }: {
             msrp_reservations: igmp.msrp_reservations || 0,
           }]}
         />
-        {groups.length > 0 && <><h3>MVRグループ</h3><Table rows={groups} /></>}
-        {failures.length > 0 && <><h3>⚠ MSRP予約失敗</h3><Table rows={failures} /></>}
-        {gptp && <><h3>gPTPクロック</h3><Table rows={[gptp]} /></>}
+        {groups.length > 0 && <><h3>{t('ui.m002')}</h3><Table rows={groups} /></>}
+        {failures.length > 0 && <><h3>{t('ui.m003')}</h3><Table rows={failures} /></>}
+        {gptp && <><h3>{t('ui.m004')}</h3><Table rows={[gptp]} /></>}
       </div>
     </details>
   );

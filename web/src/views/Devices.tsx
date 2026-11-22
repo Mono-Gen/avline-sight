@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useState } from 'react';
 import { api, json } from '../api';
 import { Badge } from '../components/Badge';
@@ -10,12 +11,12 @@ import type { BulkPingResult, BulkPingResponse, InventoryRow } from '../types';
 import { STATE_REFRESH_MS, usePolling } from '../usePolling';
 import type { ViewProps } from './props';
 
-const columns = ['名称', 'MAC', 'IP', 'Ping', 'メーカー', 'LLDP名', 'スイッチ', 'ポート', 'VLAN', 'PoE(W)', '速度', '最終確認', '検出元'];
+const columns = [t('ui.m100'), 'MAC', 'IP', 'Ping', t('ui.m074'), t('ui.m213'), t('ui.m018'), t('ui.m020'), 'VLAN', 'PoE(W)', t('ui.m214'), t('ui.m215'), t('ui.m216')];
 const emptyCell = '—';
 
 function lastSeen(value: string | undefined): string {
-  // Goのゼロ時刻はJSONでは省略されないため、観測記録なしとして扱う。
-  return value && value !== '0001-01-01T00:00:00Z' ? formatTime(value) : '記録なし';
+  
+  return value && value !== '0001-01-01T00:00:00Z' ? formatTime(value) : t('ui.m217');
 }
 
 export function DeviceInventoryTable({ rows }: { rows: InventoryRow[] }) {
@@ -27,19 +28,19 @@ export function DeviceInventoryTable({ rows }: { rows: InventoryRow[] }) {
           {asArray(rows).map(row => (
             <tr key={row.mac}>
               <td>
-                {row.label || <span className="text-slate-500 dark:text-slate-400">（名前なし）</span>}
-                {!row.seen && <span className="ml-2 whitespace-nowrap"><Badge text="○ 未検出" /></span>}
+                {row.label || <span className="text-slate-500 dark:text-slate-400">{t('ui.m091')}</span>}
+                {!row.seen && <span className="ml-2 whitespace-nowrap"><Badge text={t('ui.m218')} /></span>}
               </td>
               <td className="whitespace-nowrap font-mono">{row.mac}</td>
               <td>
                 {row.ip || emptyCell}
                 {row.ip && row.ip_stale && (
-                  <span className="ml-2 whitespace-nowrap" title="最終観測時のIPアドレスです。">
-                    <Badge text="◷ 過去のIP" />
+                  <span className="ml-2 whitespace-nowrap" title={t('ui.m219')}>
+                    <Badge text={t('ui.m220')} />
                   </span>
                 )}
               </td>
-              <td className="whitespace-nowrap" title={row.ping ? `実行: ${formatTime(row.ping.at)}` : undefined}>
+              <td className="whitespace-nowrap" title={row.ping ? t('ui.m221', { p0: formatTime(row.ping.at) }) : undefined}>
                 {row.ping ? pingLabel(row.ping.status, row.ping.rtt_ms) : emptyCell}
               </td>
               <td>{row.vendor || emptyCell}</td>
@@ -53,8 +54,8 @@ export function DeviceInventoryTable({ rows }: { rows: InventoryRow[] }) {
               <td>
                 {row.source || emptyCell}
                 {row.via_uplink && (
-                  <span className="ml-2 whitespace-nowrap" title="スイッチ間リンクの観測から推定した所在です。">
-                    <Badge text="↪ 経路上" />
+                  <span className="ml-2 whitespace-nowrap" title={t('ui.m222')}>
+                    <Badge text={t('ui.m223')} />
                   </span>
                 )}
               </td>
@@ -80,7 +81,6 @@ export function Devices(p: ViewProps) {
   const filters = { scope, q, vlans };
   const url = enabled ? deviceUrl(filters, replay) : '';
   const profileId = p.status?.profile.id;
-  // 表示条件が変わった直後も、前のプロファイルや再生時刻の行を表示しない。
   const key = JSON.stringify([url, profileId, revision]);
   const inventory = usePolling(async signal => ({ key, rows: await api<InventoryRow[]>(url, { signal }) }),
     isReplay ? 0 : STATE_REFRESH_MS, [key], enabled, 300);
@@ -88,80 +88,77 @@ export function Devices(p: ViewProps) {
   const [manual, setManual] = useState('');
   const [manualResults, setManualResults] = useState<BulkPingResult[]>([]);
   const targets = pingTargets(rows);
-  const pingDisabledReason = isReplay ? 'オフライン再生中はPingできません。'
-    : p.locked ? '閲覧専用ロック中はPingできません。'
-    : targets.length === 0 ? 'IPアドレスの分かる機器が表示されていません。'
-      : targets.length > MAX_BULK_PING ? `一度に${MAX_BULK_PING}件までです。検索やVLANで絞り込んでください。` : undefined;
-  const manualDisabledReason = isReplay ? 'オフライン再生中はPingできません。'
-    : p.locked ? '閲覧専用ロック中はPingできません。' : undefined;
+  const pingDisabledReason = isReplay ? t('ui.m224')
+    : p.locked ? t('ui.m225')
+    : targets.length === 0 ? t('ui.m226')
+      : targets.length > MAX_BULK_PING ? t('ui.m227', { p0: MAX_BULK_PING }) : undefined;
+  const manualDisabledReason = isReplay ? t('ui.m224')
+    : p.locked ? t('ui.m225') : undefined;
   const runPing = (body: { ips?: string[]; manual?: string }) => p.run(async () => {
     setNotice('');
-    // 手入力は展開後の件数が画面側では分からないため、上限件数で待つ
     const r = await api<BulkPingResponse>('/api/diagnostics/ping-bulk', json('POST', body),
       bulkPingTimeoutMs(body.ips ? body.ips.length : MAX_BULK_PING));
     const listed = new Set(rows.map(row => row.ip));
-    // 一覧にないIP（手入力）の結果だけ別表に出す。一覧の行は再取得した ping 列に反映される
     setManualResults(asArray(r.results).filter(x => !listed.has(x.ip)));
-    setNotice(`Ping完了: 応答 ${r.ok} / ${r.total}件（${(r.elapsed_ms / 1000).toFixed(1)}秒）`);
+    setNotice(t('ui.m228', { p0: r.ok, p1: r.total, p2: (r.elapsed_ms / 1000).toFixed(1) }));
     setRevision(value => value + 1);
   });
-  const importDisabledReason = isReplay ? 'オフライン再生中はCSVを読み込めません。'
-    : p.locked ? '閲覧専用ロック中はCSVを読み込めません。' : undefined;
+  const importDisabledReason = isReplay ? t('ui.m229')
+    : p.locked ? t('ui.m230') : undefined;
 
   return (
     <section className="panel space-y-3">
       <div className="flex flex-wrap items-end gap-3">
-        <div role="group" aria-label="表示範囲" className="flex gap-1">
-          <button aria-pressed={scope === 'all'} onClick={() => setScope('all')}>すべて</button>
-          <button aria-pressed={scope === 'unnamed'} onClick={() => setScope('unnamed')}>名前なしのみ</button>
+        <div role="group" aria-label={t('ui.m231')} className="flex gap-1">
+          <button aria-pressed={scope === 'all'} onClick={() => setScope('all')}>{t('ui.m232')}</button>
+          <button aria-pressed={scope === 'unnamed'} onClick={() => setScope('unnamed')}>{t('ui.m233')}</button>
         </div>
-        <label>検索 <input type="search" value={q} onChange={event => setQuery(event.target.value)} /></label>
+        <label>{t('ui.m234')}<input type="search" value={q} onChange={event => setQuery(event.target.value)} /></label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         {enabled && <>
-          <a className="underline" href={deviceUrl({ ...filters, scope: 'all' }, replay, true)} download>一覧をCSV書出</a>
-          <a className="underline" href={deviceUrl({ ...filters, scope: 'unnamed' }, replay, true)} download>名前なし雛形をCSV書出</a>
+          <a className="underline" href={deviceUrl({ ...filters, scope: 'all' }, replay, true)} download>{t('ui.m235')}</a>
+          <a className="underline" href={deviceUrl({ ...filters, scope: 'unnamed' }, replay, true)} download>{t('ui.m236')}</a>
         </>}
         <button disabled={Boolean(importDisabledReason) || p.busy} title={importDisabledReason} onClick={() => {
           setNotice('');
           setImportOpen(true);
-        }}>CSV読込</button>
+        }}>{t('ui.m237')}</button>
         {importDisabledReason && <span className="text-sm text-slate-500 dark:text-slate-400">{importDisabledReason}</span>}
       </div>
       {!isReplay && (
         <div className="flex flex-wrap items-center gap-3">
           <button disabled={Boolean(pingDisabledReason) || p.busy} title={pingDisabledReason}
-            onClick={() => runPing({ ips: targets })}>表示中の機器にPing（{targets.length}件）</button>
-          <label>手入力 <input
+            onClick={() => runPing({ ips: targets })}>{t('ui.m238')}{targets.length}{t('ui.m239')}</button>
+          <label>{t('ui.m240')}<input
             value={manual}
             placeholder="192.168.1.10, 192.168.1.20-40, 10.0.0.0/28"
             disabled={Boolean(manualDisabledReason)}
             onChange={event => setManual(event.target.value)}
           /></label>
           <button disabled={Boolean(manualDisabledReason) || !manual.trim() || p.busy} title={manualDisabledReason} onClick={() => {
-            if (window.confirm(`次の宛先にPingを送ります（1回${MAX_BULK_PING}件まで）。
-${manual.trim()}`)) runPing({ manual });
-          }}>手入力のIPにPing</button>
+            if (window.confirm(t('ui.m241', { p0: MAX_BULK_PING, p1: manual.trim() }))) runPing({ manual });
+          }}>{t('ui.m242')}</button>
           {(pingDisabledReason || manualDisabledReason) && (
             <span className="text-sm text-slate-500 dark:text-slate-400">{manualDisabledReason || pingDisabledReason}</span>
           )}
         </div>
       )}
-      <p className="text-sm text-slate-500 dark:text-slate-400">「無応答」は故障とは限りません（監視PCから経路がない、機器がPingに応答しない設定など）。</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{t('ui.m243')}</p>
       {notice && <p role="status">✓ {notice}</p>}
       {manualResults.length > 0 && (
         <div className="overflow-auto">
-          <h3 className="font-bold">一覧にないIPの結果 {manualResults.length}件</h3>
+          <h3 className="font-bold">{t('ui.m244')}{manualResults.length}{t('ui.m096')}</h3>
           <table className="text-sm">
-            <thead><tr><th scope="col">IP</th><th scope="col">結果</th><th scope="col">詳細</th></tr></thead>
+            <thead><tr><th scope="col">IP</th><th scope="col">{t('ui.m245')}</th><th scope="col">{t('ui.m085')}</th></tr></thead>
             <tbody>
               {manualResults.map(x => <tr key={x.ip}><td className="font-mono">{x.ip}</td><td>{pingLabel(x.status, x.rtt_ms)}</td><td>{x.detail || emptyCell}</td></tr>)}
             </tbody>
           </table>
         </div>
       )}
-      {enabled ? <PollingStatus {...inventory} /> : <p role="status">再生時刻を取得中…</p>}
-      {inventory.data?.key === key && rows.length === 0 && <p>該当する接続機器はありません。</p>}
+      {enabled ? <PollingStatus {...inventory} /> : <p role="status">{t('ui.m246')}</p>}
+      {inventory.data?.key === key && rows.length === 0 && <p>{t('ui.m247')}</p>}
       <DeviceInventoryTable rows={rows} />
       {importOpen && !importDisabledReason && (
         <DeviceCsvImportDialog
@@ -171,8 +168,7 @@ ${manual.trim()}`)) runPing({ manual });
           close={() => setImportOpen(false)}
           onImported={result => {
             setImportOpen(false);
-            setNotice(`機器名CSVを反映しました。${importSummary(result)}`);
-            // 確定前のポーリング応答を無効にし、反映後の一覧を取得する。
+            setNotice(t('ui.m248', { p0: importSummary(result) }));
             setRevision(value => value + 1);
           }}
         />

@@ -34,7 +34,7 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, "接続機器一覧を作れません", err.Error(), "")
 		return
 	}
-	writeJSON(w, 200, rows)
+	writeJSON(w, 200, inventoryGroupRows(r, rows))
 }
 
 func (s *Server) devicesCSV(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +44,21 @@ func (s *Server) devicesCSV(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, "接続機器一覧を作れません", err.Error(), "")
 		return
 	}
-	writeInventoryCSV(w, rows, opt, time.Now())
+	writeInventoryCSV(w, inventoryGroupRows(r, rows), opt, time.Now(), r.URL.Query().Get("lang"))
+}
+
+// group省略は全体、明示した空文字は未所属として区別する。
+func inventoryGroupRows(r *http.Request, rows []engine.InventoryRow) []engine.InventoryRow {
+	if !r.URL.Query().Has("group") || r.URL.Query().Get("group") != "" {
+		return rows
+	}
+	out := make([]engine.InventoryRow, 0, len(rows))
+	for _, row := range rows {
+		if row.GroupTag == "" {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 // replayInventory は再生データの指定時刻スナップショットから一覧を作る。
@@ -79,7 +93,7 @@ func (s *Server) replayInventory(w http.ResponseWriter, r *http.Request) ([]engi
 	}
 	opt := inventoryOptions(r)
 	opt.SnapshotLabels = true
-	return engine.BuildInventory(states, aliases, last, opt, at), at, true
+	return inventoryGroupRows(r, engine.BuildInventory(states, aliases, last, opt, at)), at, true
 }
 
 func (s *Server) replayDevices(w http.ResponseWriter, r *http.Request) {
@@ -90,11 +104,11 @@ func (s *Server) replayDevices(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) replayDevicesCSV(w http.ResponseWriter, r *http.Request) {
 	if rows, at, ok := s.replayInventory(w, r); ok {
-		writeInventoryCSV(w, rows, inventoryOptions(r), at)
+		writeInventoryCSV(w, rows, inventoryOptions(r), at, r.URL.Query().Get("lang"))
 	}
 }
 
-func writeInventoryCSV(w http.ResponseWriter, rows []engine.InventoryRow, opt engine.InventoryOptions, at time.Time) {
+func writeInventoryCSV(w http.ResponseWriter, rows []engine.InventoryRow, opt engine.InventoryOptions, at time.Time, lang ...string) {
 	kind := "devices"
 	if opt.Scope == "unnamed" {
 		kind = "devices-unnamed"
@@ -103,7 +117,8 @@ func writeInventoryCSV(w http.ResponseWriter, rows []engine.InventoryRow, opt en
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	w.Header().Set("Cache-Control", "no-store")
-	if err := engine.WriteInventoryCSV(w, rows, time.Local); err != nil {
+	english := len(lang) > 0 && strings.EqualFold(lang[0], "en")
+	if err := writeLocalizedInventoryCSV(w, rows, time.Local, english); err != nil {
 		// ヘッダ送信後なのでステータスは変えられない。途中切れのファイルになるためログに残す
 		slog.Warn("接続機器CSVの書出が途中で失敗", "err", err)
 	}

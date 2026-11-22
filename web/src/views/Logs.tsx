@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useState } from 'react';
 import { api, json } from '../api';
 import { Badge } from '../components/Badge';
@@ -10,12 +11,12 @@ import { usePolling } from '../usePolling';
 import type { ViewProps } from './props';
 
 const filterLabels = {
-  category: '分類',
-  severity: '重要度',
-  switch_id: 'スイッチID',
-  q: 'テキスト',
-  from: '開始日時',
-  to: '終了日時',
+  get category() { return t('ui.m083'); },
+  get severity() { return t('ui.m026'); },
+  get switch_id() { return t('ui.m019'); },
+  get q() { return t('ui.m264'); },
+  get from() { return t('ui.m265'); },
+  get to() { return t('ui.m266'); },
 };
 type Filters = EventFilters;
 
@@ -62,25 +63,25 @@ export function Logs(props: ViewProps) {
             await api('/api/events/ack-all', json('POST'));
             await refresh();
           })}
-        >すべて確認</button>
+        >{t('ui.m267')}</button>
         <a href="/api/export/csv?type=events">CSV</a>
         <a href="/api/export/json?type=events">JSON</a>
       </div>
       <div className="overflow-auto">
         <table>
-          <thead><tr><th>時刻</th><th>重要度</th><th>分類</th><th>スイッチ</th><th>内容</th><th>確認</th></tr></thead>
+          <thead><tr><th>{t('ui.m082')}</th><th>{t('ui.m026')}</th><th>{t('ui.m083')}</th><th>{t('ui.m018')}</th><th>{t('ui.m028')}</th><th>{t('ui.m268')}</th></tr></thead>
           <tbody>
             {rows.map(event => (
               <tr key={event.id}>
                 <td>{formatTime(event.ts)}</td><td><Badge text={event.severity} /></td><td>{event.category}</td>
                 <td>{event.switch_name}</td><td>{event.title} {event.hint}</td>
-                <td>{event.acked ? '確認済' : <button
+                <td>{event.acked ? t('ui.m269') : <button
                   disabled={props.busy || props.locked}
                   onClick={() => props.run(async () => {
                     await api(`/api/events/${event.id}/ack`, json('POST'));
                     await refresh();
                   })}
-                >確認</button>}</td>
+                >{t('ui.m268')}</button>}</td>
               </tr>
             ))}
           </tbody>

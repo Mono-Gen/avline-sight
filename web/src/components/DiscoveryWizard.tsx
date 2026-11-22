@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useEffect, useState } from 'react';
 import { api, json } from '../api';
 import { asArray } from '../format';
@@ -25,9 +26,9 @@ export function DiscoveryWizard({ close, run, busy }: {
   useEffect(() => {
     api<typeof candidates>('/api/discovery/lldp-candidates').then(setCandidates).catch(() => setCandidates([]));
   }, []);
-  return <Dialog title="スイッチ探索" close={close}>
+  return <Dialog title={t('ui.m118')} close={close}>
     <input placeholder="CIDR" value={cidr} onChange={e => setCidr(e.target.value)} />
-    <input type="password" placeholder="コミュニティ" value={community} onChange={e => setCommunity(e.target.value)} />
+    <input type="password" placeholder={t('ui.m119')} value={community} onChange={e => setCommunity(e.target.value)} />
     <button
       disabled={busy}
       onClick={() => run(async () => {
@@ -39,8 +40,7 @@ export function DiscoveryWizard({ close, run, busy }: {
         }));
         setFound(r.found || []);
       })}
-    >探索
-    </button>
+    >{t('ui.m120')}</button>
     {asArray(found).map(f => <div key={f.ip}>
       {f.ip}
 
@@ -62,11 +62,9 @@ export function DiscoveryWizard({ close, run, busy }: {
             registered: true
           } : x));
         })}
-      >登録
-      </button>
+      >{t('ui.m121')}</button>
     </div>)}
-    <h3>LLDP候補
-    </h3>
+    <h3>{t('ui.m122')}</h3>
     {asArray(candidates).map(c => <div key={c.ip}>
       {c.ip}
 
@@ -89,8 +87,7 @@ export function DiscoveryWizard({ close, run, busy }: {
           }));
           setCandidates(asArray(candidates).filter(x => x.ip !== c.ip));
         })}
-      >登録
-      </button>
+      >{t('ui.m121')}</button>
     </div>)}
   </Dialog>;
 }

@@ -10,7 +10,6 @@ export function useSwitchState(id: number, live: SwitchState | undefined, replay
   );
   const polled = polling.data?.id === id ? polling.data : undefined;
   const currentLive = live?.id === id ? live : undefined;
-  // WSと定期取得の到着順が入れ替わっても、採取時刻の新しい状態を表示する。
   const state = replay ? asArray(replay).find(item => item.id === id)
     : currentLive && (!polled || Date.parse(currentLive.last_poll) >= Date.parse(polled.last_poll))
       ? currentLive : polled;

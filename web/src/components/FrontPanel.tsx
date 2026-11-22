@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { frontPanelRows } from '../frontPanelLayout';
 import type { ModelDefinitions, Port } from '../types';
 
@@ -43,11 +44,11 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions }: {
                 >
                   {port.type === 'sfp' ? '◈' : port.type === 'lag' ? '≡' : '▣'} {port.name}
                   <br />
-                  {port.excluded ? '除外' : port.oper === 'up' ? '接続中' : '未接続'}
-                  {alert && <span title="エラー・破棄カウンター増加"> ⚠ 異常</span>}
+                  {port.excluded ? t('ui.m133') : port.oper === 'up' ? t('ui.m134') : t('ui.m135')}
+                  {alert && <span title={t('ui.m136')}> {t('ui.m137')}</span>}
                   {fault
-                    ? <span className="text-red-800" title={port.poe?.fault}> ⛔ PoE障害</span>
-                    : (port.poe?.power_w || 0) > 0 && <span title="PoE給電中"> ⚡</span>}
+                    ? <span className="text-red-800" title={port.poe?.fault}> {t('ui.m138')}</span>
+                    : (port.poe?.power_w || 0) > 0 && <span title={t('ui.m139')}> ⚡</span>}
                 </button>
               );
             })}

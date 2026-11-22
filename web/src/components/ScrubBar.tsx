@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useState } from 'react';
 import { api, json } from '../api';
 import { asArray, formatTime } from '../format';
@@ -18,16 +19,15 @@ export function ScrubBar({ sid, timeline, ts, requestedTs, busy, onSnapshot, onC
   const [draft, setDraft] = useState<number>();
   const min = Date.parse(timeline.from);
   const max = Date.parse(timeline.to);
-  // 取得時刻と移動先の間に記録がなくても、次のキー操作は移動先から続ける。
+  
   const value = draft ?? (requestedTs ? Date.parse(requestedTs) : min);
   const seek = (requested: number) => {
-    // 取得できた時刻を一覧や書出と共有し、失敗時も表示だけが先に進まないようにする。
+    
     setDraft(undefined);
     if (Number.isFinite(requested)) onSnapshot(new Date(requested).toISOString());
   };
   return <div className="bg-amber-100 p-3 text-black">
-    <strong>⏪ オフライン再生
-    </strong>
+    <strong>{t('ui.m169')}</strong>
 
     <button
       disabled={busy}
@@ -35,11 +35,10 @@ export function ScrubBar({ sid, timeline, ts, requestedTs, busy, onSnapshot, onC
         await api(`/api/replay/${encodeURIComponent(sid)}`, json('DELETE'));
         onClose();
       })}
-    >LIVEへ戻る
-    </button>
+    >{t('ui.m170')}</button>
     <div>
       <input
-        aria-label="再生の移動先"
+        aria-label={t('ui.m171')}
         type="range"
         min={min}
         max={max}
@@ -60,7 +59,7 @@ export function ScrubBar({ sid, timeline, ts, requestedTs, busy, onSnapshot, onC
         onBlur={() => setDraft(undefined)}
       />
 
-      <span>表示中: {ts ? formatTime(ts) : '取得待ち'}</span>
+      <span>{t('ui.m172')}{ts ? formatTime(ts) : t('ui.m147')}</span>
     </div>
     <div>
       {asArray((timeline.markers || [])).map((m, i) => <button

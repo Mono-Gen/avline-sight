@@ -1,7 +1,11 @@
 import { wsUrl } from './api';
-import type { Event, Overview, SwitchState } from './types';
+import type { Alert, Event, Overview, Phase, SwitchGroup, SwitchState } from './types';
 
 export type LiveMessage =
+  | { type: 'alerts_changed'; data: Alert[] }
+  | { type: 'phase_changed'; data: { phase: Phase } }
+  | { type: 'work_changed'; data: SwitchGroup[] }
+  | { type: 'lock_changed'; data: { locked: boolean; pin_set: boolean } }
   | {
     type: 'overview_tick';
     data: Overview;
@@ -34,7 +38,6 @@ export class LiveSocket {
     this.socket = socket;
     socket.onopen = () => {
       this.onStatus(true);
-      // 再接続でも閲覧中のスイッチを購読し直す。
       this.subscribe(this.id);
     };
     socket.onmessage = event => {

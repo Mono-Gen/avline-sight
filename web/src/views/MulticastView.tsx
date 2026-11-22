@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { api } from '../api';
 import { AvStatus } from '../components/AvStatus';
 import { PollingStatus } from '../components/PollingStatus';
@@ -21,7 +22,7 @@ export function MulticastView(props: ViewProps) {
   const switches = asArray(props.overview.switches);
   const switchKey = switches.map(item => item.id).join(',');
   const result = usePolling(async signal => {
-    // 集約APIにAVB詳細が無いため、同じ更新周期で各装置の正規化状態も取得する。
+    
     const [multicast, states] = await Promise.all([
       api<Multicast>('/api/multicast', { signal }),
       Promise.all(switches.map(item => api<SwitchState>(`/api/switches/${item.id}/state`, { signal }))),
@@ -43,17 +44,17 @@ export function MulticastView(props: ViewProps) {
   return (
     <div className="panel space-y-4">
       {!props.replay && <PollingStatus {...result} />}
-      <h2>VLAN クエリア</h2>
+      <h2>{t('ui.m270')}</h2>
       <Table rows={filter(data?.vlans)} />
-      <h2>グループ × ポート</h2>
+      <h2>{t('ui.m271')}</h2>
       <Table rows={filter(data?.groups)} />
-      <h2>マルチキャストルーター</h2>
+      <h2>{t('ui.m272')}</h2>
       <Table rows={filter(data?.mrouters)} />
       <h2>gPTP</h2>
       <Table rows={asArray(data?.gptp).filter(row => !tags.length || visibleIds.has(row.switch_id))} />
-      <h2>スイッチ別 MVR / AVB</h2>
+      <h2>{t('ui.m273')}</h2>
       {visibleStates.map(state => <AvStatus key={state.id} state={state} />)}
-      <h2>検出事項</h2>
+      <h2>{t('ui.m253')}</h2>
       <Table rows={asArray(data?.findings).filter(row => !tags.length || visibleIds.has(row.switch_id))} />
     </div>
   );

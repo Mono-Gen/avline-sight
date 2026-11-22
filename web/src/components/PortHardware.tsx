@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import React from 'react';
 import { asArray, decimal } from '../format';
 import type { Port } from '../types';
@@ -29,39 +30,39 @@ export function PortHardware({ port }: {
       {poe && <Details
         title="PoE"
         rows={[
-          ['検出状態', poe.detect],
-          ['電力', `${decimal(poe.power_w)} W`],
-          ['クラス', poe.class],
-          ['電流', `${decimal(poe.current_ma)} mA`],
-          ['電圧', `${decimal(poe.volts)} V`],
-          ['障害', poe.fault || 'なし'],
-          ['給電拒否回数', poe.denied_cnt],
-          ['過負荷回数', poe.overload_cnt],
-          ['短絡回数', poe.short_cnt],
+          [t('ui.m148'), poe.detect],
+          [t('ui.m149'), `${decimal(poe.power_w)} W`],
+          [t('ui.m150'), poe.class],
+          [t('ui.m151'), `${decimal(poe.current_ma)} mA`],
+          [t('ui.m152'), `${decimal(poe.volts)} V`],
+          [t('ui.m153'), poe.fault || t('ui.m154')],
+          [t('ui.m155'), poe.denied_cnt],
+          [t('ui.m156'), poe.overload_cnt],
+          [t('ui.m157'), poe.short_cnt],
         ]}
       />}
       {sfp && <Details
-        title="SFP 光モジュール"
+        title={t('ui.m158')}
         rows={[
-          ['受信光', `${decimal(sfp.rx_dbm, 2)} dBm`],
-          ['送信光', `${decimal(sfp.tx_dbm, 2)} dBm`],
-          ['温度', `${decimal(sfp.temp_c)} ℃`],
-          ['電圧', `${decimal(sfp.volts, 2)} V`],
-          ['バイアス電流', `${decimal(sfp.bias_ma)} mA`],
-          ['メーカー', sfp.vendor],
-          ['型番', sfp.part_no],
-          ['対応状態', sfp.supported],
-          ['光信号喪失', sfp.los ? '⚠ あり' : '✓ なし'],
-          ['送信障害', sfp.tx_fault ? '⚠ あり' : '✓ なし'],
+          [t('ui.m159'), `${decimal(sfp.rx_dbm, 2)} dBm`],
+          [t('ui.m160'), `${decimal(sfp.tx_dbm, 2)} dBm`],
+          [t('ui.m161'), `${decimal(sfp.temp_c)} ℃`],
+          [t('ui.m152'), `${decimal(sfp.volts, 2)} V`],
+          [t('ui.m162'), `${decimal(sfp.bias_ma)} mA`],
+          [t('ui.m074'), sfp.vendor],
+          [t('ui.m075'), sfp.part_no],
+          [t('ui.m076'), sfp.supported],
+          [t('ui.m072'), sfp.los ? t('ui.m163') : t('ui.m164')],
+          [t('ui.m073'), sfp.tx_fault ? t('ui.m163') : t('ui.m164')],
         ]}
       />}
       {cable && <Details
-        title="ケーブル診断"
+        title={t('ui.m165')}
         rows={[
-          ['状態', cable.status],
-          ['最短長', `${cable.min_len_m} m`],
-          ['最長長', `${cable.max_len_m} m`],
-          ['障害位置', `${cable.fail_loc_m} m`],
+          [t('ui.m063'), cable.status],
+          [t('ui.m166'), `${cable.min_len_m} m`],
+          [t('ui.m167'), `${cable.max_len_m} m`],
+          [t('ui.m168'), `${cable.fail_loc_m} m`],
         ]}
       />}
     </div>
