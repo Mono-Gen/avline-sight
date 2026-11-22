@@ -187,7 +187,7 @@ func (s *Server) Handler() http.Handler {
 // lockExempt は閲覧専用ロック中も許可する変更系パス。
 func lockExempt(path string) bool {
 	return path == "/api/mode/lock" || path == "/api/markers" || strings.HasPrefix(path, "/api/replay/") ||
-		path == "/api/export/pack" || path == "/api/diagnostics/ping" || path == "/api/diagnostics/ping-bulk" || strings.HasPrefix(path, "/api/events/") && strings.HasSuffix(path, "/ack")
+		path == "/api/export/pack" || strings.HasPrefix(path, "/api/events/") && strings.HasSuffix(path, "/ack")
 }
 
 func (s *Server) middleware(next http.Handler) http.Handler {

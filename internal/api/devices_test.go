@@ -83,7 +83,7 @@ func TestAliasImportFlow(t *testing.T) {
 	}
 }
 
-// 一括Ping: 未知のIPは拒否、手入力はロック中に拒否、短縮範囲と上限、既知IPはロック中でも可
+// 一括Ping: 未知のIPは拒否、短縮範囲と上限、ロック中はすべて拒否
 func TestPingBulk(t *testing.T) {
 	s, h := newDevicesServer(t)
 	// スイッチIP（10.0.0.1）だけが既知。ループバックは手入力でのみ打てる
@@ -109,8 +109,11 @@ func TestPingBulk(t *testing.T) {
 	if w := do(h, "POST", "/api/diagnostics/ping-bulk", `{"manual":"127.0.0.1"}`); w.Code != http.StatusLocked {
 		t.Fatalf("ロック中の手入力: %d", w.Code)
 	}
-	if w := do(h, "POST", "/api/diagnostics/ping-bulk", `{"ips":["10.0.0.1"]}`); w.Code != 200 {
-		t.Fatalf("ロック中でも既知IPは打てるはず: %d %s", w.Code, w.Body)
+	if w := do(h, "POST", "/api/diagnostics/ping-bulk", `{"ips":["10.0.0.1"]}`); w.Code != http.StatusLocked {
+		t.Fatalf("ロック中は既知IPへのPingも禁止（ユーザー判断 2026-11-22）: %d", w.Code)
+	}
+	if w := do(h, "POST", "/api/diagnostics/ping", `{"ip":"10.0.0.1"}`); w.Code != http.StatusLocked {
+		t.Fatalf("ロック中は1台版Pingも禁止: %d", w.Code)
 	}
 }
 

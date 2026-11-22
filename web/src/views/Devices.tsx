@@ -89,10 +89,11 @@ export function Devices(p: ViewProps) {
   const [manualResults, setManualResults] = useState<BulkPingResult[]>([]);
   const targets = pingTargets(rows);
   const pingDisabledReason = isReplay ? 'オフライン再生中はPingできません。'
+    : p.locked ? '閲覧専用ロック中はPingできません。'
     : targets.length === 0 ? 'IPアドレスの分かる機器が表示されていません。'
       : targets.length > MAX_BULK_PING ? `一度に${MAX_BULK_PING}件までです。検索やVLANで絞り込んでください。` : undefined;
   const manualDisabledReason = isReplay ? 'オフライン再生中はPingできません。'
-    : p.locked ? '閲覧専用ロック中は手入力のPingはできません（一覧の機器へのPingは可能です）。' : undefined;
+    : p.locked ? '閲覧専用ロック中はPingできません。' : undefined;
   const runPing = (body: { ips?: string[]; manual?: string }) => p.run(async () => {
     setNotice('');
     // 手入力は展開後の件数が画面側では分からないため、上限件数で待つ

@@ -58,7 +58,7 @@
 - `GET /api/audit` → `{findings:[Finding], fw_versions:{"13.0.7.6":["AV-SW-01",...]}}`
   - `Finding`: `{severity, code, title, hint, switch_id, switch_name, port?}`
 - `POST /api/diagnostics/ping` 入力 `{ip}` → `{ok, status, rtt_ms, output, elapsed_ms}`（登録スイッチ・観測済み機器・登録機器の最終IPのみ）
-- `POST /api/diagnostics/ping-bulk` 入力 `{ips?:[...], manual?:"192.168.1.10, 192.168.1.20-40, 10.0.0.0/28"}` → `{results:[{ip,status:"ok"|"timeout"|"unreachable"|"error",rtt_ms,detail,source:"known"|"manual"}], ok, total, elapsed_ms, at}`。`ips` は上記の既知IPのみ（未知は403）。`manual` は閲覧専用ロック中は423。1回256件まで、同時16並列・1宛先最大2回・1秒待ち。ロック中も既知IPへの実行は可
+- `POST /api/diagnostics/ping-bulk` 入力 `{ips?:[...], manual?:"192.168.1.10, 192.168.1.20-40, 10.0.0.0/28"}` → `{results:[{ip,status:"ok"|"timeout"|"unreachable"|"error",rtt_ms,detail,source:"known"|"manual"}], ok, total, elapsed_ms, at}`。`ips` は上記の既知IPのみ（未知は403）。閲覧専用ロック中は（1台版も含め）423。1回256件まで、同時16並列・1宛先最大2回・1秒待ち。ロック中も既知IPへの実行は可
 
 ## イベント・マーカー
 - `GET /api/events?category=&severity=&switch_id=&q=&from=&to=&limit=500` → `[Event]`（新しい順）

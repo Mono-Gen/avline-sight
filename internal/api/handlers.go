@@ -548,7 +548,8 @@ func (s *Server) pingAllowed() map[string]bool {
 const maxBulkPing = 256
 
 // pingBulk は複数宛先へ一括でPingする。ips は監視中に分かっているIPのみ、manual は任意の
-// IP・範囲（a.b.c.d-e / a.b.c.d-a.b.c.e）・CIDR をカンマ/空白区切りで受け付ける（ロック中は不可）。
+// IP・範囲（a.b.c.d-e / a.b.c.d-a.b.c.e）・CIDR をカンマ/空白区切りで受け付ける。
+// 閲覧専用ロック中はミドルウェアで一律に拒否する（Pingも現場ネットワークへ送信する操作のため）。
 func (s *Server) pingBulk(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		IPs    []string `json:"ips"`
@@ -576,10 +577,6 @@ func (s *Server) pingBulk(w http.ResponseWriter, r *http.Request) {
 		source[ip] = "known"
 	}
 	if m := strings.TrimSpace(in.Manual); m != "" {
-		if s.isLocked() {
-			writeErr(w, http.StatusLocked, "閲覧専用ロック中は手入力のPingはできません", "", "一覧の機器へのPingは実行できます。手入力はロック解除後に行ってください")
-			return
-		}
 		for _, part := range strings.FieldsFunc(m, func(c rune) bool { return strings.ContainsRune(", \n\t、", c) }) {
 			ips, err := expandRange(part)
 			if err != nil {
