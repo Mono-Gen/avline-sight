@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +27,68 @@ func startupStore(t *testing.T) *store.Store {
 }
 
 const startupConfig = `{"name":"Tour","settings":{"setup_ping_interval_sec":90},"switches":[{"name":"Core","ip":"192.0.2.1","enabled":true}]}`
+
+func TestExplicitExportReusesActiveProfileAndKeepsCredentials(t *testing.T) {
+	ctx := t.Context()
+	st := startupStore(t)
+	pid, err := st.EnsureDefaultProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetProfileJSON(pid, "settings_json", map[string]int{"setup_ping_interval_sec": 90}); err != nil {
+		t.Fatal(err)
+	}
+	sw := model.SwitchConfig{
+		ProfileID: pid, Name: "Core", IP: "192.0.2.1", Enabled: true,
+		Community: "fixture", WebURL: "http://192.0.2.1/manage?view=local#top",
+	}
+	if err := st.SaveSwitch(&sw); err != nil {
+		t.Fatal(err)
+	}
+	for _, alias := range []store.Alias{
+		{MatchType: "mac", MatchKey: "aa-bb-cc-dd-ee-ff", Label: "Mixer"},
+		{MatchType: "port", MatchKey: fmt.Sprintf("+%d:010", sw.ID), Label: "Uplink"},
+	} {
+		if err := st.SaveAlias(pid, alias); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current, err := st.ProfileConfig(ctx, pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.GroupOrder != nil {
+		t.Fatalf("expected unset group order, got %v", current.GroupOrder)
+	}
+	exported, err := engine.ExportProfileConfig(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(exported.Aliases) != 2 || exported.Aliases[0].MatchKey != "AA:BB:CC:DD:EE:FF" ||
+		exported.Aliases[1].MatchKey != "1:10" {
+		t.Fatalf("expected canonical exported alias keys: %v", exported.Aliases)
+	}
+	data, err := json.Marshal(exported)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, defaultConfigName)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if warning, err := loadStartupConfig(ctx, st, dir, path); warning != "" || err != nil {
+		t.Fatalf("apply exported file: %q %v", warning, err)
+	}
+	profiles, err := st.Profiles()
+	if err != nil || len(profiles) != 1 || !profiles[0].Active || profiles[0].ID != pid {
+		t.Fatalf("expected active profile %d to be reused: %v %v", pid, profiles, err)
+	}
+	sws, err := st.Switches(pid)
+	if err != nil || len(sws) != 1 || sws[0].ID != sw.ID || sws[0].Community != "fixture" {
+		t.Fatalf("expected the existing switch and its credentials to be preserved: %v", err)
+	}
+}
 
 func TestAutomaticProfileConfigOnlyOnFirstStart(t *testing.T) {
 	ctx := context.Background()

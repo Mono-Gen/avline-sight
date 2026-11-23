@@ -1,18 +1,26 @@
-# AVLine-Sight API 契約（v1）
+# AVLine-Sight API 契約
 
-バックエンド（Go）とWebUI（React）の間の契約。型の正は `internal/model/model.go` のJSONタグ。
-時刻はすべて RFC3339（UTC）。エラー時は HTTP 4xx/5xx と `{"error": "日本語メッセージ"}`。
+バックエンド（Go）とWebUI（React）の間の契約。JSONフィールドは各実装のJSONタグを参照してください。
+APIの日付時刻は原則RFC3339です。本番後レポートのCSVはJSTを使います。APIハンドラーのエラーはHTTP 4xx/5xxと `{"error":"メッセージ"}` を返します。ローカライズ対応の応答は `Accept-Language` に従います。
 閲覧専用ロック中は変更系（POST/PUT/DELETE）が `423 Locked`。例外は `/api/mode/lock`、`/api/markers`、再生関連、`/api/export/pack`。イベント確認（個別・一括）と確認取り消し、手動Ping・フェーズ変更・カウンタリセットはロック中に実行不可。
 
 ## 状態・システム
 | メソッド | パス | 応答 |
 |---|---|---|
-| GET | `/api/status` | `{version, mode:"live", lab:bool, locked:bool, pin_set:bool, phase, profile:{id,name}, trap:{addr, ok, error}, web_addr}` |
+| GET | `/api/status` | `{version, mode:"live", lab:bool, locked:bool, pin_set:bool, phase, profile:{id,name}, trap:{addr, ok, error}, web_addr, config_startup_error, credentials_pending}` |
 | POST | `/api/mode/lock` | 入力 `{locked:bool, pin?:string}` → `{locked}`（解除時、PIN設定済みならPIN必須） |
 | GET | `/api/system/nics` | `[{name, addrs:[string]}]` |
+| PUT | `/api/system/network-bind` | `{trap_addr}` → `{addr,ok,error}`。SNMP Trap受信の待受先を変更し、指定アドレスを保存する。待受に失敗した場合も `ok:false` の結果を返す |
 | GET/PUT | `/api/settings` | `Settings`（下記） |
-| GET | `/api/phase` | `{phase:"setup"|"rehearsal"|"show"}`。既定 `show`、metaの `op_phase` に保存。保存済みの旧値 `teardown` は起動時に `setup` として扱い、新規指定は400 |
-| PUT | `/api/phase` | 入力 `{phase}` → `{phase}`。実際の変更時にINFO `PHASE_CHANGED` とWS `phase_changed` |
+| GET | `/api/phase` | `{phase}`。値は `setup`、`rehearsal`、`show`。既定は `show`。保存済みの旧値 `teardown` は起動時に `setup` として扱う |
+| PUT | `/api/phase` | `{phase,confirm_checklist?}` → `{phase}`。フェーズが変わると INFO `PHASE_CHANGED` を記録し、WebSocketで `phase_changed` を配信する |
+| GET | `/api/checklist/pre-show` | `{items:[ChecklistItem]}`。項目の理由と対処は `Accept-Language` に従う |
+
+`config_startup_error` は設定ファイルの自動読込エラー（通常は空文字）、`credentials_pending` は認証情報の入力が必要なスイッチの台数です。
+
+`ChecklistItem` は `{id,state,reason,action,optional,findings?}` です。`state` は `pass`（合格）、`review`（要確認）、`pending`（判定中）のいずれかです。`findings` の各項目は `{state,reason,action?,target}` で、`target` に `switch_id`、`if_index`、`mac`、`label`、`destination` が入る場合があります。
+
+`PUT /api/phase` で別のフェーズから `show` に変更するとき、サーバーは本番前チェックを再評価します。`pass` 以外の項目があり、`confirm_checklist:true` がない場合は409を返します。残項目を確認して開始した場合は `PRE_SHOW_CHECKLIST_REMAINDER` を記録します。本番開始時はベースラインも保存します。不正なフェーズは400です。
 
 設営（`setup`）は `if_index>0` のポートアラートと `DEVICE_MISSING` / `PING_FAIL` / `IP_MISMATCH` を抑止。リハ（`rehearsal`）と本番（`show`）は抑止なし。抑止中もイベントは保存する。抑止開始前に復旧していた未確認ラッチは保持し、抑止中の件数から除く。フェーズによる抑止は `suppressed_by:"phase"` に示す。
 
@@ -25,22 +33,21 @@
 | メソッド | パス | 入出力 |
 |---|---|---|
 | GET | `/api/groups` | `[{name, switch_ids:[id]}]`。設定順、未指定のグループは名前順、未所属は最後 |
-| PUT | `/api/groups/{name}` | `{new_name}` → グループ一覧。対象プロファイルの全スイッチを一括変更し、同名のグループがあれば統合。旧名はURLエスケープし、未所属は `/api/groups/`。空の新名と予約名 `*`、`.`、`..` は400 |
+| PUT | `/api/groups/{name}` | `{new_name}` → グループ一覧。対象プロファイルの全スイッチを一括変更し、同名のグループがあれば統合。旧名はURLエスケープする。空の新名と予約名 `*`、`.`、`..` は400 |
+| PUT | `/api/groups/` | `{new_name}` → グループ一覧。未所属のスイッチを指定したグループに移す |
 | PUT | `/api/groups/order` | `{names:[...]}` → グループ一覧。順序はプロファイルごとにmetaに保存。重複名・空名は400。`{new_name}` を送ると名前が `order` のグループを改名 |
 | POST | `/api/counters/reset` | `{group}`（`"*"` は全台）→ `{results:[{switch_id,ok,reset_at?,error?}]}`。既存ソフトリセットを呼び、停止中・無効なスイッチは `ok:false` |
-
-作業中APIと `work_changed` は廃止。旧metaの作業期限は読み込まず、抑止しない。未登録APIは404を返す。
 
 改名・順序保存・一括リセットで `X-AVLine-Profile` を指定すると、表示していたプロファイルIDが現在のIDと異なる場合に409を返す。旧データに `*` という名前のグループがある場合、改名だけが可能。旧名が `.` または `..` の場合は `/api/groups/?legacy_name=.` または `?legacy_name=..` で指定する。
 
 `Settings`:
 ```json
 {"thresholds":{"cpu_pct":80,"mem_free_pct":15,"temp_c":65,"poe_pct":80,"util_pct":80,"sfp_rx_dbm":-10,"sfp_drop_db":3,"err_delta":1},
- "setup_ping_interval_sec":60, "rehearsal_ping_interval_sec":60,
+ "setup_ping_interval_sec":60, "rehearsal_ping_interval_sec":60, "expert_display_default":false,
  "views":[{"id":"audio","name":"音響","vlans":[10],"tags":[],"categories":[]}]}
 ```
 
-Ping間隔はそれぞれ30〜3600秒の整数。30秒の下限で登録機器への定期送信を毎分2回以下に抑える。省略時は既定60秒を使用し、0・範囲外・小数は400。保存時に進行中の定期Pingを中断し、次の周期から適用する。旧設定の音声項目は読み込まない。
+Ping間隔はそれぞれ30〜3600秒の整数。30秒の下限で登録機器への定期送信を毎分2回以下に抑える。省略時は既定60秒を使用し、0・範囲外・小数は400。保存時に進行中の定期Pingを中断し、次の周期から適用する。`expert_display_default` は現場共通の初期値で、ブラウザー単位の指定が優先される。
 
 監視中のWindowsサーバーは [SetThreadExecutionState](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadexecutionstate) により自動スリープを抑止し、終了時に解除する。画面消灯は妨げない。他OSは何もしない。
 
@@ -48,14 +55,25 @@ WebUIはポートモニターを起動画面とし、図/一覧を切り替え�
 
 PC通知はブラウザー単位の設定で既定OFF。許可を得た場合のみ、新しい未確認のCRITICAL/WARNINGを無音で通知する（抑止中・再生中・監視停止中は通知しない）。既存履歴、復旧・確認で同じイベントを再通知しない。言語・テーマ・通知はブラウザー単位で保存し、サーバーのSettingsには含めない。
 
-## プロファイル
-`GET /api/profiles` → `[{id,name,active}]` / `POST /api/profiles {name}` / `PUT /api/profiles/:id/activate` /
-`GET /api/profiles/:id/export`（JSONダウンロード）/ `POST /api/profiles/import`（JSON本文）
+## プロファイルと設定ファイル
+
+| メソッド | パス | 入出力 |
+|---|---|---|
+| GET | `/api/profiles` | `[{id,name,active}]` |
+| POST | `/api/profiles` | `{name}` → `{id,name}` |
+| PUT | `/api/profiles/:id/activate` | 指定した現場に切り替える → `{id}` |
+| GET | `/api/profiles/:id/export` | `avline-sight.config.json` をダウンロードする。SNMPコミュニティは除外する |
+| POST | `/api/profiles/import/preview` | 設定ファイルのJSON本文 → `{profile_id,revision,switch_count,group_count,changes:[{field,before,after}]}`。現在の設定と比較し、差分を返す |
+| POST | `/api/profiles/import` | 設定ファイルのJSON本文 → `{id}`。プレビューで得た `revision` を `X-AVLine-Config-Revision` で送ると、新しい現場を作成して切り替える。ヘッダーを省略すると新しい現場を作成するだけ |
+
+設定ファイルの上限は4 MiBです。`version:1` または旧形式のバージョン省略を受け付けます。設定ファイルには `version`、`name`、`settings`、`group_order`、`trap_addr`（任意）、`topology_layout`、`watchlist`、`switches`、`ports`、`aliases` が入ります。スイッチIDはファイル内参照用です。
+
+不正なファイルは400です。適用時に、プレビューから現在の設定またはファイル内容が変わっていた場合は409を返します。`X-AVLine-Profile` を指定して現在のプロファイルIDと異なる場合も409です。プレビューと適用は閲覧専用ロック中に423を返します。
 
 ## スイッチ
 | メソッド | パス | 説明 |
 |---|---|---|
-| GET | `/api/switches` | `[SwitchConfig]`（communityは `"****"` でマスク、`last_trap_ts:RFC3339|null` は最終Trap受信時刻） |
+| GET | `/api/switches` | `[SwitchConfig]`（communityは `"****"` でマスク、`last_trap_ts:RFC3339\|null` は最終Trap受信時刻） |
 | POST | `/api/switches` | `SwitchConfig`（id無し）→ 作成結果 |
 | PUT/DELETE | `/api/switches/:id` | 更新/削除 |
 | GET | `/api/switches/:id/state` | `SwitchState`（全詳細） |
@@ -64,9 +82,9 @@ PC通知はブラウザー単位の設定で既定OFF。許可を得た場合の
 | POST | `/api/switches/:id/probe` | OID互換性プローブ再実行 |
 | GET | `/api/switches/:id/diagnostic-dump` | JSONダウンロード |
 | GET | `/api/switches/:id/access-info` | `{web_url, https, ssh:{enabled,port}, telnet:{port}}` |
-| POST | `/api/device-aliases` | `{match_type:"mac"|"port", match_key, label, note, planned_ip?}`。予定IPはIPv4または空文字。不正値は400 |
-| POST | `/api/device-aliases/import` | `{csv, mode:"merge"|"replace", commit:bool}` → `{committed, result:{added,updated,unchanged,deleted}, rows:[{line,mac,label,note,planned_ip,action:"add"|"update"|"same",old_label?}], skipped_empty, errors:[{line,reason}]}`。commit=false は試行のみ（書込なし）。エラー行があると commit は 422。上限2MB/5000行 |
-| GET | `/api/devices?scope=all|unnamed&group=&vlans=10,20&q=` | 接続機器一覧 `[InventoryRow]`（MAC単位で所在1か所。スイッチ間リンクのみで見える機器は `via_uplink:true`。登録済みで見えない機器は `seen:false`）。`group=*` は全グループ・未観測の登録機器も含む |
+| POST | `/api/device-aliases` | `{match_type:"mac"\|"port", match_key, label, note, planned_ip?}`。予定IPはIPv4または空文字。不正値は400 |
+| POST | `/api/device-aliases/import` | `{csv, mode:"merge"\|"replace", commit:bool}` → `{committed, result:{added,updated,unchanged,deleted}, rows:[{line,mac,label,note,planned_ip,action:"add"\|"update"\|"same",old_label?}], skipped_empty, errors:[{line,reason}]}`。commit=false は試行のみ（書込なし）。エラー行があると commit は 422。上限2MB/5000行 |
+| GET | `/api/devices?scope=all\|unnamed&group=&vlans=10,20&q=` | 接続機器一覧 `[InventoryRow]`（MAC単位で所在1か所。スイッチ間リンクのみで見える機器は `via_uplink:true`。登録済みで見えない機器は `seen:false`）。`group=*` は全グループ・未観測の登録機器も含む |
 | GET | `/api/devices/export.csv?…` | 同条件のCSV（BOM付きUTF-8、`group=*` 対応）。列: MAC,名称,メモ,予定IP,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元,Ping |
 | GET | `/api/replay/:sid/devices?ts=RFC3339&…` / `/api/replay/:sid/devices/export.csv?ts=…` | 再生時刻のスナップショット基準の一覧/CSV |
 
@@ -82,20 +100,22 @@ PC通知はブラウザー単位の設定で既定OFF。許可を得た場合の
 
 ## 監視ビュー
 - `GET /api/overview` → `{switches:[SwitchSummary], alerts:{CRITICAL,WARNING,INFO}, recent_events:[Event]}`。件数は抑止されていない「発生中または未確認」のエントリ数（スイッチ別件数も同条件）
-  - `SwitchSummary`: `{id,name,ip,group_tag,reachable,last_error,last_trap_ts:RFC3339|null,model,fw,uptime_sec,cpu_5s,mem_free_pct,mbuf_used_pct,temp_max_c,temp_state,fans_ok,psu_ok,poe_budget_w,poe_used_w,ports_up,ports_total,rx_bps,tx_bps,alerts:{CRITICAL,WARNING,INFO?}}`
+  - `SwitchSummary`: `{id,name,ip,group_tag,reachable,last_error,last_trap_ts:RFC3339|null,model,fw,uptime_sec,cpu_5s,mem_free_pct,mbuf_used_pct,temp_max_c,temp_state,fans_ok,psu_ok,poe_budget_w,poe_used_w,ports_up,ports_total,rx_bps,tx_bps,alerts:{CRITICAL,WARNING,INFO?},needs_credentials?}`
 - `GET /api/ports/search?q=&switch_id=&sort=err|poe|bw` → `[{switch_id, switch_name, port: Port}]`
 - `GET /api/metrics/port?switch_id=&if_index=&from=&to=` → `{resolution:"raw"|"1m", points:[{ts, rx_bps, tx_bps, rx_mc_pps, tx_mc_pps, err_delta, fcs_delta, discard_delta, cos_drop_delta, pause_delta, poe_w, sfp_rx_dbm}]}`（from/to省略時は直近30分）
 - `GET /api/metrics/switch?switch_id=&from=&to=` → `{resolution, points:[{ts, cpu_5s, mem_free_pct, mbuf_used_pct, temp_max_c, poe_used_w}]}`
 - `GET /api/topology` → `{nodes:[{id, label, kind:"switch"|"external"|"device", switch_id?, reachable?, is_root?, x?, y?}], edges:[{id, source, target, local_port, remote_port, blocking, speed_mbps, util_pct}], background:string|null}`
 - `PUT /api/topology/layout` → 入力 `{positions:{"<nodeId>":{x,y}}}`
 - `POST /api/topology/background`（multipart `file`）→ `{url}`、`GET /api/topology/background` で画像
-- `GET/PUT /api/watchlist` → `[{switch_id, if_index, label}]`
+- `GET /api/watchlist` → `[{switch_id,if_index,label}]`
+- `PUT /api/watchlist` は同形式の配列を保存し、保存した配列を返す
 - `GET /api/multicast` → `{vlans:[VlanIGMP+{switch_id,switch_name}], groups:[McastGroup+{switch_id,switch_name}], mrouters:[Mrouter+{switch_id,switch_name}], gptp:[{switch_id,switch_name,...GPTP}], findings:[Finding]}`
 - `GET /api/dhcp` → `{servers:[{switch_id,switch_name,server_on,pools,lease_count,decline_rx,snooping_on,invalid_server_msgs}], leases:[Lease+{switch_id,switch_name}], conflicts:[{switch_id,switch_name,ip}], findings:[Finding]}`
-- `GET /api/audit` → `{findings:[Finding], fw_versions:{"13.0.7.6":["AV-SW-01",...]}}`
-  - `Finding`: `{severity, code, title, hint, switch_id, switch_name, port?}`
+- `GET /api/audit` → `{findings:[Finding], fw_versions:{"13.0.7.6":["AV-SW-01"]}, port_recommendations:[PortRecommendation]}`
+  - `Finding` は `{severity,code,title,hint,switch_id,switch_name,port?}`。
+  - `PortRecommendation` は `{switch_id,port,code,current,recommended,source?,version?,reference?,lpi?}`。エキスパート表示の「推奨と違う設定」で使用する。
 - `POST /api/diagnostics/ping` 入力 `{ip}` → `{ok, status, rtt_ms, output, elapsed_ms}`（登録スイッチ・観測済み機器・登録機器の最終IP・予定IPのみ）
-- `POST /api/diagnostics/ping-bulk` 入力 `{ips?:[...], manual?:"192.168.1.10, 192.168.1.20-40, 10.0.0.0/28"}` → `{results:[{ip,status:"ok"|"timeout"|"unreachable"|"error",rtt_ms,detail,source:"known"|"manual"}], ok, total, elapsed_ms, at}`。`ips` は上記の既知IPのみ（未知は403）。閲覧専用ロック中は（1台版も含め）423。1回256件まで、同時16並列・1宛先最大2回・1秒待ち
+- `POST /api/diagnostics/ping-bulk` 入力 `{ips?:[...], manual?:"192.0.2.10, 192.0.2.20-40, 198.51.100.0/28"}` → `{results:[{ip,status:"ok"|"timeout"|"unreachable"|"error",rtt_ms,detail,source:"known"|"manual"}], ok, total, elapsed_ms, at}`。`ips` は上記の既知IPのみ（未知は403）。閲覧専用ロック中は（1台版も含め）423。1回256件まで、同時16並列・1宛先最大2回・1秒待ち
 
 ## イベント・マーカー
 - `GET /api/events?category=&severity=&switch_id=&q=&from=&to=&limit=500` → `[Event]`（新しい順）
@@ -104,6 +124,8 @@ PC通知はブラウザー単位の設定で既定OFF。許可を得た場合の
 - `GET /api/alerts` → `[{event_id,switch_id,switch_name,if_index,severity,code,title,ts,active,acked,cleared_at:RFC3339|null,port,mac?,device_name?,state:"active"|"latched",suppressed,suppressed_by:"phase"|""}]`。抑止中の発生条件も含む。CRITICAL→WARNING→INFO、同重要度はts降順（同時刻はevent_id降順）
   - REST応答は保存イベント由来の翻訳引数 `detail`、対処文 `hint`、確認時刻 `acked_at` を取得できる場合に補う。WebSocket通知では省略する。
 - `POST /api/markers` 入力 `{note}` → `Event`（category=MARKER）
+
+`CLOCK_SKEW` は、監視PCとスイッチの時刻差の絶対値が60秒を超えたときのWARNINGです。`detail.offset_seconds` に時刻差を保持します。`PORT_CONFIG_CHANGED` は監視対象ポートの設定変化を記録する `CONFIG` カテゴリのINFOイベントです。`detail` に `{port,field,before,after}` を含み、アラートは作りません。初回起動時の設定ファイル自動読込に成功すると、INFO `CONFIG_AUTO_IMPORTED` を記録します。
 
 発生時にイベントIDを持つエントリを作成し、未確認の復旧は `active:false,state:"latched"` と復旧時刻を保持する。復旧時刻はDBのnullable `cleared_at` 列（Unixミリ秒）へ永続化し、再発生時はnullへ戻す。旧データや再評価前など復旧時刻が不明な場合は `cleared_at:null` とし、画面には不明と表示する。同じキーが未確認の間に再発生したら同じイベントIDを再使用する。発生中の確認は `acked:true` として残り、確認済みで復旧すると削除。復旧後の確認は直ちに削除。DBの `acked_at` を更新するが確認者は記録しない。確認後は `alerts_changed` を全ブラウザへ配信する。
 
@@ -126,7 +148,7 @@ snmp-server host <PC IP> traps version snmpv2 <community>
 M4250（FW 13.0.4.7）の工場出荷時・各AVプロファイル適用後の設定（`show running-config` の全表示）で確認できた事実:
 - `snmp-server enable traps` と `linkmode`・`stpmode`・`multiusers` のTrapは既定で有効。各ポートも `snmp trap link-status` が既定で有効。
 - Trapの送信先は既定で未設定。必要なのは送信先（このPCのIPとコミュニティ）の追加だけ。送信先を設定する行の書式は、設定済みの例が無いため未確認。
-- 既定の設定にはSNMPv2cのコミュニティの行が無く、SNMPv3ユーザー `admin` のみが表示される。v2cで監視する場合は、コミュニティの設定が要るかを実機で確認する。
+- 既定の設定ではSNMPv3ユーザーが表示される。v2cで監視する場合は、コミュニティの設定が要るかを実機で確認する。
 
 待受・ファイアウォールでTrap用UDPポート（既定162）を確認し、設定後は `last_trap_ts` の更新で受信を確認する。
 
@@ -136,17 +158,27 @@ M4250（FW 13.0.4.7）の工場出荷時・各AVプロファイル適用後の�
 ## 書出・読込・オフライン再生
 - `POST /api/export/pack` 入力 `{from,to}` または `{marker_id, minutes}` → `.avsight`（application/zip）ダウンロード
 - `GET /api/export/csv?type=events|connections|ports&from=&to=&bom=1` / `GET /api/export/json?type=...`
+- `GET /api/export/show-report.csv` → BOM付きUTF-8の `avline-sight-show-report.csv`。既定では最後に記録された本番開始から次のフェーズ変更まで（本番継続中なら現在まで）を出力する。期間を指定する場合は `from` と `to` の両方をRFC3339で指定し、開始を終了より前にする。既定の本番開始記録がなければ404、期間指定が不正なら400、上限超過なら422
+  - 時刻順にフェーズ変更（`phase`）、本番前チェックの残項目（`checklist`）、マーカー（`marker`）、対象のアラート発生（`alert`）・復旧（`recovery`）・確認（`ack`）を出力する。時刻はJST
+  - 列は `time (JST),type,event_id,code,severity,switch_id,switch_name,if_index,title,detail`。フェーズ変更とチェック残項目の `detail` はJSON。上限は10,000行かつ対象テキストの合計16 MiB
 - `POST /api/replay/import`（multipart `file`）→ `{session_id, from, to, switches:[name]}`
 - `GET /api/replay/:sid/timeline` → `{from, to, markers:[{ts, severity, title, category}]}`
-- `GET /api/replay/:sid/snapshot?ts=` → `{ts, switches:[SwitchState]}`（ts以前で最新のスナップショット）
+- `GET /api/replay/:sid/snapshot?ts=` → `{ts,switches:[SwitchState],port_recommendations:[PortRecommendation],alerts?}`（ts以前で最新のスナップショット。アラートは保存されている場合に含む）
 - `GET /api/replay/:sid/events?from=&to=` → `[Event]`
 - `DELETE /api/replay/:sid`
 
-## 探索・ラボ
+## 探索
+
 - `POST /api/discovery/scan` 入力 `{cidr, community, port?}` → `{found:[{ip, port, sys_name, sys_descr, sys_object_id, registered}]}`
 - `GET /api/discovery/lldp-candidates` → `[{ip, sys_name, via_switch, via_port}]`
-- `GET /api/sim/scenarios` → `[{id,title}]`（ラボモード時のみ。非ラボは404）
-- `POST /api/sim/fault` 入力 `{switch_index, scenario}` / `POST /api/sim/reset`
+
+## 開発用ラボAPI
+
+ラボモードでのみ使用できます。通常起動時は404を返します。
+
+- `GET /api/sim/scenarios` → `[{id,title}]`
+- `POST /api/sim/fault` 入力 `{switch_index,scenario}` → `{injected:scenario}`
+- `POST /api/sim/reset` → `{status:"reset"}`
 
 ## WebSocket
 ### `/ws/live`
@@ -160,7 +192,7 @@ M4250（FW 13.0.4.7）の工場出荷時・各AVプロファイル適用後の�
 - `{"type":"switch_state","data":SwitchState}`（購読中スイッチの更新時）
 クライアント→サーバー: `{"subscribe": <switch_id>}`（0で解除）
 
-### `/ws/terminal/:switchId?proto=telnet|ssh`
+### `/ws/terminal/:id?proto=telnet|ssh`
 1. 接続直後、クライアントが `{"type":"auth","user":"..","password":"..","cols":120,"rows":32}` を送る（認証情報はサーバーで保存しない）
 2. 以降 クライアント→サーバー `{"type":"data","data":"文字列"}` / `{"type":"resize","cols":N,"rows":M}`
 3. サーバー→クライアント: 端末出力をテキストフレームでそのまま送る。終了時はクローズ理由に日本語メッセージ

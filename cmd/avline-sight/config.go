@@ -44,10 +44,12 @@ func loadStartupConfig(ctx context.Context, st *store.Store, exeDirectory string
 	if err != nil {
 		return startupConfigFailure(explicit, err)
 	}
-	opts := store.ConfigApply{Activate: true, OnlyEmpty: explicit == "", ReuseActive: explicit != ""}
+	opts := store.ConfigApply{Activate: true, OnlyEmpty: explicit == ""}
 	if explicit == "" {
 		opts.StartupEvent = &model.Event{TS: time.Now(), Category: "SYSTEM", Severity: model.SevInfo,
 			Code: "CONFIG_AUTO_IMPORTED", Title: "設定ファイルを自動で読み込みました"}
+	} else {
+		opts.ReuseActive = engine.ExportProfileConfig
 	}
 	if _, err := st.ApplyProfileConfig(ctx, c, opts); err != nil {
 		return startupConfigFailure(explicit, err)

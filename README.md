@@ -1,73 +1,99 @@
 # AVLine-Sight
 
-A dedicated monitoring tool for NETGEAR AV Line (M4250 series) networks used for AV over IP
-(Dante / AES67 / NDI / SDVoE / ST 2110 / Q-SYS / sACN / AVB).
-It ships as one portable Windows executable with the web UI built in, and stores everything in `./data/` next to the executable.
+AVLine-Sight monitors AV over IP networks built with NETGEAR AV Line (M4250 series) switches, including Dante, AES67, NDI, SDVoE, ST 2110, Q-SYS, sACN and AVB.
+It ships as one portable Windows executable with the web UI built in. By default, it stores monitoring data under `./data/` next to the executable.
 
-日本語版: [README_JP.md](README_JP.md)
+日本語版は [README_JP.md](README_JP.md) を参照してください。
 
-## Features
-- SNMPv2c polling in three tiers (Fast / Medium / Slow). Each switch has its own worker, so one dead switch does not delay the others; failing switches back off (5s → 15s → 30s).
-- SNMP trap receiver for linkUp/Down, LLDP, PoE, fan/PSU/temperature, STP, IP conflict and CPU traps. Unknown traps are stored with their raw OID.
-- Switch health: CPU (5s/60s/300s), per-process CPU, memory, Mbuf, temperature, fans, PSUs, reboot detection (sysUpTime going backwards).
-- Ports and connected devices: LLDP, DHCP snooping, ARP, FDB with an OUI vendor dictionary, manual labels, and a connection timeline.
-- AV checks: IGMP querier health, multicast group × port matrix, EEE/LPI, PAUSE frames (NDI4 is treated as an exception), CoS queue drops, DSCP trust, FrameTooLongs (MTU mismatch), UDLD, SFP DOM, PoE faults, STP/MSTP, double DHCP servers and rogue DHCP servers.
-- Cross-switch audit against the NETGEAR ProAV guide: firmware mismatch, STP priority, querier placement, snooping consistency, uplink MTU and daisy-chain depth.
-- Rehearsal baselines and diffs, incident markers (key `M`), `.avsight` session export, offline time-machine replay, and CSV/JSON export.
-- Built-in Telnet/SSH terminal (xterm.js) with one-click `show` snippets. Connections are allowed only to registered switches, credentials are not stored, and sessions close after 10 minutes of inactivity.
+## Monitoring screens
+
+- **Port monitor** opens at startup. Switch between Diagram (rack view) and List to check switches and ports. The alert band shows active and unacknowledged alerts. The overall status covers all switches, including when the view is filtered by group.
+- **Devices** shows observed and registered devices, their switch and port, planned and observed IP addresses, and the latest ping result. You can export the list as CSV.
+- **Logs** shows events and markers in time order. Use filters to find warnings, unacknowledged events or markers. Times shown in the log are PC receive times in JST.
+- **Wall display** shows current status by switch and highlights unacknowledged alerts for a shared monitor.
+- **Expert display** is off by default. Turn it on in Settings to open Details, Topology and the Telnet/SSH Terminal. Details includes Multicast / AV, DHCP, Health / Audit, Configuration changes and Settings that differ from recommendations. The terminal connects to registered switches, stores no credentials and disconnects after 10 minutes of inactivity.
+
+## Operating phases and post-show report
+
+| Phase | Monitoring behavior |
+|---|---|
+| Setup | Periodically pings registered devices. Suppresses port alerts, missing devices, ping failures and IP mismatches. Fast and Medium polling intervals are multiplied by three, and Slow by two. |
+| Rehearsal | Enables all alerts, periodically pings registered devices and uses the configured polling intervals. |
+| Show | Enables all alerts and uses the configured polling intervals. Periodic ping stops. |
+
+When switching to Show, review the **Pre-show checklist**. It checks switch reachability, trap receipt, clock offset, registered devices and alert status, among other items. If any items are pending or need review, explicitly confirm them to start the show. The app logs the remaining items and saves a baseline when the show starts.
+
+**Post-show report (CSV)** in Settings exports the latest recorded show period. Use the same button in Logs to export the period between the selected start and end times. The CSV includes phase changes, remaining checklist items, markers, and alert activity such as occurrences, recoveries and acknowledgements. Timestamps are in JST.
+
+## Monitoring features
+
+- SNMPv2c uses three polling tiers (Fast / Medium / Slow). Each switch has an independent worker. Unresponsive switches back off from 5 to 15 to 30 seconds.
+- SNMP traps cover linkUp/Down, LLDP, PoE, fans, PSUs, temperature, STP, IP conflicts and CPU. Unknown traps are stored with their raw OID.
+- Switch health includes CPU (5s/60s/300s), per-process CPU, memory, Mbuf, temperature, fans, PSUs and reboot detection via sysUpTime. `CLOCK_SKEW` warns when a measured switch clock differs from the monitoring PC by more than 60 seconds. Check time synchronization on both devices.
+- Device identification uses LLDP, DHCP Snooping, ARP, FDB with an OUI vendor dictionary, and manual labels. Connection history is shown on a timeline.
+- AV checks cover IGMP querier status, multicast groups by port, EEE/LPI, PAUSE frames with an NDI4 exception, CoS queue drops, DSCP Trust, FrameTooLongs (MTU mismatch), UDLD, SFP DOM, PoE faults, STP/MSTP and duplicate or rogue DHCP servers. Expert display also provides cross-switch audits based on the NETGEAR ProAV Guide.
+- Detected changes to monitored port settings, such as PVID, EEE and maximum frame size, appear in Logs as `PORT_CONFIG_CHANGED` events with before and after values. Expert display provides a comparison with the latest baseline and a list of recent configuration changes.
+- Save and compare baselines, add an incident marker with `M`, export an `.avsight` session for offline replay, and export monitoring data as CSV or JSON.
 
 ## Quick start
+
 ```powershell
-# Production (WebUI on localhost:8080, traps on UDP 162)
 .\avline-sight.exe --open
 ```
-If UDP 162 cannot be bound, the app keeps running and shows a warning. This happens when the Windows "SNMP Trap" service holds the port or the app lacks permission. Change the trap port (for example `0.0.0.0:1162`) from the UI or with `--trap`.
+
+The default WebUI address is `localhost:8080`. If the app cannot listen on UDP 162 for traps, it continues monitoring and shows a warning. The Windows SNMP Trap service may be using the port, or the app may lack permission. Change the listening port in Settings or with `--trap`.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--listen` | `127.0.0.1:8080` | WebUI address. Use `0.0.0.0:8080` to share on the LAN, together with the read-only lock. If the port is busy, the next free port is used. |
-| `--trap` | `0.0.0.0:162` | SNMP trap listen address |
-| `--data` | `<exe dir>/data` | Database and settings directory |
-| `--fast/--medium/--slow` | `3s/12s/45s` | Polling intervals |
+| `--listen` | `127.0.0.1:8080` | WebUI listen address. If the port is busy, the app tries up to 20 higher ports. |
+| `--trap` | Saved address or `0.0.0.0:162` | SNMP trap listen address. |
+| `--data` | `<exe directory>/data` | Database directory. |
+| `--config` | First-start lookup described below | Apply a JSON configuration file at startup. An explicitly supplied file is applied even if data already exists. |
+| `--fast/--medium/--slow` | `3s/12s/45s` | Polling intervals. |
+
+## Configuration file
+
+In **Settings**, use **Import configuration file** to select a JSON file and review the differences. Applying it creates and activates a new profile. Use **Export configuration file** to save the current profile as `avline-sight.config.json`. Exports omit SNMP communities. Enter the communities for switches that require credentials before polling can start.
+
+On first startup with no profiles in the database, the app loads `avline-sight.config.json` if you place it next to the executable. A successful automatic import records `CONFIG_AUTO_IMPORTED`. Advanced users can supply a path with `--config`, for example `--config .\avline-sight.config.json`.
 
 ## Checking SNMP trap reception
 
-Traps let you notice failures immediately and reduce polling load. Monitoring continues without them, but short link drops are easier to miss.
+Traps help detect short link interruptions between polls. Monitoring continues if the trap receiver stops.
 
-**1. Check the app**: if the trap receiver status at the top says "listening", reception is ready. If it says it cannot listen, go to step 2. If a switch's "last trap" stays empty, check the switch's trap destination settings.
+1. Check that the header shows **Trap receiver ready**. If a switch has no last trap time, check its trap destination.
+2. Check what is using UDP 162 in PowerShell.
 
-**2. Find what is using port 162** (PowerShell)
 ```powershell
 Get-NetUDPEndpoint -LocalPort 162 -ErrorAction SilentlyContinue | Select-Object LocalAddress, OwningProcess
 Get-Service SNMPTRAP -ErrorAction SilentlyContinue
 ```
-- If nothing is listed, port 162 is free. Where administrator rights are required, run the app as administrator.
-- If `SNMPTRAP` (the Windows "SNMP Trap" service) is Running, it holds port 162.
 
-**3. If the port cannot be used** (pick one)
-- Stop the Windows "SNMP Trap" service (admin PowerShell): `Stop-Service SNMPTRAP; Set-Service SNMPTRAP -StartupType Disabled`
-- Listen on another port: start with `--trap 0.0.0.0:1162` and set the switch's trap destination port to 1162.
-- Allow it through Windows Firewall (admin): `New-NetFirewallRule -DisplayName "AVLine-Sight Trap" -Direction Inbound -Protocol UDP -LocalPort 162 -Action Allow` (use your port if changed)
-
-**4. Switch-side settings**: see the example in `docs/api.md` (not yet verified on real hardware).
+3. If the port is in use, stop the Windows SNMP Trap service if it can be stopped, or set a different port in the app and use the same destination port on the switches. Check that the Windows firewall permits inbound UDP traffic on that port.
+4. After configuring the switch, verify that the last trap time updates. The CLI example still requires hardware verification. [API documentation](docs/api.md#snmp-trap)
 
 ## Watching from several PCs
 
-Run the monitoring app (exe) on one PC only; other PCs open `http://<that PC's IP>:8080` in a browser (start with `--listen 0.0.0.0:8080` and use the read-only lock). Acknowledgements, operation phase and lock are reflected on all PCs immediately. Running the app on several PCs doubles the polling load on the switches and does not share acknowledgement state, so it is not recommended.
+Run the app on one monitoring PC with `--listen 0.0.0.0:8080` and use the read-only lock. Open `http://<monitoring-PC-IP>:8080` on other PCs. Acknowledgements, operating phase and lock changes are shared across the connected browsers.
 
 ## Build
-Requirements: Go 1.26+, Node.js 20+.
+
+Requires Go 1.26.3 or later and Node.js 20 or later.
+
 ```powershell
-pwsh scripts/build.ps1 -Version 1.0.0
+pwsh scripts/build.ps1 -Version 0.2.0
 ```
-This builds the web UI (`web/dist`), runs the Go tests, and produces `bin/avline-sight.exe`.
+
+The script builds the web UI under `web/dist`, runs the Go tests under `internal/` and produces `bin/avline-sight.exe`.
 
 ## Documentation
-- API contract: [docs/api.md](docs/api.md)
-- MIB basis: NETGEAR M4250 firmware 13.0.7.6 MIBs. Every OID in `internal/mib` was machine-checked against the MIB files.
+
+- [API contract](docs/api.md)
+- The MIBs come from NETGEAR M4250 firmware 13.0.7.6. Every OID in `internal/mib` was machine-checked against the MIB files.
 
 ## Known limitations
-- Tested only against the built-in simulator; no real M4250 has been tested yet. On first connection to real hardware, run "Probe" and export a diagnostic dump to check vendor-specific differences, such as the SFP DOM scale (`DBmHundreths`, currently ÷100).
-- The OUI dictionary covers only major vendors. QSC, Biamp, MA Lighting, Clear-Com and BirdDog are not included yet.
-- SSH host keys are not pinned. The fingerprint is shown on connect for manual checking.
+
+- Hardware verification on an M4250 is pending. On first connection to real hardware, run Probe and export a diagnostic dump to check vendor-specific values such as the SFP DOM scale (`DBmHundreths`, currently divided by 100).
+- The OUI dictionary covers major vendors. QSC, Biamp, MA Lighting, Clear-Com and BirdDog are still missing.
+- SSH host keys are not pinned. Check the fingerprint shown on connection.
 - SNMPv3, external notifications, sFlow and SNMP SET actions are planned for v2.
