@@ -9,9 +9,9 @@ It ships as one portable Windows executable with the web UI built in. By default
 
 - **Port monitor** opens at startup. Switch between Diagram (rack view) and List to check switches and ports. The alert band shows active and unacknowledged alerts. The overall status covers all switches, including when the view is filtered by group.
 - **Devices** shows observed and registered devices, their switch and port, planned and observed IP addresses, and the latest ping result. You can export the list as CSV.
-- **Logs** shows events and markers in time order. Use filters to find warnings, unacknowledged events or markers. Times shown in the log are PC receive times in JST.
+- **Logs** shows events and markers in time order. Use filters to find issues and warnings, unacknowledged events or markers. Times shown in the log are PC receive times in JST.
 - **Wall display** shows current status by switch and highlights unacknowledged alerts for a shared monitor.
-- **Expert display** is off by default. Turn it on in Settings to open Details, Topology and the Telnet/SSH Terminal. Details includes Multicast / AV, DHCP, Health / Audit, Configuration changes and Settings that differ from recommendations. The terminal connects to registered switches, stores no credentials and disconnects after 10 minutes of inactivity.
+- **Expert display** is off by default. Turn it on in Settings to open Details, Topology and the Telnet/SSH Terminal. Details includes Multicast / AV, DHCP, Health / Audit, Configuration changes and Settings that differ from recommendations. The terminal connects only to registered switches, stores no credentials and disconnects after 10 minutes of inactivity.
 
 ## Operating phases and post-show report
 
@@ -41,7 +41,7 @@ When switching to Show, review the **Pre-show checklist**. It checks switch reac
 .\avline-sight.exe --open
 ```
 
-The default WebUI address is `localhost:8080`. If the app cannot listen on UDP 162 for traps, it continues monitoring and shows a warning. The Windows SNMP Trap service may be using the port, or the app may lack permission. Change the listening port in Settings or with `--trap`.
+The default WebUI address is `localhost:8080`. If the app cannot listen on UDP 162 for traps, it continues monitoring and shows a warning. The Windows SNMP Trap service may be using the port, or the app may lack permission. Change the listening port at startup with `--trap` (for example `--trap 0.0.0.0:1162`).
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -55,7 +55,7 @@ The default WebUI address is `localhost:8080`. If the app cannot listen on UDP 1
 
 In **Settings**, use **Import configuration file** to select a JSON file and review the differences. Applying it creates and activates a new profile. Use **Export configuration file** to save the current profile as `avline-sight.config.json`. Exports omit SNMP communities. Enter the communities for switches that require credentials before polling can start.
 
-On first startup with no profiles in the database, the app loads `avline-sight.config.json` if you place it next to the executable. A successful automatic import records `CONFIG_AUTO_IMPORTED`. Advanced users can supply a path with `--config`, for example `--config .\avline-sight.config.json`.
+On first startup with no profiles in the database, the app loads `avline-sight.config.json` if you place it next to the executable. A successful automatic import records `CONFIG_AUTO_IMPORTED`. To load a file from another location, supply a path with `--config`, for example `--config .\avline-sight.config.json`.
 
 ## Checking SNMP trap reception
 
@@ -69,7 +69,7 @@ Get-NetUDPEndpoint -LocalPort 162 -ErrorAction SilentlyContinue | Select-Object 
 Get-Service SNMPTRAP -ErrorAction SilentlyContinue
 ```
 
-3. If the port is in use, stop the Windows SNMP Trap service if it can be stopped, or set a different port in the app and use the same destination port on the switches. Check that the Windows firewall permits inbound UDP traffic on that port.
+3. If the port is in use, stop the Windows SNMP Trap service if it can be stopped, or start the app on a different port with `--trap` and use the same destination port on the switches. Check that the Windows firewall permits inbound UDP traffic on that port.
 4. After configuring the switch, verify that the last trap time updates. The CLI example still requires hardware verification. [API documentation](docs/api.md#snmp-trap)
 
 ## Watching from several PCs
@@ -93,7 +93,7 @@ The script builds the web UI under `web/dist`, runs the Go tests under `internal
 
 ## Known limitations
 
-- Hardware verification on an M4250 is pending. On first connection to real hardware, run Probe and export a diagnostic dump to check vendor-specific values such as the SFP DOM scale (`DBmHundreths`, currently divided by 100).
+- Hardware verification on an M4250 is pending. On first connection to real hardware, use the developer API probe (`POST /api/switches/:id/probe`) and diagnostic dump (`GET /api/switches/:id/diagnostic-dump`) to check vendor-specific values such as the SFP DOM scale (`DBmHundreths`, currently divided by 100).
 - The OUI dictionary covers major vendors. QSC, Biamp, MA Lighting, Clear-Com and BirdDog are still missing.
 - SSH host keys are not pinned. Check the fingerprint shown on connection.
 - SNMPv3, external notifications, sFlow and SNMP SET actions are planned for v2.

@@ -41,7 +41,7 @@ WebUIを同梱した持ち運び可能なWindows用の単一実行ファイル�
 .\avline-sight.exe --open
 ```
 
-WebUIの既定アドレスは `localhost:8080` です。UDP 162でTrapを待ち受けできない場合も、監視を続けて警告を表示します。Windowsの「SNMP Trap」サービスがポートを使用しているか、権限が足りない可能性があります。待受ポートは設定画面か `--trap` で変更できます。
+WebUIの既定アドレスは `localhost:8080` です。UDP 162でTrapを待ち受けできない場合も、監視を続けて警告を表示します。Windowsの「SNMP Trap」サービスがポートを使用しているか、権限が足りない可能性があります。待受ポートは起動時に `--trap` で変更できます（例: `--trap 0.0.0.0:1162`）。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
@@ -55,7 +55,7 @@ WebUIの既定アドレスは `localhost:8080` です。UDP 162でTrapを待ち�
 
 **設定** → **設定ファイルを読み込む** でJSONファイルを選び、差分を確認します。適用すると新しい現場が登録され、その現場に切り替わります。**設定ファイルを書き出す** で現在の現場を `avline-sight.config.json` として保存できます。書き出したファイルにSNMPコミュニティは含まれません。認証情報が必要なスイッチは、SNMPコミュニティを入力するとポーリングを開始できます。
 
-データベースに現場がない初回起動時は、実行ファイルと同じ階層に置いた `avline-sight.config.json` を読み込みます。自動読込に成功すると `CONFIG_AUTO_IMPORTED` が記録されます。詳細に指定する場合は、`--config .\avline-sight.config.json` のようにパスを渡せます。
+データベースに現場がない初回起動時は、実行ファイルと同じ階層に置いた `avline-sight.config.json` を読み込みます。自動読込に成功すると `CONFIG_AUTO_IMPORTED` が記録されます。別の場所のファイルを読み込みたい場合は、`--config .\avline-sight.config.json` のようにパスを渡せます。
 
 ## SNMP Trapの受信を確認する
 
@@ -69,7 +69,7 @@ Get-NetUDPEndpoint -LocalPort 162 -ErrorAction SilentlyContinue | Select-Object 
 Get-Service SNMPTRAP -ErrorAction SilentlyContinue
 ```
 
-3. ポートが使用中なら、停止できる場合はWindowsの「SNMP Trap」サービスを止めます。または、アプリで別のポートを指定し、スイッチの送信先にも同じポートを指定します。WindowsファイアウォールでそのポートのUDP受信を許可していることを確認してください。
+3. ポートが使用中なら、停止できる場合はWindowsの「SNMP Trap」サービスを止めます。または、`--trap` で別のポートを指定してアプリを起動し、スイッチの送信先にも同じポートを指定します。WindowsファイアウォールでそのポートのUDP受信を許可していることを確認してください。
 4. スイッチの設定後に、最終Trap時刻が更新されることを確認します。CLIの設定例は実機での確認が必要です。[API仕様](docs/api.md#snmp-trap)
 
 ## 複数のPCで見る
@@ -93,7 +93,7 @@ WebUIを `web/dist` にビルドし、`internal/` 配下のGoテストを実行�
 
 ## 既知の制約
 
-- M4250実機での動作確認は今後の課題です。初めて実機につなぐときは「プローブ」を実行し、診断ダンプで機種ごとの値を確認してください。たとえばSFP DOMの換算値（`DBmHundreths`、現在は100で除算）です。
+- M4250実機での動作確認は今後の課題です。初めて実機につなぐときは、開発者向けAPIのプローブ（`POST /api/switches/:id/probe`）と診断ダンプ（`GET /api/switches/:id/diagnostic-dump`）で機種ごとの値を確認してください。たとえばSFP DOMの換算値（`DBmHundreths`、現在は100で除算）です。
 - OUI辞書には主要ベンダーを収録しています。QSC、Biamp、MA Lighting、Clear-Com、BirdDogは未収録です。
 - SSHのホスト鍵は固定（ピン留め）しません。接続時に表示される指紋を照合してください。
 - SNMPv3、外部通知、sFlow、SNMP SETによる操作はv2で対応予定です。
