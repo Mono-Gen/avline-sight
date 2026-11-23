@@ -102,7 +102,8 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, wall
     </div>
     <div className="rack-front">
       {stale && <span className="rack-stale">{t('rack.stale')}</span>}
-      {!ports.length && <span>{t(sw.reachable ? 'rack.loading' : 'rack.offline')}</span>}
+      {sw.needs_credentials ? <span>{t('configFile.credentialsRequired')}</span> :
+        !ports.length && <span>{t(sw.reachable ? 'rack.loading' : 'rack.offline')}</span>}
       {rows.map((row, index) => <div className="rack-port-row" key={index}>{row.slots.map((port, position) => port
         ? <div className="rack-port-slot" key={port.if_index}>
           <PortLamp port={port} alerts={matchingPortAlerts(alerts, sw.id, port.if_index)} devices={devices.filter(device => device.if_index === port.if_index)}

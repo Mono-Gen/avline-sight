@@ -23,6 +23,7 @@ export const en: Dictionary = {
     credentialsTitle: "Switch credentials",
     credentialsNote: "Switches without an SNMP community cannot start polling. Enter the SNMP community for each switch.",
     credentialsPending: "{count} switches need credentials. Enter their SNMP communities.",
+    credentialsRequired: "SNMP community required",
     enterCredentials: "Enter credentials",
     credentialsComplete: "All switches have credentials.",
     startupError: "Automatic configuration import failed. {reason}. Correct the file and import it from Settings.",

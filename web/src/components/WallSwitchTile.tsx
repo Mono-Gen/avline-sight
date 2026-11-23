@@ -20,7 +20,8 @@ export function WallSwitchTile({ summary, alerts, stale, selected = false, onSel
       {alert.device_name || alert.port || summary.name} · {eventTitle(alert)}
     </li>)}</ul>}
     {current.length > 3 && <p>{t('wall.more', { count: current.length - 3 })}</p>}
-    {!summary.reachable && <p>{t('rack.offline')}</p>}
+    {summary.needs_credentials ? <p>{t('configFile.credentialsRequired')}</p> :
+      !summary.reachable && <p>{t('rack.offline')}</p>}
     {stale && <p>{t('rack.stale')}</p>}
   </article>;
 }

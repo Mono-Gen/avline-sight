@@ -49,6 +49,24 @@ const noop = () => {};
 const fault = (id, extra = {}) => ({ event_id: id, severity: 'WARNING', suppressed: false, acked: false, code: 'CUSTOM', title: 'Fault', ...extra });
 const headers = html => [...html.matchAll(/<th\b[^>]*>([^<]+)<\/th>/g)].map(match => match[1]);
 
+test('switches without credentials show a credential status on the rack and wall', context => {
+  context.after(() => setLang('ja'));
+  setLang('en');
+  const { RackRow } = require('../src/components/RackRow.tsx');
+  const { registeredSummary } = require('../src/views/rackSummaries.ts');
+  const summary = registeredSummary({ id: 1, name: 'Core', needs_credentials: true });
+  const props = {
+    summary, ports: [], devices: [], alerts: [], definitions: {}, wall: true,
+    uplinks: new Set(), actions: {},
+  };
+  for (const component of [RackRow, WallSwitchTile]) {
+    const html = render(component, props);
+    assert.ok(html.includes('SNMP community required'));
+    assert.ok(!html.includes(t('rack.offline')));
+    assert.ok(render(component, { ...props, summary: { ...summary, needs_credentials: false } }).includes(t('rack.offline')));
+  }
+});
+
 test('発生元のイベントコードは日英で文言を持ち、通常表示に依頼先を出さない', context => {
   context.after(() => setLang('ja'));
   const { eventJa } = require('../src/i18n/eventJa.ts');

@@ -55,6 +55,7 @@ func applyConfig(h http.Handler, body string, preview profilePreviewResponse) *h
 
 func TestProfileConfigRoundTripAndCredentials(t *testing.T) {
 	s, h := newDevicesServer(t)
+	sampleProfile := strings.Replace(sampleProfile, `"42:10","label":"Uplink"}`, `"042:+010","label":"Uplink"},{"match_type":"mac","match_key":"aabb.ccdd.eeff","label":"Mixer"}`, 1)
 	oldID := s.Engine.ProfileID()
 	preview := previewConfig(t, h, sampleProfile)
 	diff := map[string]configDiff{}
@@ -118,7 +119,8 @@ func TestProfileConfigRoundTripAndCredentials(t *testing.T) {
 	assertSavedAlias := func() {
 		t.Helper()
 		aliases, err := s.Store.Aliases(s.Engine.ProfileID())
-		if err != nil || len(aliases) != 1 || aliases[0].MatchKey != fmt.Sprintf("%d:10", first) {
+		if err != nil || len(aliases) != 2 || aliases[0].MatchKey != "AA:BB:CC:DD:EE:FF" ||
+			aliases[1].MatchKey != fmt.Sprintf("%d:10", first) {
 			t.Fatalf("aliases: %v %v", aliases, err)
 		}
 	}
@@ -161,6 +163,26 @@ func TestProfileConfigRoundTripAndCredentials(t *testing.T) {
 	w = do(h, "GET", fmt.Sprintf("/api/profiles/%d/export", s.Engine.ProfileID()), "")
 	if w.Code != 200 || w.Body.String() != exported {
 		t.Fatalf("round-trip export: %s", w.Body)
+	}
+}
+
+func TestProfileConfigRejectsInvalidOrDuplicateAliasKeys(t *testing.T) {
+	for _, tc := range []struct{ name, aliases, field string }{
+		{"duplicate MAC", `{"match_type":"mac","match_key":"aa-bb-cc-dd-ee-ff","label":"A"},
+			{"match_type":"mac","match_key":"aabb.ccdd.eeff","label":"B"}`, "aliases[1].match_key: duplicate alias"},
+		{"duplicate port", `{"match_type":"port","match_key":"42:10","label":"A"},
+			{"match_type":"port","match_key":"+042:010","label":"B"}`, "aliases[1].match_key: duplicate alias"},
+		{"eight-byte MAC", `{"match_type":"mac","match_key":"00:11:22:33:44:55:66:77","label":"A"}`,
+			"aliases[0].match_key: expected a 6-byte MAC address"},
+		{"port index overflow", `{"match_type":"port","match_key":"42:99999999999999999999","label":"A"}`,
+			"aliases[0].match_key: invalid switch or port reference"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := strings.Replace(sampleProfile, `{"match_type":"port","match_key":"42:10","label":"Uplink"}`, tc.aliases, 1)
+			if _, err := engine.ReadProfileConfig(strings.NewReader(body)); err == nil || err.Error() != tc.field {
+				t.Fatalf("error = %v, want %q", err, tc.field)
+			}
+		})
 	}
 }
 

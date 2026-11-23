@@ -20,7 +20,7 @@ func newDevicesServer(t *testing.T) (*Server, http.Handler) {
 	}
 	t.Cleanup(func() { st.Close() })
 	pid, _ := st.EnsureDefaultProfile()
-	sw := model.SwitchConfig{ProfileID: pid, Name: "SW1", IP: "10.0.0.1", Enabled: true}
+	sw := model.SwitchConfig{ProfileID: pid, Name: "SW1", IP: "10.0.0.1", Community: "fixture", Enabled: true}
 	st.SaveSwitch(&sw)
 	e := engine.New(st, pid, nil)
 	e.Reload()

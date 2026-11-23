@@ -211,20 +211,25 @@ type Finding struct {
 // Audit はスイッチ間設定ズレ＆ProAV基準チェック（仕様3.5）。
 // crossReady は監視中の全スイッチが一度は応答し設定まで取得済みか。
 // 起動直後に一部のスイッチだけで比較すると「全台既定値」等を誤検知するため、揃うまで横断判定を保留する。
-func (e *Engine) crossReady() bool {
-	for _, s := range e.States() {
+func crossReady(states []*model.SwitchState) bool {
+	polled := false
+	for _, s := range states {
+		if s.NeedsCredentials {
+			continue
+		}
 		if s.LastPoll.IsZero() || (s.Reachable && s.Config.StpVersion == "") {
 			return false
 		}
+		polled = true
 	}
-	return true
+	return polled
 }
 
 func (e *Engine) Audit() ([]Finding, map[string][]string) {
 	states := e.States()
 	var fs []Finding
 	fw := map[string][]string{}
-	if !e.crossReady() {
+	if !crossReady(states) {
 		return []Finding{{Severity: model.SevInfo, Code: "AUDIT_PENDING", Title: "全スイッチの初回取得待ちのため、横断監査を保留しています",
 			Hint: model.EventHintJa("AUDIT_PENDING")}}, fw
 	}
@@ -447,7 +452,8 @@ func chainDepth(live []*model.SwitchState) int {
 
 // evaluateCross は横断ルールをイベント化する（監査結果のCRITICAL/WARNINGを立ち上がりで発報）。
 func (e *Engine) evaluateCross(set Settings) {
-	if !e.crossReady() {
+	states := e.States()
+	if !crossReady(states) {
 		return
 	}
 	fs, _ := e.Audit()
@@ -460,7 +466,7 @@ func (e *Engine) evaluateCross(set Settings) {
 		e.raise(seen, k, model.Event{SwitchID: f.SwitchID, SwitchName: f.SwitchName, Category: "ANOMALY", Severity: f.Severity, Code: f.Code, Title: f.Title, Hint: f.Hint, Detail: f.Detail})
 	}
 	// クエリアIPの変化（VLAN単位）
-	for _, s := range e.States() {
+	for _, s := range states {
 		for _, v := range s.IGMP.Vlans {
 			k := itoa(int(s.ID)) + ":" + itoa(v.VLAN)
 			e.mu.Lock()

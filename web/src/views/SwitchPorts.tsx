@@ -105,6 +105,7 @@ export function SwitchPorts(p: ViewProps) {
     </div>
     {!p.replay && <PollingStatus {...statePolling} />}
     {s && selected === p.selected && <>
+      {s.needs_credentials && <p role="status">⚠ {t('configFile.credentialsRequired')}</p>}
       <FrontPanel
         alerts={p.replay ? [] : p.operations?.alerts}
         switchId={s.id}

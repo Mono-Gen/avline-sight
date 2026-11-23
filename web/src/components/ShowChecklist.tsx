@@ -17,6 +17,7 @@ type State = 'pass' | 'review' | 'pending';
 interface Finding {
   state: State;
   reason: string;
+  action?: string;
   target: ChecklistTarget;
 }
 interface Item {
@@ -41,13 +42,13 @@ function ChecklistRows({ items, onTarget }: { items: Item[]; onTarget: (target: 
         <strong>{t(`checklist.${item.id}` as TranslationKey)}</strong>
       </div>
       {!item.findings?.length && <p>{item.reason}</p>}
-      {item.findings?.map(({ state, target, reason }, index) => {
+      {item.findings?.map(({ state, target, reason, action }, index) => {
         const description = [target.label, reason].filter(Boolean).join(' · ');
         return <div key={index} className="flex flex-wrap items-baseline gap-x-2">
           {state === 'review' && (target.mac || target.switch_id || target.destination) ?
             <button type="button" onClick={() => onTarget(target)}>{description} ↗</button> :
             <span>{description}</span>}
-          <span>{item.action}</span>
+          <span>{action ?? item.action}</span>
         </div>;
       })}
     </li>)}

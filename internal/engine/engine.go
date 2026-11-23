@@ -167,11 +167,13 @@ func (e *Engine) reload() {
 		}
 		keep[s.ID] = true
 		e.order = append(e.order, s.ID)
-		if e.states[s.ID] == nil {
-			e.states[s.ID] = &model.SwitchState{ID: s.ID, Name: s.Name, IP: s.IP, GroupTag: s.GroupTag}
+		needsCredentials := s.NeedsCredentials()
+		if e.states[s.ID] == nil || needsCredentials {
+			e.states[s.ID] = &model.SwitchState{ID: s.ID, Name: s.Name, IP: s.IP, GroupTag: s.GroupTag, NeedsCredentials: needsCredentials}
 		} else {
 			copyState := *e.states[s.ID]
 			copyState.Name, copyState.GroupTag = s.Name, s.GroupTag
+			copyState.NeedsCredentials = false
 			e.states[s.ID] = &copyState
 		}
 	}
@@ -308,7 +310,7 @@ func (e *Engine) OnState(st *model.SwitchState, tier string) {
 	now := time.Now().UTC()
 	e.mu.Lock()
 	registered := e.states[st.ID]
-	if registered == nil {
+	if registered == nil || registered.NeedsCredentials {
 		e.mu.Unlock()
 		return
 	}
@@ -640,6 +642,8 @@ type Summary struct {
 	RxBps       float64        `json:"rx_bps"`
 	TxBps       float64        `json:"tx_bps"`
 	Alerts      map[string]int `json:"alerts"`
+
+	NeedsCredentials bool `json:"needs_credentials,omitempty"`
 }
 
 // Overview は俯瞰データ。
@@ -677,7 +681,8 @@ func (e *Engine) Overview(withEvents bool) Overview {
 		}
 	}
 	for _, s := range e.States() {
-		sm := Summary{ID: s.ID, Name: s.Name, IP: s.IP, GroupTag: s.GroupTag, Reachable: s.Reachable, LastError: s.LastError, Model: s.Model, FW: s.FW,
+		sm := Summary{ID: s.ID, Name: s.Name, IP: s.IP, GroupTag: s.GroupTag, Reachable: s.Reachable, NeedsCredentials: s.NeedsCredentials,
+			LastError: s.LastError, Model: s.Model, FW: s.FW,
 			UptimeSec: s.UptimeSec, CPU5s: s.Health.CPU5s, MemFreePct: s.Health.MemFreePct, MbufUsedPct: s.Health.MbufUsedPct,
 			TempMaxC: s.Health.TempMaxC, TempState: s.Health.TempState, FansOK: true, PSUOK: true,
 			PoEBudgetW: s.Health.PoEBudgetW, PoEUsedW: s.Health.PoEUsedW, Alerts: map[string]int{model.SevCritical: 0, model.SevWarning: 0}}

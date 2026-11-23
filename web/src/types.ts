@@ -22,6 +22,7 @@ export interface SwitchSummary {
   ip: string;
   group_tag: string;
   reachable: boolean;
+  needs_credentials?: boolean;
   last_error: string;
   last_trap_ts?: string | null;
   model: string;

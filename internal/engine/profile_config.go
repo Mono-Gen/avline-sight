@@ -1,11 +1,13 @@
 package engine
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -81,6 +83,15 @@ func ExportProfileConfig(c store.ProfileConfig) (store.ProfileConfig, error) {
 	if c.GroupOrder == nil {
 		c.GroupOrder = []string{}
 	}
+	c.Aliases = slices.Clone(c.Aliases)
+	for i, a := range c.Aliases {
+		if key, _, ok := normalizeConfigAliasKey(a); ok {
+			c.Aliases[i].MatchKey = key
+		}
+	}
+	slices.SortFunc(c.Aliases, func(a, b store.Alias) int {
+		return cmp.Or(strings.Compare(a.MatchType, b.MatchType), strings.Compare(a.MatchKey, b.MatchKey))
+	})
 	return c, nil
 }
 
@@ -274,6 +285,22 @@ func normalizeConfigSwitches(c *store.ProfileConfig, legacy bool) error {
 	return nil
 }
 
+func normalizeConfigAliasKey(a store.Alias) (key string, switchID int64, ok bool) {
+	switch a.MatchType {
+	case "mac":
+		key, ok := NormalizeMAC(a.MatchKey)
+		return key, 0, ok
+	case "port":
+		source, index, _ := strings.Cut(strings.TrimSpace(a.MatchKey), ":")
+		id, idErr := strconv.ParseInt(source, 10, 64)
+		port, portErr := strconv.Atoi(index)
+		if idErr == nil && portErr == nil && id > 0 && port > 0 {
+			return fmt.Sprintf("%d:%d", id, port), id, true
+		}
+	}
+	return "", 0, false
+}
+
 func validateConfigReferences(c *store.ProfileConfig, ids map[int64]int64, legacy bool) error {
 	for key := range c.Layout {
 		if suffix, ok := strings.CutPrefix(key, "sw-"); ok {
@@ -299,17 +326,14 @@ func validateConfigReferences(c *store.ProfileConfig, ids map[int64]int64, legac
 			return fmt.Errorf("aliases[%d].match_type: expected mac or port", i)
 		}
 		a.ID = 0
-		a.MatchKey = strings.ToUpper(strings.TrimSpace(a.MatchKey))
-		if a.MatchType == "port" {
-			source, index, _ := strings.Cut(a.MatchKey, ":")
-			id, _ := strconv.ParseInt(source, 10, 64)
-			port, _ := strconv.Atoi(index)
-			if id <= 0 || port <= 0 || (!legacy && ids[id] == 0) {
-				return fmt.Errorf("aliases[%d].match_key: invalid switch or port reference", i)
-			}
-		} else if _, err := net.ParseMAC(a.MatchKey); err != nil {
-			return fmt.Errorf("aliases[%d].match_key: expected a MAC address", i)
+		canonical, id, ok := normalizeConfigAliasKey(a)
+		if a.MatchType == "port" && (!ok || !legacy && ids[id] == 0) {
+			return fmt.Errorf("aliases[%d].match_key: invalid switch or port reference", i)
 		}
+		if !ok {
+			return fmt.Errorf("aliases[%d].match_key: expected a 6-byte MAC address", i)
+		}
+		a.MatchKey = canonical
 		key := [2]string{a.MatchType, a.MatchKey}
 		if seen[key] {
 			return fmt.Errorf("aliases[%d].match_key: duplicate alias", i)

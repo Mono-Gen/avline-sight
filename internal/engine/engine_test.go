@@ -18,7 +18,7 @@ func newTestEngine(t *testing.T) (*Engine, *store.Store) {
 	}
 	t.Cleanup(func() { st.Close() })
 	pid, _ := st.EnsureDefaultProfile()
-	sw := model.SwitchConfig{ProfileID: pid, Name: "SW", IP: "10.0.0.1", Enabled: true}
+	sw := model.SwitchConfig{ProfileID: pid, Name: "SW", IP: "10.0.0.1", Community: "fixture", Enabled: true}
 	st.SaveSwitch(&sw)
 	return New(st, pid, nil), st
 }
@@ -214,6 +214,37 @@ func TestAuditCrossSwitch(t *testing.T) {
 	fs, _ = e.Audit()
 	if len(fs) != 1 || fs[0].Code != "AUDIT_PENDING" {
 		t.Errorf("初回取得前に横断監査が実行された: %+v", fs)
+	}
+	e.states[3].NeedsCredentials = true
+	_, fw = e.Audit()
+	if len(fw) != 2 {
+		t.Fatalf("a switch without credentials blocked the audit: %v", fw)
+	}
+	e.evaluateCross(e.Settings())
+	if !hasAlert(e, "DHCP_DOUBLE") {
+		t.Fatal("a switch without credentials blocked cross-switch alerts")
+	}
+}
+
+func TestCrossReadyRequiresAPolledSwitch(t *testing.T) {
+	waiting := &model.SwitchState{NeedsCredentials: true}
+	collected := &model.SwitchState{LastPoll: time.Now(), Reachable: true, Config: model.SwitchConf{StpVersion: "rstp"}}
+	slowPending := &model.SwitchState{LastPoll: time.Now(), Reachable: true}
+	for _, tc := range []struct {
+		name   string
+		states []*model.SwitchState
+		ready  bool
+	}{
+		{"empty", nil, false},
+		{"no credentials", []*model.SwitchState{waiting}, false},
+		{"first slow poll pending", []*model.SwitchState{waiting, collected, slowPending}, false},
+		{"configured switch collected", []*model.SwitchState{waiting, collected}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := crossReady(tc.states); got != tc.ready {
+				t.Fatalf("crossReady = %t, want %t", got, tc.ready)
+			}
+		})
 	}
 }
 

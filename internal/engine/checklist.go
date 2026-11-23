@@ -39,6 +39,7 @@ type ChecklistTarget struct {
 type ChecklistFinding struct {
 	State  string          `json:"state"`
 	Reason string          `json:"reason"`
+	Action string          `json:"action,omitempty"`
 	Target ChecklistTarget `json:"target"`
 }
 
@@ -72,11 +73,12 @@ func checklistText(english bool, ja, en string) string {
 	return ja
 }
 
-func (item *ChecklistItem) add(state, reason string, target ChecklistTarget) {
+func (item *ChecklistItem) add(state, reason string, target ChecklistTarget) *ChecklistFinding {
 	if item.State == checkPass || state == checkReview && item.State == checkPending {
 		item.State, item.Reason = state, reason
 	}
 	item.Findings = append(item.Findings, ChecklistFinding{State: state, Reason: reason, Target: target})
+	return &item.Findings[len(item.Findings)-1]
 }
 
 func switchTarget(s *model.SwitchState) ChecklistTarget {
@@ -168,6 +170,12 @@ func (e *Engine) ShowChecklist(ctx context.Context, trapReady, english bool) (Sh
 		byID[s.ID] = s
 		target := switchTarget(s)
 		switch {
+		case s.NeedsCredentials:
+			reason := l(checklistCredentialsJa, checklistCredentialsEn)
+			action := l(checklistCredentialsActionJa, checklistCredentialsActionEn)
+			target.Destination = "settings"
+			reach.add(checkReview, reason, target).Action = action
+			initial.add(checkReview, reason, target).Action = action
 		case s.LastPoll.IsZero():
 			reach.add(checkPending, l("初回の応答を待っています。", "Waiting for the first polling response."), target)
 		case !s.Reachable:
@@ -181,7 +189,7 @@ func (e *Engine) ShowChecklist(ctx context.Context, trapReady, english bool) (Sh
 		} else if offset := *s.ClockOffsetSeconds; math.Abs(offset) > clockToleranceSeconds {
 			clock.add(checkReview, fmt.Sprintf(l("監視PCとの時刻差は%+.1f秒です。", "The clock offset from the monitoring PC is %+.1f seconds."), offset), target)
 		}
-		if s.LastPoll.IsZero() || s.Config.StpVersion == "" {
+		if !s.NeedsCredentials && (s.LastPoll.IsZero() || s.Config.StpVersion == "") {
 			state := checkPending
 			if !s.LastPoll.IsZero() && !s.Reachable {
 				state = checkReview

@@ -219,7 +219,7 @@ func (s *Store) CredentialPendingCount(ctx context.Context, id int64) (int, erro
 type ConfigApply struct {
 	Activate       bool
 	OnlyEmpty      bool
-	ReuseActive    bool
+	ReuseActive    func(ProfileConfig) (ProfileConfig, error)
 	PreviewProfile int64
 	Revision       string
 	StartupEvent   *model.Event
@@ -237,11 +237,15 @@ func (s *Store) ApplyProfileConfig(ctx context.Context, c ProfileConfig, opts Co
 			return 0, err
 		}
 	}
-	if opts.ReuseActive {
+	if opts.ReuseActive != nil {
 		var active int64
 		err := tx.QueryRowContext(ctx, `SELECT id FROM profiles WHERE active=1 LIMIT 1`).Scan(&active)
 		if err == nil {
 			current, err := readProfileConfig(ctx, tx, active)
+			if err != nil {
+				return 0, err
+			}
+			current, err = opts.ReuseActive(current)
 			if err != nil {
 				return 0, err
 			}

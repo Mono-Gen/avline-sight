@@ -60,6 +60,7 @@ type SwitchState struct {
 	AlertCounts map[string]int    `json:"alert_counts"`
 
 	ClockOffsetSeconds *float64 `json:"clock_offset_seconds,omitempty"`
+	NeedsCredentials   bool     `json:"needs_credentials,omitempty"`
 
 	MbufFailCounters          map[string]string `json:"-"`
 	DHCPInvalidServerCounters map[string]string `json:"-"`

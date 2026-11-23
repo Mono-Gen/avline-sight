@@ -234,7 +234,7 @@ func TestMissingDeviceUsesAccessPortAndFreshFDBOnOtherSwitch(t *testing.T) {
 			e, db := newTestEngine(t)
 			const mac = "00:11:22:33:44:55"
 			registerDevice(t, e, db, mac, "")
-			other := model.SwitchConfig{ProfileID: e.ProfileID(), Name: "Other", Enabled: true}
+			other := model.SwitchConfig{ProfileID: e.ProfileID(), Name: "Other", Community: "fixture", Enabled: true}
 			if err := db.SaveSwitch(&other); err != nil {
 				t.Fatal(err)
 			}

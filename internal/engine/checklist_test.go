@@ -10,6 +10,55 @@ import (
 
 const checklistTestMAC = "00:11:22:33:44:55"
 
+func TestChecklistSwitchWithoutCredentials(t *testing.T) {
+	e, st := newTestEngine(t)
+	sw := model.SwitchConfig{ProfileID: e.ProfileID(), Name: "Unconfigured", IP: "192.0.2.2", Enabled: true}
+	if err := st.SaveSwitch(&sw); err != nil {
+		t.Fatal(err)
+	}
+	e.Reload()
+	if s := e.State(sw.ID); s == nil || !s.NeedsCredentials {
+		t.Fatalf("missing credentials not reflected in switch state: %+v", s)
+	}
+	summary := e.Overview(false).Switches
+	if len(summary) != 2 || summary[1].ID != sw.ID || !summary[1].NeedsCredentials {
+		t.Fatalf("missing credentials not reflected in overview: %+v", summary)
+	}
+	checklist, err := e.ShowChecklist(t.Context(), true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, item := range checklist.Items {
+		if item.ID != "reach" && item.ID != "initial" {
+			continue
+		}
+		if item.State != "review" {
+			t.Errorf("%s = %s, want review", item.ID, item.State)
+		}
+		for _, finding := range item.Findings {
+			if finding.Target.SwitchID == sw.ID {
+				checked++
+				if finding.State != "review" || finding.Reason != "SNMP community required" ||
+					finding.Action != "Enter the SNMP community in Settings." || finding.Target.Destination != "settings" {
+					t.Errorf("%s: unexpected credential finding: %+v", item.ID, finding)
+				}
+			}
+		}
+	}
+	if checked != 2 {
+		t.Fatalf("checked %d credential findings, want 2", checked)
+	}
+	sw.Community = "fixture"
+	if err := st.SaveSwitch(&sw); err != nil {
+		t.Fatal(err)
+	}
+	e.Reload()
+	if s := e.State(sw.ID); s.NeedsCredentials || !s.LastPoll.IsZero() {
+		t.Fatalf("switch should wait for its first poll: %+v", s)
+	}
+}
+
 func TestChecklistChassisAlertTargetsOnlyTheSwitch(t *testing.T) {
 	e, _ := newTestEngine(t)
 	e.states[1] = &model.SwitchState{ID: 1, Name: "Stage"}

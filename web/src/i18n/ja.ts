@@ -20,6 +20,7 @@ export const ja = {
     same: "現在の設定と同じ内容です。",
     applyNote: "適用すると、ファイルの設定を新しい現場として登録し、その現場に切り替えます。",
     credentialsTitle: "スイッチの認証情報",
+    credentialsRequired: "SNMPコミュニティ未入力",
     credentialsNote: "SNMPコミュニティが未入力のスイッチはポーリングを開始できません。各スイッチのSNMPコミュニティを入力してください。",
     credentialsPending: "認証情報が必要なスイッチが {count} 台あります。SNMPコミュニティを入力してください。",
     enterCredentials: "認証情報を入力",

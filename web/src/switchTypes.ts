@@ -19,6 +19,7 @@ export interface SwitchState {
   ip: string;
   group_tag: string;
   reachable: boolean;
+  needs_credentials?: boolean;
   last_error?: string;
   last_poll: string;
   sys_name: string;

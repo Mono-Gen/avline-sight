@@ -10,6 +10,7 @@ export function replaySummary(state: SwitchState): SwitchSummary {
     ip: state.ip,
     group_tag: state.group_tag,
     reachable: state.reachable,
+    needs_credentials: state.needs_credentials,
     last_error: state.last_error || '',
     model: state.model,
     fw: state.fw,
@@ -38,7 +39,7 @@ export function replaySummary(state: SwitchState): SwitchSummary {
 export function registeredSummary(config: SwitchConfig): SwitchSummary {
   return {
     id: config.id, name: config.name, ip: config.ip, group_tag: config.group_tag,
-    reachable: false, fw: '', model: '', last_error: '', last_trap_ts: config.last_trap_ts,
+    reachable: false, needs_credentials: config.needs_credentials, fw: '', model: '', last_error: '', last_trap_ts: config.last_trap_ts,
     uptime_sec: 0, cpu_5s: 0, mem_free_pct: 0, mbuf_used_pct: 0, temp_max_c: 0,
     temp_state: '', fans_ok: true, psu_ok: true, poe_budget_w: 0, poe_used_w: 0,
     ports_up: 0, ports_total: 0, rx_bps: 0, tx_bps: 0, alerts: { critical: 0, warning: 0 },
