@@ -5,7 +5,7 @@ import { Badge } from '../components/Badge';
 import { DeviceCsvImportDialog } from '../components/DeviceCsvImportDialog';
 import { confirmBulkPing } from '../components/GroupActions';
 import { PollingStatus } from '../components/PollingStatus';
-import { SwitchFilters } from '../components/SwitchFilters';
+import { pruneSwitchFilter, SwitchFilters } from '../components/SwitchFilters';
 import { bulkPingTimeoutMs, deviceUrl, importSummary, MAX_BULK_PING, pingLabel, pingTargets, visibleDeviceCsv } from '../deviceCsv';
 import type { DeviceScope } from '../deviceCsv';
 import { asArray, decimal, formatTime } from '../format';
@@ -85,7 +85,10 @@ export function Devices(p: ViewProps & { initialQuery?: string }) {
   const [importOpen, setImportOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [revision, setRevision] = useState(0);
-  const [switchFilter, setSwitchFilter] = useState<SwitchFilter>(emptySwitchFilter);
+  const [storedFilter, setSwitchFilter] = useState<SwitchFilter>(emptySwitchFilter);
+  // Ignore filter choices that no longer exist so the list never stays empty on a stale selection.
+  const switchFilter = pruneSwitchFilter(storedFilter, asArray(p.replay ?? p.overview?.switches),
+    p.replay ? undefined : asArray(p.operations?.groups).map(group => group.name), p.settings?.views) ?? storedFilter;
   const preset = partPreset({ ...switchFilter, settings: p.settings });
   const filtered = hasGroupFilter(switchFilter);
   const tags = asArray(preset?.tags);

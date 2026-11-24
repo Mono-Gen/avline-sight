@@ -357,7 +357,7 @@ td {
 @media (min-width: 768px) {
   /* 長いページでも左ペイン下の操作が画面内に残るよう、画面の高さに固定する */
   .app-nav { width: 13rem; }
-  .app-nav-tools { position: sticky; bottom: 0; background: #0f172a; padding-block-end: .8rem; }
+
   .app-nav nav, .app-nav-tools { flex-direction: column; }
 }
 @media (max-width: 720px) {
@@ -365,4 +365,8 @@ td {
   .rack-front { grid-row: 2; grid-column: 1 / -1; }
   .rack-health { grid-row: 1; grid-column: 2; }
   .wall-header .overall-status { flex-basis: 100%; }
+}
+/* 左ペイン下の操作は、画面の高さが足りるときだけ画面下に固定する（低い画面では上のボタンを覆わない） */
+@media (min-width: 768px) and (min-height: 700px) {
+  .app-nav-tools { position: sticky; bottom: 0; background: #0f172a; padding-block-end: .8rem; }
 }

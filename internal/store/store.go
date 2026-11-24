@@ -273,7 +273,7 @@ func (s *Store) ActivateProfile(id int64) error {
 	}
 	var n int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM profiles WHERE id=?`, id).Scan(&n); err != nil || n == 0 {
-		return fmt.Errorf("プロファイル %d が存在しません", id)
+		return fmt.Errorf("プロジェクト %d が存在しません", id)
 	}
 	_ = r
 	return tx.Commit()

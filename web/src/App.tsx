@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, json, message } from './api';
 import { AppHeader } from './components/AppHeader';
 import { AppSidebar } from './components/AppSidebar';
+import { pruneSwitchFilter } from './components/SwitchFilters';
 import { ConfigCredentialsDialog } from './components/ConfigCredentialsDialog';
 import { ConfigImportDialog } from './components/ConfigImportDialog';
 import { ExportDialog, ScrubBar, SettingsDialog } from './components/Dialogs';
@@ -215,7 +216,8 @@ export default function App() {
     const controller = new AbortController();
     const url = `/api/replay/${encodeURIComponent(replayId)}/snapshot?ts=${encodeURIComponent(replayStart)}`;
     void api<ReplaySnapshot>(url, { signal: controller.signal }).then(result => {
-      if (controller.signal.aborted) return;      setReplay(old => old?.id === replayId && !old.ts
+      if (controller.signal.aborted) return;
+      setReplay(old => old?.id === replayId && !old.ts
         ? { ...old, ts: result.ts, requestedTs: replayStart, states: asArray(result.switches), alerts: result.alerts, portRecommendations: result.port_recommendations }
         : old);
     }).catch(reason => {
@@ -242,6 +244,11 @@ export default function App() {
     }
   }, [dialog, canOpenShowChecklist]);
   useEffect(() => setMonitorFilter(emptySwitchFilter), [profileId, replayId]);
+  // Clear filter choices that no longer exist (renamed group, deleted switch or part) so the monitor never stays empty.
+  const filterSwitches = replay ? asArray(replay.states) : asArray(overview?.switches);
+  const filterGroups = replay ? undefined : asArray(operations.groups).map(group => group.name);
+  const prunedFilter = pruneSwitchFilter(monitorFilter, filterSwitches, filterGroups, settings?.views);
+  useEffect(() => { if (prunedFilter) setMonitorFilter(prunedFilter); }, [JSON.stringify(prunedFilter)]); // eslint-disable-line react-hooks/exhaustive-deps
   const now = usePcTime();
   const stopped = !replay && monitoringStopped(online && live.fresh, live.updatedAt, now);
   const legacyReplay = replay && replay.alerts === undefined;

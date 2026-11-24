@@ -21,6 +21,17 @@ function compareValues(left: unknown, right: unknown, direction: 'ascending' | '
   return direction === 'ascending' ? result : -result;
 }
 
+// Sort by the text shown on screen (event titles and hints use their displayed wording, not raw values).
+function sortValue(key: string, row: Record<string, unknown>) {
+  const value = row[key];
+  if ((key === 'title' || key === 'hint') && typeof row.code === 'string') {
+    const detail = row.detail && typeof row.detail === 'object' ? row.detail as Record<string, unknown> : undefined;
+    const text = typeof value === 'string' ? value : undefined;
+    return key === 'hint' ? eventHint({ code: row.code, hint: text, detail }) : eventTitle({ code: row.code, title: text, detail });
+  }
+  return value;
+}
+
 function cellValue(key: string, value: unknown, row: Record<string, unknown>, expert: boolean): React.ReactNode {
   if ((key === 'title' || key === 'hint') && typeof row.code === 'string') {
     const detail = row.detail && typeof row.detail === 'object' ? row.detail as Record<string, unknown> : undefined;
@@ -44,22 +55,25 @@ function cellValue(key: string, value: unknown, row: Record<string, unknown>, ex
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
-export function Table<Row extends object>({ rows, labels = {}, first = [], hide = [], values = {}, expert = false }: {
+export function Table<Row extends object>({ rows, labels = {}, first = [], hide = [], values = {}, expert = false, resetKey }: {
   rows: Row[];
   labels?: Record<string, string>;
   first?: readonly string[];
   hide?: readonly string[];
   values?: Record<string, (value: unknown, row: Row) => React.ReactNode>;
   expert?: boolean;
+  // Header sorting is dropped when the screen's own sort order changes.
+  resetKey?: unknown;
 }) {
-  const [sort, setSort] = useState<{ key: string; direction: 'ascending' | 'descending' }>();
+  const [stored, setSort] = useState<{ key: string; direction: 'ascending' | 'descending'; resetKey?: unknown }>();
+  const sort = stored && stored.resetKey === resetKey ? stored : undefined;
   const list = asArray(rows).filter(row => row && typeof row === 'object') as (Row & Record<string, unknown>)[];
   if (!list.length) return <p>{t('ui.m195')}</p>;
   const keys = [...new Set([...first, ...list.flatMap(row => Object.keys(row))])].filter(key => !hide.includes(key));
   const entries = list.map((row, index) => ({ row, index }));
   if (sort && keys.includes(sort.key)) {
     const collator = new Intl.Collator(getLang(), { numeric: true });
-    entries.sort((left, right) => compareValues(left.row[sort.key], right.row[sort.key], sort.direction, collator));
+    entries.sort((left, right) => compareValues(sortValue(sort.key, left.row), sortValue(sort.key, right.row), sort.direction, collator));
   }
   return (
     <div className="overflow-auto">
@@ -69,9 +83,11 @@ export function Table<Row extends object>({ rows, labels = {}, first = [], hide 
             const direction = sort?.key === key ? sort.direction : undefined;
             return <th key={key} scope="col" aria-sort={direction}>
               <button type="button" className="border-0 bg-transparent p-0 text-left text-inherit"
-                onClick={() => setSort(current => ({ key,
-                  direction: current?.key === key && current.direction === 'ascending' ? 'descending' : 'ascending',
-                }))}>
+                onClick={() => setSort(current => {
+                  const active = current && current.resetKey === resetKey ? current : undefined;
+                  return active?.key !== key ? { key, direction: 'ascending', resetKey }
+                    : active.direction === 'ascending' ? { key, direction: 'descending', resetKey } : undefined;
+                })}>
                 {labels[key] || columnLabels[key] || key}{direction && <span aria-hidden="true"> {direction === 'ascending' ? '▲' : '▼'}</span>}
               </button>
             </th>;

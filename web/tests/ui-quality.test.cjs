@@ -152,14 +152,15 @@ test('switch action popup dismisses outside, on Escape and when an item is chose
     refs = [popup, trigger];
     return ActionPopup({ label: 'Core actions', children: React.createElement('button', { onClick: () => { actionCount++; } }, 'Ports') });
   };
-  for (const dismiss of [
-    () => listeners.get('click')({ target: outside }),
-    () => listeners.get('keydown')({ key: 'Escape', preventDefault: noop, stopPropagation: noop }),
-    menu => {
+  // An outside click must not pull focus back to the trigger; Escape and choosing an item return it.
+  for (const [dismiss, focusDelta] of [
+    [() => listeners.get('click')({ target: outside }), 0],
+    [() => listeners.get('keydown')({ key: 'Escape', preventDefault: noop, stopPropagation: noop }), 1],
+    [menu => {
       menu.props.onClickCapture({ target: inside });
       menu.props.children.props.onClick();
       assert.equal(actionCount, 1);
-    },
+    }, 1],
   ]) {
     draw().props.children[0].props.onClick({ currentTarget: trigger });
     const [button, menu] = draw().props.children;
@@ -171,7 +172,7 @@ test('switch action popup dismisses outside, on Escape and when an item is chose
     const priorFocus = focusCount;
     dismiss(menu);
     assert.equal(open, false);
-    assert.equal(focusCount, priorFocus + 1);
+    assert.equal(focusCount, priorFocus + focusDelta);
     cleanup();
     assert.equal(listeners.size, 0);
   }
@@ -1768,4 +1769,16 @@ test('設定ファイルの要約と差分を表示し、適用時だけ確認�
   assert.equal(requests[2].options.body, file);
   assert.equal(requests[2].options.headers['X-AVLine-Profile'], '7');
   assert.equal(requests[2].options.headers['X-AVLine-Config-Revision'], 'preview-token');
+});
+
+test('stale switch filters are cleared and empty part presets do not count as a filter', () => {
+  const { pruneSwitchFilter } = require('../src/components/SwitchFilters.tsx');
+  const switches = [{ id: 1, name: 'A', group_tag: 'core' }, { id: 2, name: 'B', group_tag: 'edge' }];
+  const parts = [{ id: 'all', name: 'All' }, { id: 'audio', name: 'Audio', vlans: [10] }];
+  assert.equal(pruneSwitchFilter({ group: 'core', part: 'audio', switchId: 1 }, switches, ['core', 'edge'], parts), undefined);
+  assert.deepEqual(pruneSwitchFilter({ group: 'old', part: '', switchId: 9 }, switches, ['core', 'edge'], parts),
+    { group: undefined, part: '', switchId: undefined });
+  assert.deepEqual(pruneSwitchFilter({ part: 'all' }, switches, [], parts), { group: undefined, part: '', switchId: undefined });
+  // While switches are still loading, nothing is cleared.
+  assert.equal(pruneSwitchFilter({ group: 'old', part: '' }, [], [], parts), undefined);
 });

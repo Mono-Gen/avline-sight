@@ -212,10 +212,11 @@ export function OverviewView(props: OverviewProps) {
         groups={live ? allGroupNames : undefined} parts={props.settings?.views} />
     </div>}
     {!locked && <div className="operation-area" role="group" aria-label={t('rack.actions')}>
-      {props.group === undefined && !preset?.tags?.length && <>
+      {/* Bulk actions appear only when their target matches what is shown (never act on all or a whole group while filtered to a switch or part). */}
+      {props.group === undefined && !preset?.tags?.length && !preset?.vlans?.length && props.switchId === undefined && <>
         <strong>{t('rack.all')}</strong><GroupActions {...actionProps} group="*" all />
       </>}
-      {props.group !== undefined && layout === 'list' && <GroupActions {...actionProps} group={props.group} />}
+      {props.group !== undefined && props.switchId === undefined && layout === 'list' && <GroupActions {...actionProps} group={props.group} />}
       <button disabled={busy} onClick={() => setEdit(null)}>{t('rack.add')}</button>
       <button disabled={busy} onClick={() => setDiscover(true)}>{t('rack.discover')}</button>
     </div>}
@@ -242,7 +243,7 @@ export function OverviewView(props: OverviewProps) {
             <button className="group-collapse" aria-label={t(isClosed ? 'rack.expand' : 'rack.collapse')} aria-expanded={!isClosed} onClick={collapse}>{isClosed ? '+' : '−'}</button>
           </div>
           {!locked && !isClosed && <div className="operation-area" role="group" aria-label={t('rack.actions')}>
-            <GroupActions {...actionProps} group={name} />
+            {props.switchId === undefined && <GroupActions {...actionProps} group={name} />}
             <button disabled={busy} aria-label={t('operations.rename')} onClick={() => setGroupEdit({ name })}>✎</button>
           </div>}
           {!isClosed && rows.map(sw => <RackRow key={sw.id} summary={sw}

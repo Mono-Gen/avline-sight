@@ -5,15 +5,16 @@ export function ActionPopup({ label, children }: { label: string; children: Reac
   const popup = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const itemsId = useId();
-  const close = useCallback(() => {
+  // Return focus to the trigger only on Escape or item choice; an outside click keeps focus where the user clicked.
+  const close = useCallback((restoreFocus = true) => {
     setOpen(false);
-    trigger.current?.focus({ preventScroll: true });
+    if (restoreFocus) trigger.current?.focus({ preventScroll: true });
   }, []);
 
   useEffect(() => {
     if (!open) return;
     const outside = (event: MouseEvent) => {
-      if (event.target instanceof Node && !popup.current?.contains(event.target)) close();
+      if (event.target instanceof Node && !popup.current?.contains(event.target)) close(false);
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;

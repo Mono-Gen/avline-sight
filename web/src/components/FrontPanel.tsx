@@ -1,4 +1,5 @@
 import { eventTitle, getLang, t } from '../i18n';
+import { asArray } from '../format';
 import { frontPanelRows } from '../frontPanelLayout';
 import type { Alert, ModelDefinitions, Port } from '../types';
 import { lampState } from '../rackModel';
@@ -17,6 +18,9 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
   const definition = model ? definitions?.[model] : undefined;
   const rows = frontPanelRows(ports, definition);
   const english = getLang() === 'en';
+  // Short numbers are unambiguous only when every slash-named port shares one prefix; stacks (1/0/1 and 2/0/1) keep full names.
+  const prefixes = new Set(asArray(ports).filter(port => port.name.includes('/')).map(port => port.name.slice(0, port.name.lastIndexOf('/'))));
+  const shortNames = prefixes.size <= 1;
   return (
     <div className="overflow-x-auto rounded bg-slate-700 p-3">
       {rows.map((row, index) => (
@@ -29,15 +33,16 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
               // Keep an unacked PoE fault visible even when another alert is active (active first).
               const isPoeFault = (alert: Alert) => alert.code === 'POE_PORT_FAULT' || alert.code === 'POE_FAULT';
               const fault = state.issues.find(alert => alert.active && isPoeFault(alert)) ?? state.issues.find(isPoeFault);
-              const shortName = port.name.slice(port.name.lastIndexOf('/') + 1) || port.name;
+              const shortName = shortNames ? port.name.slice(port.name.lastIndexOf('/') + 1) || port.name : port.name;
               const linkUp = port.oper === 'up';
-              const linkLabel = port.excluded ? t('ui.m133') : linkUp ? t('ui.m134') : t('ui.m135');
+              // For an unreachable switch, show the lamp state in words instead of the last known link state.
+              const linkLabel = port.excluded ? t('ui.m133') : !reachable ? t(state.label) : linkUp ? t('ui.m134') : t('ui.m135');
               const warningLabel = state.issues.length > 0 ? t('ui.m137') : '';
               const powered = (port.poe?.power_w || 0) > 0;
               const poeLabel = fault ? `${t('ui.m138')} · ${eventTitle(fault)}` : powered ? t('ui.m139') : '';
               const description = [`${port.name} ${port.type}`, linkLabel, t(state.label), warningLabel, poeLabel]
                 .filter(Boolean).join(' · ');
-              const iconOnly = english && ((!port.excluded && !linkUp) || Boolean(warningLabel || poeLabel));
+              const iconOnly = english && ((!port.excluded && (!linkUp || !reachable)) || Boolean(warningLabel || poeLabel));
               return (
                 <button
                   key={port.if_index}
@@ -50,7 +55,7 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
                   <span className="block whitespace-normal break-words">{shortName}</span>
                   <span className="flex items-center justify-center gap-0.5 text-xs" aria-hidden="true">
                     <span className="shrink-0">
-                      {iconOnly ? (port.excluded ? '×' : linkUp ? '✓' : '—') : linkLabel}
+                      {iconOnly ? (port.excluded ? '×' : !reachable ? '?' : linkUp ? '✓' : '—') : linkLabel}
                     </span>
                     {warningLabel && <span className="shrink-0">⚠</span>}
                     {poeLabel && <span className="shrink-0">{fault ? '⛔' : '⚡'}</span>}

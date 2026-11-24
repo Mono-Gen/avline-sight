@@ -39,6 +39,7 @@ export function PortMatrix(p: ViewProps & { visibleSwitchIds: ReadonlySet<number
       </label>
     </div>
     <Table
+      resetKey={sort}
       hide={['deviceDetails']}
       values={{
         oper: value => value === 'up' ? t('filters.linkConnected') : value === 'down' ? t('filters.linkDisconnected') : undefined,

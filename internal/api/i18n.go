@@ -103,6 +103,8 @@ var errorFragments = [][2]string{
 	{"1回の上限は", "The limit per request is "},
 	{"件です", " targets"},
 	{" は監視中に見つかったIPではありません", " is not a monitored IP address"},
+	{"プロジェクト ", "Project "},
+	{" が存在しません", " does not exist"},
 	{"画像ファイルではありません（", "This is not an image ("},
 	{"）", ")"},
 }
