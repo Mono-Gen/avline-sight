@@ -100,8 +100,8 @@ test('壁表示にはラベル付き終了とアラート確認を置き、ラ�
   assert.match(header, /wall-exit/);
   assert.match(header, /phase-setup/);
   assert.match(header, /PC時刻/);
-  assert.equal((header.match(/<select\b/g) || []).length, 1);
-  assert.match(header, /<select aria-label="グループ"/);
+  // グループの絞り込みは各画面へ移した。壁表示のヘッダーには選択欄を置かない
+  assert.equal((header.match(/<select\b/g) || []).length, 0);
   assert.equal(render(GroupActions, { ...group, wall: true }), '');
   const band = render(AlertBand, { alerts: [alert()], wall: true, ack: noop });
   assert.match(band, /Switch A.*Mixer/);

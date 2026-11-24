@@ -61,10 +61,10 @@ test('接続機器一覧に未検出・経路上・記録なしを示す', () =>
   assert.match(html, /0\.0 W/);
 });
 
-test('再生中の接続機器は再生時刻と担当VLAN付きの書出を表示し読込を無効にする', () => {
+test('再生中の接続機器は再生時刻付きの書出を表示し読込を無効にする', () => {
   const html = render(Devices, {
     replay: [], replayRef: { id: 'replay-id', ts: '2026-01-01T00:00:00Z' },
-    part: 'audio', settings: { views: [{ id: 'audio', vlans: [10, 20] }] }, locked: true, busy: false,
+    settings: { views: [{ id: 'audio', vlans: [10, 20] }] }, locked: true, busy: false,
   });
   const links = [...html.matchAll(/href="([^"]+)" download=""/g)].map(match => match[1].replaceAll('&amp;', '&'));
   assert.equal(links.length, 2);
@@ -73,7 +73,8 @@ test('再生中の接続機器は再生時刻と担当VLAN付きの書出を表�
     const parsed = new URL(link, 'http://test.invalid');
     assert.equal(parsed.pathname, '/api/replay/replay-id/devices/export.csv');
     assert.equal(parsed.searchParams.get('ts'), '2026-01-01T00:00:00Z');
-    assert.equal(parsed.searchParams.get('vlans'), '10,20');
+    // 担当パートは画面内の絞り込みに移したため、絞り込み無しの書出にVLAN条件は付かない
+    assert.equal(parsed.searchParams.get('vlans'), null);
   }
   assert.match(html, /disabled="" title="オフライン再生中はCSVを読み込めません。"/);
 });

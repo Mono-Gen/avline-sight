@@ -355,7 +355,9 @@ td {
 .log-message summary { cursor: pointer; overflow-wrap: anywhere; }
 .log-message pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (min-width: 768px) {
+  /* 長いページでも左ペイン下の操作が画面内に残るよう、画面の高さに固定する */
   .app-nav { width: 13rem; }
+  .app-nav-tools { position: sticky; bottom: 0; background: #0f172a; padding-block-end: .8rem; }
   .app-nav nav, .app-nav-tools { flex-direction: column; }
 }
 @media (max-width: 720px) {

@@ -223,7 +223,7 @@ func (s *Store) EnsureDefaultProfile() (int64, error) {
 	}
 	err = s.DB.QueryRow(`SELECT id FROM profiles ORDER BY id LIMIT 1`).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		r, err := s.DB.Exec(`INSERT INTO profiles(name,active,created_at) VALUES('既定の現場',1,?)`, time.Now().UTC().Format(time.RFC3339))
+		r, err := s.DB.Exec(`INSERT INTO profiles(name,active,created_at) VALUES('既定のプロジェクト',1,?)`, time.Now().UTC().Format(time.RFC3339))
 		if err != nil {
 			return 0, err
 		}
