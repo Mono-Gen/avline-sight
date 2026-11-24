@@ -170,8 +170,8 @@ ${summary}` : summary)) runPing({ manual }, -1);
           <button disabled={inventory.data?.key !== key}
             onClick={() => download(visibleDeviceCsv(unnamedRows), 'avline-sight-devices-unnamed.csv')}>{t('ui.m236')}</button>
         </> : <>
-          <a className="underline" href={deviceUrl({ ...filters, scope: 'all' }, replay, true)} download>{t('ui.m235')}</a>
-          <a className="underline" href={deviceUrl({ ...filters, scope: 'unnamed' }, replay, true)} download>{t('ui.m236')}</a>
+          <a className="button-link" href={deviceUrl({ ...filters, scope: 'all' }, replay, true)} download>{t('ui.m235')}</a>
+          <a className="button-link" href={deviceUrl({ ...filters, scope: 'unnamed' }, replay, true)} download>{t('ui.m236')}</a>
         </>)}
         <button disabled={Boolean(importDisabledReason) || p.busy} title={importDisabledReason} onClick={() => {
           setNotice('');

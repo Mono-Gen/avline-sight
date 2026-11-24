@@ -584,7 +584,7 @@ test('ラックの手前に5状態の凡例を置き、2桁ポートと状態記
   });
   const legend = html.match(/<ul class="rack-legend"[^]*?<\/ul>/)[0];
   for (const [tone, symbol, label] of [
-    ['critical', '!', '異常'], ['warning', '▲', '未確認'], ['healthy', '✓', '正常'],
+    ['critical', '!', '異常'], ['warning', '▲', '注意・未確認'], ['healthy', '✓', '正常'],
     ['unused', '·', '未使用'], ['unknown', '?', '不明'],
   ]) {
     assert.ok(legend.includes(`class="lamp-${tone}" aria-hidden="true">${symbol}</span>${label}`));
@@ -592,7 +592,13 @@ test('ラックの手前に5状態の凡例を置き、2桁ポートと状態記
   assert.ok(html.indexOf(legend) < html.indexOf('class="rack-groups"'));
   assert.match(html, /class="lamp-number">11<\/span><span class="lamp-symbol" aria-hidden="true">!<\/span>/);
   assert.match(html, /Mixer · 1\/0\/11 物理エラー/);
-  assert.match(html, /title="電源 · 異常"/);
+  // Health: only the abnormal item is named in words; the full list stays in the tooltip.
+  assert.match(html, /<span class="health-abnormal">⚠ 電源 異常<\/span>/);
+  assert.match(html, /class="rack-health" title="[^"]*電源 異常[^"]*"/);
+  assert.doesNotMatch(html, /本体 ✓/);
+  // Group header counts are words, and the legend explains the dot before a switch name.
+  assert.match(html, /異常 1 · 未確認 1/);
+  assert.match(html, /●<\/span>応答あり/);
 });
 
 test('接続機器の列順と登録名・LLDP名の表示', () => {

@@ -131,7 +131,8 @@ export const ja = {
   operations: operationsJa,
   pages: {
     group: 'グループ', groupLabel: 'グループ:', marker: 'マーカー', record: '記録',
-    legend: 'ポートの凡例', abnormal: '異常', unconfirmed: '未確認', normal: '正常', unused: '未使用', unknown: '不明',
+    legend: 'ポートの凡例', abnormal: '異常', unconfirmed: '注意・未確認', switchReachable: '応答あり', switchUnreachable: '応答なし',
+    groupCounts: '異常 {active} · 未確認 {unacked}', bodyOk: '本体 ✓', bodyUnknown: '本体 ?', bodyLabel: '本体', normal: '正常', unused: '未使用', unknown: '不明',
     physicalError: '物理エラー', needsReview: '要確認',
     deviceName: '機器名', switchPort: 'スイッチ/ポート', deviceIP: 'IP/予定IP', vlanPoe: 'VLAN/PoE',
     pingConfirm: '本番中に{count}件のIPへPingを送信します。機器やネットワークに負荷がかかります。続けますか？',

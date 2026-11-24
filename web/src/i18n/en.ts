@@ -132,7 +132,8 @@ export const en: Dictionary = {
   operations: operationsEn,
   pages: {
     group: 'Group', groupLabel: 'Group:', marker: 'Marker', record: 'Record',
-    legend: 'Port legend', abnormal: 'Fault', unconfirmed: 'Unacknowledged', normal: 'Normal', unused: 'Unused', unknown: 'Unknown',
+    legend: 'Port legend', abnormal: 'Fault', unconfirmed: 'Caution / unacknowledged', switchReachable: 'Responding', switchUnreachable: 'Not responding',
+    groupCounts: 'Faults {active} · Unacknowledged {unacked}', bodyOk: 'Body ✓', bodyUnknown: 'Body ?', bodyLabel: 'Body', normal: 'Normal', unused: 'Unused', unknown: 'Unknown',
     physicalError: 'Physical error', needsReview: 'Needs review',
     deviceName: 'Device name', switchPort: 'Switch/port', deviceIP: 'IP/planned IP', vlanPoe: 'VLAN/PoE',
     pingConfirm: 'Send Ping requests to {count} IP addresses during Show? This adds load to devices and the network.',

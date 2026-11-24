@@ -22,6 +22,9 @@ export function PortLegend() {
     {Object.entries(lampStates).map(([tone, { symbol, label }]) => <li key={tone}>
       <span className={`lamp-${tone}`} aria-hidden="true">{symbol}</span>{t(label)}
     </li>)}
+    {/* The dot before a switch name: responding or not. */}
+    <li className="rack-legend-switch"><span aria-hidden="true">●</span>{t('pages.switchReachable')}</li>
+    <li className="rack-legend-switch"><span aria-hidden="true">⚠</span>{t('pages.switchUnreachable')}</li>
   </ul>;
 }
 
@@ -120,12 +123,14 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlan
         </span>;
       })}{callouts.size > 3 && <span>{t('rack.more', { count: callouts.size - 3 })}</span>}</div>}
     </div>
-    <div className="rack-health">{health.map(item => {
+    {(() => {
       const known = sw.reachable && !stale;
-      const label = `${t(`rack.${item.key}`)} · ${known ? item.value : t('pages.unknown')}`;
-      return <span key={item.key} title={label} aria-label={label} className={known && item.bad ? 'health-abnormal' : ''}>
-        {known && item.bad ? '⚠' : ''}{item.icon}
-      </span>;
-    })}</div>
+      const details = health.map(item => `${t(`rack.${item.key}`)} ${known ? item.value : t('pages.unknown')}`).join(' · ');
+      const bad = known ? health.filter(item => item.bad) : [];
+      return <div className="rack-health" title={details} aria-label={`${t('pages.bodyLabel')}: ${details}`}>
+        {!known ? <span>{t('pages.bodyUnknown')}</span> : !bad.length ? <span className="health-ok">{t('pages.bodyOk')}</span>
+          : bad.map(item => <span key={item.key} className="health-abnormal">⚠ {t(`rack.${item.key}`)} {item.value}</span>)}
+      </div>;
+    })()}
   </article>;
 }

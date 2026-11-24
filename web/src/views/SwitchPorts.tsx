@@ -107,6 +107,7 @@ export function SwitchPorts(p: ViewProps) {
     {s && selected === p.selected && <>
       {s.needs_credentials && <p role="status">⚠ {t('configFile.credentialsRequired')}</p>}
       <FrontPanel
+        showNote={p.expert}
         alerts={p.replay ? [] : p.operations?.alerts}
         switchId={s.id}
         reachable={s.reachable}

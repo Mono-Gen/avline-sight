@@ -5,7 +5,7 @@ import type { Alert, ModelDefinitions, Port } from '../types';
 import { lampState } from '../rackModel';
 import { matchingPortAlerts } from '../wallAlerts';
 
-export function FrontPanel({ ports, selected, onSelect, model, definitions, alerts = [], switchId = 0, reachable = true }: {
+export function FrontPanel({ ports, selected, onSelect, model, definitions, alerts = [], switchId = 0, reachable = true, showNote = false }: {
   ports: Port[];
   model?: string;
   definitions?: ModelDefinitions;
@@ -14,6 +14,8 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
   alerts?: Alert[];
   switchId?: number;
   reachable?: boolean;
+  // The built-in definition note is technical; only the expert display shows it.
+  showNote?: boolean;
 }) {
   const definition = model ? definitions?.[model] : undefined;
   const rows = frontPanelRows(ports, definition);
@@ -66,7 +68,7 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
           </div>
         </div>
       ))}
-      {definition?.note && <p className="text-sm text-white">{definition.note}</p>}
+      {showNote && definition?.note && <p className="text-sm text-white">{definition.note}</p>}
     </div>
   );
 }
