@@ -12,13 +12,14 @@ import { sortedAlerts, uplinkPorts } from '../rackModel';
 import type { Alert, InventoryRow, Port, SwitchConfig, SwitchSummary } from '../types';
 import { useRackData } from '../useRackData';
 import { registeredSummary, replaySummary } from './rackSummaries';
-import type { PortMonitorTarget, ViewProps } from './props';
-import { hasGroupFilter, inGroupScope } from './props';
+import type { PortMonitorTarget, SwitchFilter, ViewProps } from './props';
+import { hasGroupFilter, inGroupScope, matchesSwitch, partPreset } from './props';
 import type { Operations } from '../useOperations';
 import { PortMatrix } from './PortMatrix';
 import { WallSwitchTile } from '../components/WallSwitchTile';
 import { isPortAlert, matchingPortAlerts, replayIssueCount, summarizeAlerts } from '../wallAlerts';
 import { ErrorSymbol } from '../components/ErrorSymbol';
+import { SwitchFilters } from '../components/SwitchFilters';
 
 const collapseKey = 'rack-collapsed';
 function readCollapsed() {
@@ -65,6 +66,7 @@ type OverviewProps = ViewProps & {
   wall?: boolean; operations?: Operations; onTrapHelp?: () => void;
   replayAlerts?: Alert[];
   target?: PortMonitorTarget; onClosePortDetail?: () => void;
+  onFilterChange?: (filter: SwitchFilter) => void;
 };
 const noDevices: InventoryRow[] = [];
 
@@ -76,7 +78,7 @@ export function OverviewView(props: OverviewProps) {
   const [groupEdit, setGroupEdit] = useState<GroupEdit>();
   const portTarget = target?.ifIndex || target?.portName ? target : undefined;
   const [selected, setSelected] = useState(portTarget);
-  useEffect(() => { setSelected(portTarget); }, [portTarget, props.group, props.part]);
+  useEffect(() => { setSelected(portTarget); }, [portTarget, props.group, props.part, props.switchId]);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [notice, setNotice] = useState('');
   const [wallSwitch, setWallSwitch] = useState<number>();
@@ -95,10 +97,10 @@ export function OverviewView(props: OverviewProps) {
   const ports = indexBySwitch(asArray(rack.data?.ports));
   const bySwitch = indexBySwitch(devices);
   const knownGroups = new Map(asArray(operations?.groups).map(group => [group.name, group]));
-  const preset = asArray(props.settings?.views).find(view => view.id === props.part);
+  const preset = partPreset(props);
+  const tags = asArray(preset?.tags);
   const groupFiltered = hasGroupFilter(props);
-  const visible = summary.filter(item => (props.group === undefined || item.group_tag === props.group) &&
-    (!preset?.tags?.length || preset.tags.includes(item.group_tag)));
+  const visible = summary.filter(item => matchesSwitch(props, tags, item.id, item.group_tag));
   const visibleIds = new Set(visible.map(item => item.id));
   const targetSwitch = visible.find(item => item.id === target?.switchId);
   const focusedTarget = useRef<PortMonitorTarget>();
@@ -184,7 +186,7 @@ export function OverviewView(props: OverviewProps) {
   if (wall) return <div className="wall-monitor">
     {wallFilter && <div className="wall-filter-note">{t('wall.filter', { name: wallFilter.name })} <button onClick={() => setWallSwitch(undefined)}>{t('wall.clearFilter')}</button></div>}
     {outsideNote}
-    {(live || props.replayAlerts !== undefined) && <AlertBand alerts={wallFilter ? alerts.filter(alert => alert.switch_id === wallFilter.id) : alerts}
+    {(live || props.replayAlerts !== undefined) && <AlertBand alerts={wallFilter ? alerts.filter(alert => !alert.switch_id || alert.switch_id === wallFilter.id) : alerts}
       wall expert={props.expert} pending={live && !operations?.ready} busy={busy} locked={locked} ackMany={live ? operations?.ackMany : undefined}
       undoCount={live ? operations?.undoCount : undefined} undo={live ? operations?.undoAck : undefined} />}
     <h2 className="wall-switches-heading">{t('wall.current')}</h2>
@@ -205,6 +207,9 @@ export function OverviewView(props: OverviewProps) {
         <button aria-pressed={layout === 'diagram'} onClick={() => setLayout('diagram')}>{t('cleanup.diagram')}</button>
         <button aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>{t('cleanup.list')}</button>
       </div>
+      <SwitchFilters filter={{ group: props.group, part: props.part ?? '', switchId: props.switchId }}
+        onChange={props.onFilterChange ?? (() => undefined)} switches={summary}
+        groups={live ? allGroupNames : undefined} parts={props.settings?.views} />
     </div>}
     {!locked && <div className="operation-area" role="group" aria-label={t('rack.actions')}>
       {props.group === undefined && !preset?.tags?.length && <>
@@ -216,7 +221,7 @@ export function OverviewView(props: OverviewProps) {
     </div>}
     {!wall && notice && <div role="status" className="panel flex items-center justify-between gap-2">{notice}<button onClick={() => setNotice('')}>{t('rack.close')}</button></div>}
     {rack.error && <p role="alert" className="rack-data-error">⚠ {rack.error}</p>}
-    {layout === 'list' ? <PortMatrix {...props} /> : <><PortLegend /><div className="rack-groups">
+    {layout === 'list' ? <PortMatrix {...props} visibleSwitchIds={visibleIds} /> : <><PortLegend /><div className="rack-groups">
       {!visible.length && <p>{rack.data ? t('rack.empty') : t('rack.loading')}</p>}
       {groups.map(name => {
         const rows = groupRows.get(name) || [];
@@ -242,7 +247,7 @@ export function OverviewView(props: OverviewProps) {
           </div>}
           {!isClosed && rows.map(sw => <RackRow key={sw.id} summary={sw}
             ports={(ports.get(sw.id) || []).map(row => row.port)} devices={bySwitch.get(sw.id) || []} alerts={byAlert.get(sw.id) || []}
-            definitions={rack.definitions}
+            definitions={rack.definitions} vlans={preset?.vlans}
             wall={wall} stale={!!rack.error} uplinks={uplinks} samples={samples} actions={props}
             onPort={port => setSelected({ switchId: sw.id, ifIndex: port.if_index })} onEdit={setEdit} onHelp={onTrapHelp} refresh={refresh} />)}
         </section>;

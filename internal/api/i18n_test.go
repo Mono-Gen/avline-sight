@@ -42,9 +42,9 @@ func TestLocalizedErrorsAndLock(t *testing.T) {
 	for _, tc := range []struct {
 		language, expected string
 	}{
-		{"", "閲覧専用ロック中のため変更できません 対処: ヘッダーのロックを解除してから操作してください"},
-		{"ja", "閲覧専用ロック中のため変更できません 対処: ヘッダーのロックを解除してから操作してください"},
-		{"en-US", "Changes are unavailable while the read-only lock is enabled Action: Unlock the header control before trying again"},
+		{"", "閲覧専用ロック中のため変更できません 対処: 左ペインのロックを解除してから操作してください"},
+		{"ja", "閲覧専用ロック中のため変更できません 対処: 左ペインのロックを解除してから操作してください"},
+		{"en-US", "Changes are unavailable while the read-only lock is enabled Action: Unlock using the sidebar control before trying again"},
 	} {
 		r := httptest.NewRequest(http.MethodPut, "/api/phase", strings.NewReader(`{"phase":"setup"}`))
 		r.Header.Set("Accept-Language", tc.language)

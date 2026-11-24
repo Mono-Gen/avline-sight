@@ -7,13 +7,19 @@ export interface PortMonitorTarget {
   ifIndex?: number;
   portName?: string;
 }
-export interface ViewProps {
+export interface SwitchFilter {
+  group?: string;
+  part: string;
+  switchId?: number;
+}
+
+export const emptySwitchFilter: SwitchFilter = { part: '' };
+
+export interface ViewProps extends SwitchFilter {
   overview: Overview;
   operations?: Operations;
   status?: Status;
   settings?: Settings;
-  part: string;
-  group?: string;
   selected: number;
   select: (id: number) => void;
   openPortMonitor?: (target: PortMonitorTarget) => void;
@@ -31,16 +37,24 @@ export interface ViewProps {
   setWatch: (w: WatchItem[]) => void;
 }
 
-type ViewScope = Pick<ViewProps, 'group' | 'part' | 'settings' | 'replay' | 'overview'>;
+type ViewScope = Pick<ViewProps, 'group' | 'part' | 'switchId' | 'settings' | 'replay' | 'overview'>;
 
-export function groupSwitches({ group, part, settings, replay, overview }: ViewScope) {
-  const tags = asArray(asArray(settings?.views).find(view => view.id === part)?.tags);
-  return asArray(replay ?? overview.switches).filter(sw =>
-    (group === undefined || sw.group_tag === group) && (!tags.length || tags.includes(sw.group_tag)));
+export function partPreset({ settings, part }: Pick<ViewScope, 'settings' | 'part'>) {
+  return asArray(settings?.views).find(view => view.id === part);
 }
 
-export function hasGroupFilter({ group, part, settings }: ViewScope) {
-  return group !== undefined || !!asArray(asArray(settings?.views).find(view => view.id === part)?.tags).length;
+export function matchesSwitch(filter: SwitchFilter, tags: readonly string[], id: number | undefined, group: string) {
+  return !id || ((filter.switchId === undefined || filter.switchId === id) &&
+    (filter.group === undefined || filter.group === group) && (!tags.length || tags.includes(group)));
+}
+
+export function groupSwitches(scope: ViewScope) {
+  const tags = asArray(partPreset(scope)?.tags);
+  return asArray(scope.replay ?? scope.overview?.switches).filter(sw => matchesSwitch(scope, tags, sw.id, sw.group_tag));
+}
+
+export function hasGroupFilter(scope: SwitchFilter) {
+  return scope.group !== undefined || !!scope.part || scope.switchId !== undefined;
 }
 
 export function inGroupScope(row: { switch_id?: number }, visibleIds: ReadonlySet<number>, filtered: boolean) {

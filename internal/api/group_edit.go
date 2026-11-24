@@ -22,11 +22,11 @@ func (s *Server) checkGroupProfile(w http.ResponseWriter, r *http.Request) bool 
 	}
 	id, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || id <= 0 {
-		writeErr(w, 400, "プロファイルIDが不正です", "", "")
+		writeErr(w, 400, "プロジェクトIDが不正です", "", "")
 		return false
 	}
 	if id != s.Engine.ProfileID() {
-		writeErr(w, 409, "表示中のプロファイルが変更されました", "", "画面を更新してから再試行してください")
+		writeErr(w, 409, "表示中のプロジェクトが変更されました", "", "画面を更新してから再試行してください")
 		return false
 	}
 	return true

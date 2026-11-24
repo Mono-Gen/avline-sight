@@ -211,7 +211,7 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 			locked := s.locked
 			s.mu.Unlock()
 			if locked && strings.HasPrefix(r.URL.Path, "/api/") && !lockExempt(r.URL.Path) {
-				writeErr(w, http.StatusLocked, "閲覧専用ロック中のため変更できません", "", "ヘッダーのロックを解除してから操作してください")
+				writeErr(w, http.StatusLocked, "閲覧専用ロック中のため変更できません", "", "左ペインのロックを解除してから操作してください")
 				return
 			}
 		}

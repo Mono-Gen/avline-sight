@@ -19,7 +19,7 @@ export const rackJa = {
   more: '+{count}件', moreAlerts: '+{count}件', unknownTime: '不明', loading: '読込中…', empty: 'スイッチが登録されていません。追加または探索してください。', lastUpdated: '更新: {at}',
   device: '機器', plannedIP: '予定IP', pingStatus: 'Ping結果', notPinged: '未実施', portDetail: 'ポート詳細', bandwidth: '直近15分の帯域（bps）', noMetrics: '帯域データはまだありません', close: '閉じる',
   cpu: 'CPU', temp: '温度', psu: '電源', fan: 'ファン', poe: 'PoE予算', uplink: 'アップリンク RX/TX',
-  profile: 'プロファイル', part: '担当パート', replay: '⏪ オフライン再生', connecting: '⚠ 接続待機', light: '☀ ライト', dark: '☾ ダーク', pin: 'PINを入力してください', locked: '🔒 ロック中', lock: '🔓 編集可（ロックする）', export: '書出', settings: '設定', marker: 'マーカーのメモを入力してください', busy: '処理中…', error: '操作に失敗しました（{reason}）。接続や入力を確認して再試行してください。', unknown: '原因不明', invalidURL: 'URLが不正です。アクセス設定を確認してください。',
+  profile: 'プロジェクト', part: '担当パート', replay: '⏪ オフライン再生', connecting: '⚠ 接続待機', light: '☀ ライト', dark: '☾ ダーク', pin: 'PINを入力してください', locked: '🔒 ロック中', lock: '🔓 編集可（ロックする）', export: '書出', settings: '設定', marker: 'マーカーのメモを入力してください', busy: '処理中…', error: '操作に失敗しました（{reason}）。接続や入力を確認して再試行してください。', unknown: '原因不明', invalidURL: 'URLが不正です。アクセス設定を確認してください。',
 };
 export const rackEn: typeof rackJa = {
   nav: { overview: 'Overview', topology: 'Topology', monitor: 'Port monitor', ports: 'Ports', devices: 'Devices', multicast: 'Multicast / AV', dhcp: 'DHCP', health: 'Health / Audit', logs: 'Logs' },
@@ -42,5 +42,5 @@ export const rackEn: typeof rackJa = {
   more: '+{count}', moreAlerts: '+{count} more', unknownTime: 'Unknown', loading: 'Loading…', empty: 'No switches registered. Add or discover a switch.', lastUpdated: 'Updated: {at}',
   device: 'Device', plannedIP: 'Planned IP', pingStatus: 'Ping result', notPinged: 'Not run', portDetail: 'Port details', bandwidth: 'Bandwidth over the last 15 minutes (bps)', noMetrics: 'No bandwidth samples yet', close: 'Close',
   cpu: 'CPU', temp: 'Temperature', psu: 'PSU', fan: 'Fan', poe: 'PoE budget', uplink: 'Uplink RX/TX',
-  profile: 'Profile', part: 'View preset', replay: '⏪ Offline replay', connecting: '⚠ Connecting', light: '☀ Light', dark: '☾ Dark', pin: 'Enter PIN', locked: '🔒 Locked', lock: '🔓 Editing enabled (lock)', export: 'Export', settings: 'Settings', marker: 'Enter a marker note', busy: 'Working…', error: 'Operation failed ({reason}). Check the connection and input, then retry.', unknown: 'Unknown cause', invalidURL: 'Invalid URL. Check the access settings.',
+  profile: 'Project', part: 'View preset', replay: '⏪ Offline replay', connecting: '⚠ Connecting', light: '☀ Light', dark: '☾ Dark', pin: 'Enter PIN', locked: '🔒 Locked', lock: '🔓 Editing enabled (lock)', export: 'Export', settings: 'Settings', marker: 'Enter a marker note', busy: 'Working…', error: 'Operation failed ({reason}). Check the connection and input, then retry.', unknown: 'Unknown cause', invalidURL: 'Invalid URL. Check the access settings.',
 };

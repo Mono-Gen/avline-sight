@@ -17,7 +17,7 @@ import (
 func (s *Server) profiles(w http.ResponseWriter, r *http.Request) {
 	ps, err := s.Store.Profiles()
 	if err != nil {
-		writeErr(w, 500, "プロファイル一覧を取得できません", err.Error(), "")
+		writeErr(w, 500, "プロジェクト一覧を取得できません", err.Error(), "")
 		return
 	}
 	if ps == nil {
@@ -29,12 +29,12 @@ func (s *Server) profiles(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createProfile(w http.ResponseWriter, r *http.Request) {
 	var in struct{ Name string }
 	if err := readJSON(r, &in); err != nil || strings.TrimSpace(in.Name) == "" {
-		writeErr(w, 400, "プロファイルを作成できません", "名前が空です", "現場名を入力してください")
+		writeErr(w, 400, "プロジェクトを作成できません", "名前が空です", "プロジェクト名を入力してください")
 		return
 	}
 	id, err := s.Store.CreateProfile(strings.TrimSpace(in.Name))
 	if err != nil {
-		writeErr(w, 500, "プロファイルを作成できません", err.Error(), "")
+		writeErr(w, 500, "プロジェクトを作成できません", err.Error(), "")
 		return
 	}
 	writeJSON(w, 200, map[string]any{"id": id, "name": in.Name})
@@ -48,7 +48,7 @@ func (s *Server) activateProfile(w http.ResponseWriter, r *http.Request) {
 		err = s.Store.ActivateProfile(id)
 	}
 	if err != nil {
-		writeErr(w, 400, "プロファイルを切替できません", err.Error(), "")
+		writeErr(w, 400, "プロジェクトを切替できません", err.Error(), "")
 		return
 	}
 	s.Engine.SetProfile(id)
@@ -69,7 +69,7 @@ func (s *Server) exportProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	c, err := s.Store.ProfileConfig(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
-		writeErr(w, 404, "プロファイルが見つかりません", err.Error(), "")
+		writeErr(w, 404, "プロジェクトが見つかりません", err.Error(), "")
 		return
 	}
 	if err == nil {
@@ -162,7 +162,7 @@ func compareProfileConfigs(current, next store.ProfileConfig) ([]configDiff, err
 }
 
 func writeConfigInputError(w http.ResponseWriter, err error) {
-	writeErr(w, 400, "設定ファイルを読み込めません", err.Error(), "該当項目を修正して再試行してください")
+	writeErr(w, 400, "プロジェクトファイルを読み込めません", err.Error(), "該当項目を修正して再試行してください")
 }
 
 func (s *Server) importProfile(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +184,7 @@ func (s *Server) importProfile(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	if s.locked {
 		s.mu.Unlock()
-		writeErr(w, http.StatusLocked, "閲覧専用ロック中のため変更できません", "", "ヘッダーのロックを解除してから操作してください")
+		writeErr(w, http.StatusLocked, "閲覧専用ロック中のため変更できません", "", "左ペインのロックを解除してから操作してください")
 		return
 	}
 	id, err := s.Store.ApplyProfileConfig(r.Context(), c, opts)

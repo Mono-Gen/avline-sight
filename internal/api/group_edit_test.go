@@ -88,7 +88,7 @@ func TestGroupChangesRejectStaleProfile(t *testing.T) {
 		req.Header.Set("Accept-Language", "en")
 		result := httptest.NewRecorder()
 		h.ServeHTTP(result, req)
-		if result.Code != 409 || !strings.Contains(result.Body.String(), "The active profile has changed") {
+		if result.Code != 409 || !strings.Contains(result.Body.String(), "The active project has changed") {
 			t.Fatalf("%s %s: %d %s", request.method, request.path, result.Code, result.Body)
 		}
 	}

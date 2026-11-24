@@ -2,7 +2,7 @@ import type { EventCopy, eventJa } from './eventJa';
 
 export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
   "CONFIG_AUTO_IMPORTED": {
-    "title": "Configuration file imported automatically",
+    "title": "Project file imported automatically",
     "hint": ""
   },
   "DEVICE_MISSING": {

@@ -8,7 +8,7 @@ import { Dialog } from './Dialog';
 const maxConfigBytes = 4 * 1024 * 1024;
 const importPath = '/api/profiles/import';
 const fieldLabels: Record<string, TranslationKey> = {
-  name: 'rack.profile',
+  name: 'project.name',
   switches: 'configFile.switches',
   group_order: 'operations.order',
   trap_addr: 'configFile.trap',

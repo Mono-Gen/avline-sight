@@ -44,16 +44,16 @@ function cellValue(key: string, value: unknown, row: Record<string, unknown>, ex
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
-export function Table({ rows, labels = {}, first = [], hide = [], values = {}, expert = false }: {
-  rows: object[];
+export function Table<Row extends object>({ rows, labels = {}, first = [], hide = [], values = {}, expert = false }: {
+  rows: Row[];
   labels?: Record<string, string>;
   first?: readonly string[];
   hide?: readonly string[];
-  values?: Record<string, (value: unknown) => React.ReactNode>;
+  values?: Record<string, (value: unknown, row: Row) => React.ReactNode>;
   expert?: boolean;
 }) {
   const [sort, setSort] = useState<{ key: string; direction: 'ascending' | 'descending' }>();
-  const list = asArray(rows).filter(row => row && typeof row === 'object') as Record<string, unknown>[];
+  const list = asArray(rows).filter(row => row && typeof row === 'object') as (Row & Record<string, unknown>)[];
   if (!list.length) return <p>{t('ui.m195')}</p>;
   const keys = [...new Set([...first, ...list.flatMap(row => Object.keys(row))])].filter(key => !hide.includes(key));
   const entries = list.map((row, index) => ({ row, index }));
@@ -82,7 +82,7 @@ export function Table({ rows, labels = {}, first = [], hide = [], values = {}, e
             <tr key={index}>
               {keys.map(key => {
                 const formatValue = Object.prototype.hasOwnProperty.call(values, key) ? values[key] : undefined;
-                return <td key={key}>{formatValue?.(row[key]) ?? cellValue(key, row[key], row, expert)}</td>;
+                return <td key={key}>{formatValue?.(row[key], row) ?? cellValue(key, row[key], row, expert)}</td>;
               })}
             </tr>
           ))}

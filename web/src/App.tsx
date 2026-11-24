@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, json, message } from './api';
 import { AppHeader } from './components/AppHeader';
+import { AppSidebar } from './components/AppSidebar';
 import { ConfigCredentialsDialog } from './components/ConfigCredentialsDialog';
 import { ConfigImportDialog } from './components/ConfigImportDialog';
 import { ExportDialog, ScrubBar, SettingsDialog } from './components/Dialogs';
@@ -28,7 +29,8 @@ import { useLiveFeed } from './useLiveFeed';
 import { t, useLang } from './i18n';
 import { useOperations } from './useOperations';
 import { replayIssueCount, summarizeAlerts } from './wallAlerts';
-import type { PortMonitorTarget } from './views/props';
+import type { PortMonitorTarget, SwitchFilter } from './views/props';
+import { emptySwitchFilter } from './views/props';
 import { groupSwitches, hasGroupFilter } from './views/props';
 const normalPages = ['monitor', 'devices', 'logs'] as const;
 const expertPages = ['details', 'topology'] as const;
@@ -77,9 +79,7 @@ export default function App() {
   const expert = expertOverride ?? settings?.expert_display_default ?? false;
   const pages = expert ? [...normalPages, ...expertPages] : normalPages;
   const [settingsVersion, setSettingsVersion] = useState(0);
-  const [groupSelection, setGroupSelection] = useState('');
-  const part = groupSelection.startsWith('view:') ? groupSelection.slice(5) : '';
-  const group = groupSelection.startsWith('group:') ? groupSelection.slice(6) : undefined;
+  const [monitorFilter, setMonitorFilter] = useState<SwitchFilter>(emptySwitchFilter);
   const markerInput = useRef<HTMLInputElement>(null);
   const [online, setOnline] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
@@ -241,12 +241,7 @@ export default function App() {
       setDialog('');
     }
   }, [dialog, canOpenShowChecklist]);
-  const groupNames = [...new Set(replay ? asArray(replay.states).map(sw => sw.group_tag) :
-    [...asArray(operations.groups).map(item => item.name), ...asArray(overview.switches).map(sw => sw.group_tag)])];
-  const hasGroup = group !== undefined && groupNames.includes(group);
-  useEffect(() => {
-    if (groupSelection && !hasGroup && !part && (replay ? replay.ts : operations.ready)) setGroupSelection('');
-  }, [groupSelection, hasGroup, part, replay, operations.ready]);
+  useEffect(() => setMonitorFilter(emptySwitchFilter), [profileId, replayId]);
   const now = usePcTime();
   const stopped = !replay && monitoringStopped(online && live.fresh, live.updatedAt, now);
   const legacyReplay = replay && replay.alerts === undefined;
@@ -257,8 +252,9 @@ export default function App() {
   const replaySummaryUnavailable = !!legacyReplay && ready && !asArray(replay.states).some(state => state.alert_counts != null);
   const activeDetailTab = replay && (detailTab === 'dhcp' || detailTab === 'config') ? 'multicast' : detailTab;
   useDesktopNotifications({ enabled: notifications, alerts: operations.alerts, profileId, ready, paused: !!replay || stopped });
-  const viewScope = { overview, settings, part, group, replay: replay ? replay.states ?? emptyReplay : null };
-  const overallLabel = hasGroupFilter(viewScope) ? t('cleanup.overall') : '';
+  const viewScope = { overview, settings, ...emptySwitchFilter, replay: replay ? replay.states ?? emptyReplay : null };
+  const monitorScope = { ...viewScope, ...monitorFilter };
+  const overallLabel = !wall && page === 'monitor' && hasGroupFilter(monitorScope) ? t('cleanup.overall') : '';
   useEffect(() => {
     document.title = `(${replaySummaryUnavailable ? '—' : issueCount}) AVLine-Sight${overallLabel ? ` · ${overallLabel}` : ''}`;
   }, [issueCount, overallLabel, replaySummaryUnavailable]);
@@ -275,7 +271,7 @@ export default function App() {
     selected,
     select,
     openPortMonitor: (target: PortMonitorTarget) => {
-      if (hasGroupFilter(viewScope) && !groupSwitches(viewScope).some(sw => sw.id === target.switchId)) setGroupSelection('');
+      if (hasGroupFilter(monitorScope) && !groupSwitches(monitorScope).some(sw => sw.id === target.switchId)) setMonitorFilter(emptySwitchFilter);
       setMonitorTarget(target);
       setPage('monitor');
     },
@@ -294,28 +290,21 @@ export default function App() {
   const openChecklistTarget = (target: ChecklistTarget) => {
     setDialog(target.destination === 'trap' || target.destination === 'settings' ? target.destination : '');
     if (target.mac) {
-      setGroupSelection('');
       setDeviceTarget(target.mac);
       setPage('devices');
     } else if (target.switch_id) {
       props.openPortMonitor({ switchId: target.switch_id, ifIndex: target.if_index });
     } else if (target.destination === 'logs') {
-      setGroupSelection('');
       setPage('logs');
     }
   };
-  return <div className={wall ? 'wall-shell' : 'min-h-screen'}>
+  return <div className={wall ? 'wall-shell' : 'flex min-h-screen flex-col'}>
     <AppHeader {...{ online, phase, onPhase: operations.setPhase, onTrapHelp: props.onTrapHelp,
-      wall, setWall, expert, status, busy, locked, profiles, settings, groupSelection, groupNames, replay, markerInput, run, refresh, setDialog, summary,
+      wall, setWall, expert, status, busy, locked, replay, markerInput, run, summary,
       updatedAt: replay ? replay.ts : live.updatedAt }}
       openChecklist={gate => {
         setError('');
         setDialog(gate ? 'show-gate' : 'show-checklist');
-      }}
-      setGroupSelection={value => {
-        if (value === groupSelection) return;
-        setMonitorTarget(undefined);
-        setGroupSelection(value);
       }} />
     {stopped && <MonitorStopped updatedAt={live.updatedAt} />}
     {status?.config_startup_error && !startupNoticeDismissed && <div role="alert" className="panel p-3">
@@ -346,8 +335,9 @@ export default function App() {
     </div>}
     {busy && <div role="status" className="bg-amber-100 text-black">{t('rack.busy')}
     </div>}
-    <div className={wall ? 'wall-content' : 'flex flex-col md:flex-row'}>
-      {!wall && <nav className="app-nav">
+    <div className={wall ? 'wall-content' : 'app-workspace flex flex-1 flex-col md:flex-row'}>
+      {!wall && <AppSidebar {...{ profiles, status, busy, locked, expert, run, refresh }} replay={!!replay}
+        setExpert={changeExpert} openSettings={() => setDialog('settings')}>
         {pages.map(v => <button
           key={v}
           disabled={!!replay && !replayPages.includes(v)}
@@ -356,11 +346,16 @@ export default function App() {
         >
           {v === 'details' ? t('cleanup.details') : t(`rack.nav.${v}`)}
         </button>)}
-      </nav>}
+      </AppSidebar>}
       <main className={wall ? 'wall-main' : 'min-w-0 flex-1 space-y-4 p-4'}>
         {!wall && <h1 className="text-2xl font-bold">{pageTitle}</h1>}
         <ErrorBoundary key={wall ? 'wall' : page} name={wall ? t('rack.wall') : pageTitle}>
-          {(wall || page === 'monitor') && <PortMonitor key={status?.profile.id || 0} {...props} target={wall ? undefined : monitorTarget}
+          {(wall || page === 'monitor') && <PortMonitor key={status?.profile.id || 0} {...props}
+            {...(wall ? emptySwitchFilter : monitorFilter)} target={wall ? undefined : monitorTarget}
+            onFilterChange={filter => {
+              setMonitorTarget(undefined);
+              setMonitorFilter(filter);
+            }}
             onClosePortDetail={() => setMonitorTarget(undefined)} />}
 
           {!wall && expert && page === 'topology' && <Topology key={status?.profile.id || 0} {...props}
@@ -369,7 +364,7 @@ export default function App() {
           {!wall && page === 'switch' && <SwitchPorts {...props} />}
 
 
-          {!wall && page === 'devices' && <Devices key={deviceTarget} {...props} initialQuery={deviceTarget} />}
+          {!wall && page === 'devices' && <Devices key={JSON.stringify([profileId, replayId, deviceTarget])} {...props} initialQuery={deviceTarget} />}
 
           {!wall && expert && page === 'details' && <>
             <div role="tablist" aria-label={t('cleanup.details')} className="detail-tabs">
@@ -398,7 +393,7 @@ export default function App() {
       onApplied={async () => {
         setSelected(0);
         setMonitorTarget(undefined);
-        setGroupSelection('');
+        setMonitorFilter(emptySwitchFilter);
         setPage('monitor');
         setDialog('');
         await refresh().catch(reason => setError(message(reason)));
@@ -418,8 +413,7 @@ export default function App() {
       key={profileId}
       profileId={profileId}
       locked={locked}
-      tools={<SettingsTools {...{ theme, setTheme, notifications, setNotifications, expert, busy, locked, groups: operations.groups, profileId, run, setDialog }}
-        setExpert={changeExpert}
+      tools={<SettingsTools {...{ theme, setTheme, notifications, setNotifications, busy, locked, groups: operations.groups, profileId, run, setDialog }}
         replay={!!replay} refresh={operations.refresh} setReplay={next => { setPage('monitor'); setReplay(next); }} />}
       value={settings}
       webAddr={status?.web_addr}

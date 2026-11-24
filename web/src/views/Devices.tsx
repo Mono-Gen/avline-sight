@@ -5,13 +5,15 @@ import { Badge } from '../components/Badge';
 import { DeviceCsvImportDialog } from '../components/DeviceCsvImportDialog';
 import { confirmBulkPing } from '../components/GroupActions';
 import { PollingStatus } from '../components/PollingStatus';
+import { SwitchFilters } from '../components/SwitchFilters';
 import { bulkPingTimeoutMs, deviceUrl, importSummary, MAX_BULK_PING, pingLabel, pingTargets, visibleDeviceCsv } from '../deviceCsv';
 import type { DeviceScope } from '../deviceCsv';
 import { asArray, decimal, formatTime } from '../format';
 import { pcTimestamp } from '../pcTime';
 import type { BulkPingResult, BulkPingResponse, InventoryRow } from '../types';
 import { STATE_REFRESH_MS, usePolling } from '../usePolling';
-import type { ViewProps } from './props';
+import type { SwitchFilter, ViewProps } from './props';
+import { emptySwitchFilter, hasGroupFilter, matchesSwitch, partPreset } from './props';
 import { alertStates, alertTone, matchingDeviceAlerts, summarizeAlerts } from '../wallAlerts';
 import type { Alert } from '../types';
 
@@ -83,20 +85,25 @@ export function Devices(p: ViewProps & { initialQuery?: string }) {
   const [importOpen, setImportOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [revision, setRevision] = useState(0);
-  const preset = asArray(p.settings?.views).find(view => view.id === p.part);
-  const multiTag = (preset?.tags?.length ?? 0) > 1;
+  const [switchFilter, setSwitchFilter] = useState<SwitchFilter>(emptySwitchFilter);
+  const preset = partPreset({ ...switchFilter, settings: p.settings });
+  const filtered = hasGroupFilter(switchFilter);
+  const tags = asArray(preset?.tags);
   const vlans = asArray(preset?.vlans);
   const isReplay = p.replay !== null;
   const replay = p.replayRef;
   const enabled = !isReplay || Boolean(replay);
-  const filters = { scope, q, vlans, group: p.group ?? (preset?.tags?.length === 1 ? preset.tags[0] : undefined) };
+  const filters = { scope: filtered ? 'all' as const : scope, q, vlans: [] };
   const url = enabled ? deviceUrl(filters, replay) : '';
   const profileId = p.status?.profile.id;
   const key = JSON.stringify([url, profileId, revision]);
   const inventory = usePolling(async signal => ({ key, rows: await api<InventoryRow[]>(url, { signal }) }),
     isReplay ? 0 : STATE_REFRESH_MS, [key], enabled, 300);
-  const rows = inventory.data?.key === key ? asArray(inventory.data.rows)
-    .filter(row => !preset?.tags?.length || preset.tags.includes(row.group_tag)) : [];
+  const matchingRows = inventory.data?.key === key ? asArray(inventory.data.rows).filter(row =>
+    matchesSwitch(switchFilter, tags, row.switch_id, row.group_tag) &&
+    (!row.switch_id || !vlans.length || vlans.includes(row.vlan))) : [];
+  const unnamedRows = matchingRows.filter(row => !row.label);
+  const rows = scope === 'unnamed' ? unnamedRows : matchingRows;
   const phase = p.operations?.phase || p.status?.phase;
   const [manual, setManual] = useState('');
   const [manualResults, setManualResults] = useState<BulkPingResult[]>([]);
@@ -121,6 +128,9 @@ export function Devices(p: ViewProps & { initialQuery?: string }) {
 
   return (
     <section className="panel space-y-3">
+      <SwitchFilters filter={switchFilter} onChange={setSwitchFilter} parts={p.settings?.views}
+        switches={asArray(p.replay ?? p.overview?.switches)}
+        groups={isReplay ? undefined : asArray(p.operations?.groups).map(group => group.name)} />
       <div className="flex flex-wrap items-end gap-3">
         <div role="group" aria-label={t('ui.m231')} className="flex gap-1">
           <button aria-pressed={scope === 'all'} onClick={() => setScope('all')}>{t('ui.m232')}</button>
@@ -129,10 +139,12 @@ export function Devices(p: ViewProps & { initialQuery?: string }) {
         <label>{t('ui.m234')}<input type="search" value={q} onChange={event => setQuery(event.target.value)} /></label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        {enabled && (multiTag ? <button disabled={inventory.data?.key !== key}
-          onClick={() => download(visibleDeviceCsv(rows), scope === 'unnamed' ? 'avline-sight-devices-unnamed.csv' : 'avline-sight-devices.csv')}>
-          {t(scope === 'unnamed' ? 'ui.m236' : 'ui.m235')}
-        </button> : <>
+        {enabled && (filtered ? <>
+          <button disabled={inventory.data?.key !== key}
+            onClick={() => download(visibleDeviceCsv(matchingRows), 'avline-sight-devices.csv')}>{t('ui.m235')}</button>
+          <button disabled={inventory.data?.key !== key}
+            onClick={() => download(visibleDeviceCsv(unnamedRows), 'avline-sight-devices-unnamed.csv')}>{t('ui.m236')}</button>
+        </> : <>
           <a className="underline" href={deviceUrl({ ...filters, scope: 'all' }, replay, true)} download>{t('ui.m235')}</a>
           <a className="underline" href={deviceUrl({ ...filters, scope: 'unnamed' }, replay, true)} download>{t('ui.m236')}</a>
         </>)}

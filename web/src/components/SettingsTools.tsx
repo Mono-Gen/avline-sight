@@ -8,10 +8,9 @@ import { GroupEditDialog } from './GroupEditDialog';
 import { ImportReplay } from './ImportReplay';
 import { ShowReportButton } from './ShowReportButton';
 
-export function SettingsTools({ theme, setTheme, notifications, setNotifications, expert = false, setExpert, busy, locked, replay, groups, profileId, run, refresh, setDialog, setReplay }: {
+export function SettingsTools({ theme, setTheme, notifications, setNotifications, busy, locked, replay, groups, profileId, run, refresh, setDialog, setReplay }: {
   theme: string; setTheme: (value: string) => void;
   notifications: boolean; setNotifications: (value: boolean) => void;
-  expert?: boolean; setExpert: (enabled: boolean) => void;
   busy: boolean; locked: boolean; replay: boolean; groups: SwitchGroup[]; profileId?: number;
   run: (action: () => Promise<void>) => void; refresh: () => Promise<unknown>;
   setDialog: (value: string) => void; setReplay: Dispatch<SetStateAction<ReplaySession | null>>;
@@ -37,7 +36,6 @@ export function SettingsTools({ theme, setTheme, notifications, setNotifications
         <option value="ja">JA</option><option value="en">English</option>
       </select></label>
       <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{t(theme === 'dark' ? 'rack.light' : 'rack.dark')}</button>
-      <label className="block"><input type="checkbox" checked={expert} onChange={event => setExpert(event.target.checked)} /> {t('expert.setting')}</label>
       <label className="block"><input type="checkbox" checked={notifications} disabled={busy} onChange={toggleNotifications} /> {t('cleanup.notifications')}</label>
       {notice && <p role="alert">⚠ {notice}</p>}
       <h3>{t('cleanup.transfers')}</h3>

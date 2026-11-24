@@ -283,7 +283,22 @@ td {
 .header-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .app-header .trap-ready { color: #86efac; }
 .app-header .trap-failed { color: #fca5a5; }
-.app-nav { display: flex; flex-wrap: wrap; align-content: start; gap: .45rem; padding: .8rem; flex-shrink: 0; }
+.header-project { font-size: .8rem; overflow-wrap: anywhere; }
+.app-nav { display: flex; flex-direction: column; gap: 1rem; padding: .8rem; flex-shrink: 0; }
+.app-nav nav, .app-nav-tools { display: flex; flex-wrap: wrap; gap: .45rem; }
+.app-nav-tools { margin-block-start: auto; border-block-start: 1px solid var(--control-border); padding-block-start: .65rem; }
+.app-nav-tools > label { min-width: 0; max-width: 100%; }
+.app-nav-tools select { display: block; width: 100%; }
+.app-nav-expert { display: flex; justify-content: space-between; align-items: center; gap: .5rem;
+  margin-block-start: .75rem; padding: .4rem .5rem; border: 1px dashed var(--control-border); border-radius: .4rem; }
+.screen-filters, .port-list-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem .75rem; min-width: 0; }
+.screen-filters label { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; min-width: 0; max-width: 100%; }
+.screen-filters select { min-width: 0; max-width: 100%; }
+.port-list-controls { margin-block-end: .5rem; }
+.port-list-controls input[type="search"] { width: 17rem; max-width: 100%; }
+.port-list-controls input[type="checkbox"] { accent-color: var(--control-active-bg); }
+.port-list-controls label { display: flex; align-items: center; gap: .35rem; }
+.port-list-device-meta { display: block; font-size: .8em; }
 .app-nav button { text-align: start; }
 .app-nav button[aria-current="page"] { font-weight: 700; }
 .detail-tabs, .group-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
@@ -339,7 +354,10 @@ td {
 .wall-switch-tile.status-healthy { padding-block: .4rem; }
 .log-message summary { cursor: pointer; overflow-wrap: anywhere; }
 .log-message pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (min-width: 768px) { .app-nav { width: 13rem; flex-direction: column; } }
+@media (min-width: 768px) {
+  .app-nav { width: 13rem; }
+  .app-nav nav, .app-nav-tools { flex-direction: column; }
+}
 @media (max-width: 720px) {
   .rack-row { grid-template-columns: minmax(0, 1fr) auto; }
   .rack-front { grid-row: 2; grid-column: 1 / -1; }

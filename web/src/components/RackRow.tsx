@@ -51,8 +51,9 @@ function Sparkline({ samples, label }: { samples: { rx: number; tx: number }[]; 
   </svg>;
 }
 
-export function RackRow({ summary: sw, ports, devices, alerts, definitions, wall, stale, uplinks, samples, actions, onPort, onEdit, onHelp, refresh }: {
+export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlans = [], wall, stale, uplinks, samples, actions, onPort, onEdit, onHelp, refresh }: {
   summary: SwitchSummary; ports: Port[]; devices: InventoryRow[]; alerts: Alert[]; definitions: ModelDefinitions;
+  vlans?: readonly number[];
   wall: boolean; stale: boolean; uplinks: Set<string>; samples: Record<string, { rx: number; tx: number }[]>;
   actions: ViewProps; onPort: (port: Port) => void; onEdit: (config: SwitchConfig | null) => void; onHelp: () => void; refresh: () => Promise<void>;
 }) {
@@ -105,7 +106,7 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, wall
       {stale && <span className="rack-stale">{t('rack.stale')}</span>}
       {sw.needs_credentials ? <span>{t('configFile.credentialsRequired')}</span> :
         !ports.length && <span>{t(sw.reachable ? 'rack.loading' : 'rack.offline')}</span>}
-      {rows.map((row, index) => <div className="rack-port-row" key={index}>{row.slots.map((port, position) => port
+      {rows.map((row, index) => <div className="rack-port-row" key={index}>{row.slots.map((port, position) => port && (!vlans.length || vlans.includes(port.pvid))
         ? <div className="rack-port-slot" key={port.if_index}>
           <PortLamp port={port} alerts={matchingPortAlerts(alerts, sw.id, port.if_index)} devices={devices.filter(device => device.if_index === port.if_index)}
             reachable={sw.reachable && !stale} wall={wall} onSelect={() => onPort(port)} />

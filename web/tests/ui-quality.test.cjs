@@ -36,6 +36,8 @@ const { OverallStatus, MonitorStopped } = require('../src/components/MonitorStat
 const { WallSwitchTile } = require('../src/components/WallSwitchTile.tsx');
 const { SettingsTools } = require('../src/components/SettingsTools.tsx');
 const { AppHeader } = require('../src/components/AppHeader.tsx');
+const { AppSidebar } = require('../src/components/AppSidebar.tsx');
+const { SwitchFilters } = require('../src/components/SwitchFilters.tsx');
 const { PhaseControls } = require('../src/components/PhaseControls.tsx');
 const { AlertBand, AlertEntry } = require('../src/components/AlertBand.tsx');
 const { summarizeAlerts, groupWallAlerts } = require('../src/wallAlerts.ts');
@@ -396,15 +398,19 @@ test('Filtered live and replay monitors label the overall count and report outsi
       const first = App();
       assert.equal(document.title, `(${count}) AVLine-Sight`);
       assert.ok(!render(OverviewView, monitor(first)).includes(t('cleanup.outsideGroup', { count: outside })));
-      header(first).setGroupSelection('group:west');
+      monitor(first).onFilterChange({ group: 'west', part: '' });
       cursor = 0;
       const filtered = App();
       const { summary } = header(filtered);
       assert.equal(header(filtered).wall, wall);
       assert.equal(summary.props.count, count);
-      assert.ok(render(summary.type, summary.props).includes(`>${t('cleanup.overall')}</span>`));
-      assert.equal(document.title, `(${count}) AVLine-Sight · ${t('cleanup.overall')}`);
+      assert.equal(render(summary.type, summary.props).includes(`>${t('cleanup.overall')}</span>`), !wall);
+      assert.equal(document.title, `(${count}) AVLine-Sight${wall ? '' : ` · ${t('cleanup.overall')}`}`);
       const html = render(OverviewView, monitor(filtered));
+      if (wall) {
+        assert.ok(!html.includes(t('cleanup.outsideGroup', { count: outside })));
+        continue;
+      }
       assert.ok(html.includes(t('cleanup.outsideGroup', { count: outside })));
       if (replay?.alerts) {
         assert.match(html, /Network absent/);
@@ -456,22 +462,25 @@ test('Alert band bulk acknowledgement applies the same eligibility rules inside 
 
 test('Multi-tag device CSV contains exactly the displayed rows in live mode and replay', async () => {
   const rows = [
-    { group_tag: 'west', mac: '02:00:00:00:00:01', label: '=West, "Mixer"' },
-    { group_tag: 'east', mac: '02:00:00:00:00:02', label: 'East camera' },
-    { group_tag: 'other', mac: '02:00:00:00:00:03', label: 'Excluded' },
+    { switch_id: 1, group_tag: 'west', mac: '02:00:00:00:00:01', label: '=West, "Mixer"' },
+    { switch_id: 2, group_tag: 'east', mac: '02:00:00:00:00:02', label: 'East camera' },
+    { switch_id: 3, group_tag: 'other', mac: '02:00:00:00:00:03', label: 'Excluded' },
   ];
   const downloads = [];
   let loading = false;
+  let filter = { part: '' };
   const { Devices, DeviceInventoryTable: InventoryTable } = sourceWith('../src/views/Devices.tsx', {
-    react: { ...React, useState: initial => [initial, noop] },
+    react: { ...React, useState: initial => initial?.part === '' ? [filter, value => { filter = value; }] : [initial, noop] },
     '../api': { download: (blob, name) => downloads.push({ blob, name }) },
     '../usePolling': { usePolling: (_load, _interval, [key]) => ({ data: loading ? undefined : { key, rows } }) },
   });
-  const props = { part: 'show', settings: { views: [{ id: 'show', tags: ['west', 'east'] }] } };
+  const props = { settings: { views: [{ id: 'show', tags: ['west', 'east'] }] } };
   for (const replay of [null, []]) {
     const replayRef = replay && { id: 'recording', ts: '2026-01-01T00:00:00Z' };
     const draw = () => Devices({ ...props, replay, replayRef });
     const exportButton = tree => elements(tree, node => node.type === 'button' && node.props.children === t('ui.m235'))[0];
+    filter = { part: '' };
+    elements(draw(), node => node.type === SwitchFilters)[0].props.onChange({ part: 'show' });
     loading = true;
     assert.equal(exportButton(draw()).props.disabled, true);
     loading = false;
@@ -487,6 +496,10 @@ test('Multi-tag device CSV contains exactly the displayed rows in live mode and 
     assert.match(csv, /02:00:00:00:00:02,East camera/);
     assert.doesNotMatch(csv, /02:00:00:00:00:03|Excluded/);
     assert.equal(csv.trimEnd().split('\r\n').length, 3);
+    elements(tree, node => node.type === SwitchFilters)[0].props.onChange({ part: 'show', group: 'west', switchId: 1 });
+    assert.deepEqual(Array.from(elements(draw(), node => node.type === InventoryTable)[0].props.rows, row => row.mac), ['02:00:00:00:00:01']);
+    elements(tree, node => node.type === SwitchFilters)[0].props.onChange({ part: 'show', group: 'west', switchId: 2 });
+    assert.deepEqual(Array.from(elements(draw(), node => node.type === InventoryTable)[0].props.rows), []);
   }
 });
 
@@ -648,32 +661,102 @@ test('本番の一括Pingとカウンタリセットは負荷を説明し、キ�
   assert.match(messages.at(-1), /本番中に1件.*負荷/);
 });
 
-test('グループ選択はヘッダーの1か所に置き、機器一覧と書出に同じ選択を渡す', () => {
-  const { Devices } = require('../src/views/Devices.tsx');
-  const header = render(AppHeader, { profiles: [], groupSelection: 'group:Audio', groupNames: ['Audio', 'Video', ''], locked: false,
-    status: { profile: { id: 1 } } });
-  const devices = render(Devices, { group: 'Audio', replay: null });
-  assert.equal(((header + devices).match(/<select aria-label="グループ"/g) || []).length, 1);
-  assert.match(header, /グループ: <select[^]*<option value="group:Audio" selected="">Audio/);
-  assert.match(header, /<option value="group:">未所属/);
-  assert.doesNotMatch(devices, /<select/);
-  assert.equal((devices.match(/group=Audio/g) || []).length, 2);
-  assert.match(render(Devices, { group: '', replay: null }), /group=&amp;lang=ja/);
-  assert.match(header, /編集可（ロックする）/);
-  assert.match(render(AppHeader, { locked: true, profiles: [] }), /🔒 ロック中/);
-  assert.match(header, /<form class="header-marker"><input[^]*aria-label="マーカー"[^]*<button type="submit">記録<\/button>/);
+test('Header and sidebar place project, monitoring and edit controls in the approved order', () => {
+  setLang('ja');
+  const status = { profile: { id: 1, name: 'Studio' }, trap: { ok: true } };
+  const header = render(AppHeader, { status, online: true, phase: 'show', locked: false });
+  assert.match(header, /AVLine-Sight[^]*● LIVE[^]*<small class="header-project">プロジェクト: Studio<\/small>[^]*data-action="phase"[^]*trap-ready[^]*header-marker[^]*>記録<[^]*>壁表示<[^]*header-time/);
+  assert.doesNotMatch(header, /スイッチグループ|編集可|>設定<|<option value="1"/);
+  const sidebar = render(AppSidebar, { status, profiles: [status.profile], locked: false, expert: false,
+    children: React.createElement('button', null, 'ポートモニター') });
+  assert.match(sidebar, /<nav[^]*ポートモニター[^]*<\/nav>[^]*プロジェクト<select[^]*Studio[^]*編集可（ロックする）[^]*>設定<[^]*class="app-nav-expert">エキスパート表示<input[^]*role="switch"/);
+  assert.match(render(AppSidebar, { status, profiles: [], locked: true, expert: true }), /🔒 ロック中[^]*role="switch"[^]*checked=""/);
+  const css = fs.readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
+  assert.match(css, /\.app-nav-tools \{[^}]*margin-block-start: auto/);
+  assert.match(css, /\.app-nav-expert \{[^}]*border: 1px dashed/);
+});
+
+test('Project and project-file text is consistent in both languages', () => {
+  try {
+    const expected = {
+      ja: ['プロジェクト', 'プロジェクトファイルを読み込む', 'プロジェクトファイルを書き出す'],
+      en: ['Project', 'Import project file', 'Export project file'],
+    };
+    for (const [language, labels] of Object.entries(expected)) {
+      setLang(language);
+      assert.deepEqual(['rack.profile', 'configFile.import', 'configFile.export'].map(key => t(key)), labels);
+      assert.match(t('configFile.applyNote'), language === 'ja' ? /新しいプロジェクト/ : /new project/);
+      const tools = render(SettingsTools, { profileId: 1, groups: [] });
+      assert.ok(tools.includes(labels[1]));
+      assert.ok(tools.includes(labels[2]));
+      assert.match(tools, /href="\/api\/profiles\/1\/export" download="avline-sight.config.json"/);
+    }
+  } finally {
+    setLang('ja');
+  }
+});
+
+test('Diagram and list share all three monitor filters and preserve system-wide alerts', () => {
+  const switches = [
+    { id: 1, name: 'West-A', group_tag: 'west' }, { id: 2, name: 'East-A', group_tag: 'east' },
+    { id: 3, name: 'West-B', group_tag: 'west' }, { id: 4, name: 'No group', group_tag: '' },
+  ];
+  const alerts = [
+    fault(1, { switch_id: 1, title: 'Visible fault' }), fault(2, { switch_id: 2, title: 'East fault' }),
+    fault(3, { switch_id: 3, title: 'West-B fault' }), fault(4, { switch_id: 0, title: 'Network fault' }),
+  ];
+  let layout = 'diagram';
+  let filter = { part: '' };
+  const { PortMatrix } = require('../src/views/PortMatrix.tsx');
   const { OverviewView } = sourceWith('../src/views/Overview.tsx', {
+    react: { ...React, useState: initial => initial === 'diagram' ? [layout, value => { layout = value; }] : [typeof initial === 'function' ? initial() : initial, noop],
+      useEffect: noop, useMemo: make => make(), useRef: current => ({ current }) },
     '../useRackData': { useRackData: () => ({ data: {}, definitions: {}, refresh: noop }) },
   });
-  const alerts = [fault(1, { switch_id: 1, active: true, title: 'Audio fault' }),
-    fault(2, { switch_id: 2, active: true, title: 'Video fault' })];
-  const monitor = render(OverviewView, { group: 'Audio', replay: null, locked: false, operations: { alerts, ready: true, ack: noop, ackMany: noop }, overview: { switches: [
-    { id: 1, name: 'Audio SW', group_tag: 'Audio' }, { id: 2, name: 'Video SW', group_tag: 'Video' },
-  ] } });
-  assert.match(monitor, /Audio SW/);
-  assert.match(monitor, /Audio fault/);
-  assert.doesNotMatch(monitor, /Video SW|Video fault|<select/);
-  assert.match(monitor, /operation-area[^]*?data-action="ack-all"/);
+  const draw = () => OverviewView({ ...filter, onFilterChange: value => { filter = value; }, overview: { switches },
+    settings: { views: [{ id: 'stage', name: 'Stage', tags: ['west', 'east'] }] }, replay: null, locked: true,
+    operations: { alerts, ready: true } });
+  const filterRow = tree => elements(tree, node => node.type === SwitchFilters)[0];
+  const selects = () => elements(SwitchFilters(filterRow(draw()).props), node => node.type === 'select');
+  assert.deepEqual(Array.from(selects(), input => input.props.value), ['', '', '']);
+  const initialRow = render(SwitchFilters, filterRow(draw()).props);
+  assert.match(initialRow, /スイッチグループ[^]*担当パート[^]*<label>スイッチ<select/);
+  assert.equal((initialRow.match(/>すべて</g) || []).length, 3);
+  assert.match(initialRow, /value="group:">未所属/);
+  selects()[0].props.onChange({ target: { value: 'group:west' } });
+  selects()[1].props.onChange({ target: { value: 'stage' } });
+  selects()[2].props.onChange({ target: { value: '1' } });
+  const diagram = renderToStaticMarkup(draw());
+  assert.match(diagram, /Visible fault[^]*Network fault|Network fault[^]*Visible fault/);
+  assert.doesNotMatch(diagram, /East fault|West-B fault/);
+  assert.match(diagram, /id="rack-switch-1"/);
+  assert.doesNotMatch(diagram, /id="rack-switch-[234]"/);
+  const switchLayout = label => elements(draw(), node => node.type === 'button' && node.props.children === t(label))[0].props.onClick();
+  switchLayout('cleanup.list');
+  assert.deepEqual(Array.from(selects(), input => input.props.value), ['group:west', 'stage', 1]);
+  assert.deepEqual([...elements(draw(), node => node.type === PortMatrix)[0].props.visibleSwitchIds], [1]);
+  switchLayout('cleanup.diagram');
+  assert.deepEqual(Array.from(selects(), input => input.props.value), ['group:west', 'stage', 1]);
+});
+
+test('Port list localizes link state and lays out search, sort, refresh and device metadata', () => {
+  const ports = [
+    { switch_id: 1, switch_name: 'Visible switch', port: { name: '1/0/1', oper: 'up', pvid: 10,
+      devices: [{ label: 'Mixer', mac: '02:00:00:00:00:01', ip: '192.0.2.1', vendor: 'Maker' }] } },
+    { switch_id: 1, switch_name: 'Visible switch', port: { name: '1/0/2', oper: 'down', pvid: 10 } },
+    { switch_id: 2, switch_name: 'Excluded switch', port: { name: '1/0/3', oper: 'up', pvid: 10 } },
+  ];
+  const { PortMatrix } = sourceWith('../src/views/PortMatrix.tsx', {
+    '../usePolling': { usePolling: () => ({ updatedAt: new Date('2026-01-01T00:00:00Z'), data: ports }) },
+  });
+  const html = render(PortMatrix, { part: '', switchId: 1, visibleSwitchIds: new Set([1]), replay: null });
+  assert.match(html, /class="port-list-controls"[^]*更新:[^]*placeholder="機器名 \/ MAC \/ IP \/ VLAN"[^]*aria-label="並び順"[^]*type="checkbox"[^]*異常のみ<\/label><\/div>/);
+  assert.match(html, /<td>接続中<\/td>[^]*<strong>Mixer<\/strong><small class="port-list-device-meta">02:00:00:00:00:01 · 192.0.2.1 · Maker<\/small>/);
+  assert.match(html, /<td>未接続<\/td>/);
+  assert.doesNotMatch(html, /Excluded switch|deviceDetails/);
+  const css = fs.readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
+  assert.match(css, /\.port-list-controls input\[type="search"\] \{ width: 17rem; max-width: 100%;/);
+  assert.match(css, /\.port-list-device-meta \{ display: block; font-size: .8em;/);
 });
 
 test('壁の上部・未確認キュー・全タイルは発生中と未確認の同じ集合を集計する', () => {
@@ -940,12 +1023,12 @@ test('Expert display defaults off, persists locally, and leaves expert pages whe
   }, { AbortController, localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) } }).default;
   const draw = () => { cursor = 0; return App(); };
   const header = tree => elements(tree, node => node.type === AppHeader)[0].props;
-  const menu = tree => elements(tree, node => node.type === 'nav')[0].props.children;
-  const tools = tree => elements(tree, node => node.props?.tools?.type === SettingsTools)[0].props.tools.props;
+  const sidebar = tree => elements(tree, node => node.type === AppSidebar)[0].props;
+  const menu = tree => sidebar(tree).children;
   const openSettings = async locked => {
     draw();
     updateStatus({ profile: { id: 1 }, locked });
-    header(draw()).setDialog('settings');
+    sidebar(draw()).openSettings();
     const cancel = loadSettings();
     await new Promise(setImmediate);
     cancel();
@@ -953,14 +1036,14 @@ test('Expert display defaults off, persists locally, and leaves expert pages whe
   };
   const normal = [t('rack.nav.monitor'), t('rack.nav.devices'), t('rack.nav.logs')];
   let tree = await openSettings(false);
-  assert.equal(tools(tree).expert, false);
+  assert.equal(sidebar(tree).expert, false);
   assert.deepEqual(Array.from(menu(tree), item => item.props.children), normal);
   assert.ok(!render(AppHeader, header(tree)).includes('>エキスパート<'));
   const { PortMonitor } = require('../src/views/PortMonitor.tsx');
   const monitor = tree => elements(tree, node => node.type === PortMonitor)[0].props;
   assert.equal(monitor(tree).openTerminal, undefined);
 
-  tools(tree).setExpert(true);
+  sidebar(tree).setExpert(true);
   tree = draw();
   assert.equal(storage.get('expert-display'), 'true');
   assert.deepEqual(Array.from(menu(tree), item => item.props.children), [...normal, t('cleanup.details'), t('rack.nav.topology')]);
@@ -976,27 +1059,23 @@ test('Expert display defaults off, persists locally, and leaves expert pages whe
     tree = draw();
     menu(tree).find(item => item.props.children === page).props.onClick();
     assert.equal(menu(draw()).find(item => item.props.children === page).props['aria-current'], 'page');
-    tools(draw()).setExpert(false);
+    sidebar(draw()).setExpert(false);
     tree = draw();
     assert.equal(menu(tree)[0].props['aria-current'], 'page');
     assert.equal(elements(tree, node => node.type === Drawer).length, 0);
     assert.deepEqual(Array.from(menu(tree), item => item.props.children), normal);
-    tools(tree).setExpert(true);
+    sidebar(tree).setExpert(true);
   }
   states.length = 0;
-  assert.equal(tools(await openSettings(true)).expert, true);
+  assert.equal(sidebar(await openSettings(true)).expert, true);
   assert.equal(monitor(draw()).openTerminal, undefined);
 });
 
 test('Expert settings, terminal entries and alert details respect the display preference', () => {
   setLang('ja');
-  const { SettingsTools: Tools } = sourceWith('../src/components/SettingsTools.tsx', {
-    react: { useState: initial => [initial, noop] },
-    '../i18n': { t, useLang: () => ['ja', noop] },
-  });
   const changes = [];
-  const input = elements(Tools({ locked: true, setExpert: value => changes.push(value) }),
-    node => node.type === 'input' && node.props.type === 'checkbox')[0];
+  const input = elements(AppSidebar({ profiles: [], expert: false, locked: true, setExpert: value => changes.push(value) }),
+    node => node.type === 'input' && node.props.role === 'switch')[0];
   assert.equal(input.props.checked, false);
   input.props.onChange({ target: { checked: true } });
   assert.deepEqual(changes, [true]);
@@ -1299,7 +1378,7 @@ test('The default port monitor shows the unified layout and the three normal men
   assert.match(html, />図<|>一覧</);
 });
 
-test('Port monitor clears navigation targets on a header group change and when port detail closes', () => {
+test('Port monitor clears navigation targets on a screen filter change and when port detail closes', () => {
   const { PortMonitor } = require('../src/views/PortMonitor.tsx');
   const state = [];
   let nextState = 0;
@@ -1321,13 +1400,12 @@ test('Port monitor clears navigation targets on a header group change and when p
   }).default;
   const drawApp = () => { nextState = 0; return App(); };
   const monitor = tree => elements(tree, node => node.type === PortMonitor)[0].props;
-  const header = tree => elements(tree, node => node.type === AppHeader)[0].props;
   const target = { switchId: 1, ifIndex: 2 };
 
   monitor(drawApp()).openPortMonitor(target);
   const beforeGroupChange = drawApp();
   assert.equal(monitor(beforeGroupChange).target, target);
-  header(beforeGroupChange).setGroupSelection('view:stage');
+  monitor(beforeGroupChange).onFilterChange({ part: 'stage' });
   const afterGroupChange = drawApp();
   assert.equal(monitor(afterGroupChange).part, 'stage');
   assert.equal(monitor(afterGroupChange).target, undefined);
