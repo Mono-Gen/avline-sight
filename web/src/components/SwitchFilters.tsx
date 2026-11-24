@@ -27,12 +27,14 @@ export function pruneSwitchFilter(filter: SwitchFilter, switches: readonly Filte
   };
 }
 
-export function SwitchFilters({ filter, onChange, switches, groups, parts }: {
+export function SwitchFilters({ filter, onChange, switches, groups, parts, withSwitch = true }: {
   filter: SwitchFilter;
   onChange: (filter: SwitchFilter) => void;
   switches: readonly FilterSwitch[];
   groups?: string[];
   parts?: ViewPreset[];
+  // Screens with their own switch selector (logs) show only group and part here.
+  withSwitch?: boolean;
 }) {
   const groupNames = new Set([...asArray(groups), ...switches.map(sw => sw.group_tag)]);
   const change = (next: SwitchFilter) => onChange({ ...next, part: next.part && meaningfulPart(parts, next.part) ? next.part : '' });
@@ -51,11 +53,11 @@ export function SwitchFilters({ filter, onChange, switches, groups, parts }: {
         {asArray(parts).filter(part => meaningfulPart(parts, part.id)).map(part => <option key={part.id} value={part.id}>{part.name}</option>)}
       </select>
     </label>
-    <label>{t('filters.switch')}
+    {withSwitch && <label>{t('filters.switch')}
       <select value={filter.switchId ?? ''} onChange={event => change({ ...filter, switchId: Number(event.target.value) || undefined })}>
         <option value="">{t('rack.all')}</option>
         {switches.map(sw => <option key={sw.id} value={sw.id}>{sw.name}</option>)}
       </select>
-    </label>
+    </label>}
   </div>;
 }

@@ -1782,3 +1782,12 @@ test('stale switch filters are cleared and empty part presets do not count as a 
   // While switches are still loading, nothing is cleared.
   assert.equal(pruneSwitchFilter({ group: 'old', part: '' }, [], [], parts), undefined);
 });
+
+test('logs and expert detail tabs get the team filter, the wall display never does', () => {
+  const app = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8');
+  assert.match(app, /page === 'logs' && <>\{teamFilterRow\}<Logs \{\.\.\.props\} \{\.\.\.activeTeamFilter\} \/>/);
+  for (const view of ['MulticastView', 'DhcpView', 'HealthAudit', 'ConfigChanges', 'Recommendations']) {
+    assert.match(app, new RegExp(`<${view} [^>]*\{\.\.\.activeTeamFilter\}`));
+  }
+  assert.match(app, /\.\.\.\(wall \? emptySwitchFilter : monitorFilter\)/);
+});

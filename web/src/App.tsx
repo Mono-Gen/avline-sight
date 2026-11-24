@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, json, message } from './api';
 import { AppHeader } from './components/AppHeader';
 import { AppSidebar } from './components/AppSidebar';
-import { pruneSwitchFilter } from './components/SwitchFilters';
+import { pruneSwitchFilter, SwitchFilters } from './components/SwitchFilters';
 import { ConfigCredentialsDialog } from './components/ConfigCredentialsDialog';
 import { ConfigImportDialog } from './components/ConfigImportDialog';
 import { ExportDialog, ScrubBar, SettingsDialog } from './components/Dialogs';
@@ -81,6 +81,8 @@ export default function App() {
   const pages = expert ? [...normalPages, ...expertPages] : normalPages;
   const [settingsVersion, setSettingsVersion] = useState(0);
   const [monitorFilter, setMonitorFilter] = useState<SwitchFilter>(emptySwitchFilter);
+  // Logs and the expert detail tabs share one team filter (switch group and part). The wall display always shows everything.
+  const [teamFilter, setTeamFilter] = useState<SwitchFilter>(emptySwitchFilter);
   const markerInput = useRef<HTMLInputElement>(null);
   const [online, setOnline] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
@@ -243,12 +245,16 @@ export default function App() {
       setDialog('');
     }
   }, [dialog, canOpenShowChecklist]);
-  useEffect(() => setMonitorFilter(emptySwitchFilter), [profileId, replayId]);
+  useEffect(() => { setMonitorFilter(emptySwitchFilter); setTeamFilter(emptySwitchFilter); }, [profileId, replayId]);
   // Clear filter choices that no longer exist (renamed group, deleted switch or part) so the monitor never stays empty.
   const filterSwitches = replay ? asArray(replay.states) : asArray(overview?.switches);
   const filterGroups = replay ? undefined : asArray(operations.groups).map(group => group.name);
   const prunedFilter = pruneSwitchFilter(monitorFilter, filterSwitches, filterGroups, settings?.views);
   useEffect(() => { if (prunedFilter) setMonitorFilter(prunedFilter); }, [JSON.stringify(prunedFilter)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const prunedTeam = pruneSwitchFilter(teamFilter, filterSwitches, filterGroups, settings?.views);
+  const activeTeamFilter = prunedTeam ?? teamFilter;
+  const teamFilterRow = <SwitchFilters filter={activeTeamFilter} onChange={filter => setTeamFilter({ ...filter, switchId: undefined })}
+    switches={filterSwitches} groups={filterGroups} parts={settings?.views} withSwitch={false} />;
   const now = usePcTime();
   const stopped = !replay && monitoringStopped(online && live.fresh, live.updatedAt, now);
   const legacyReplay = replay && replay.alerts === undefined;
@@ -374,6 +380,7 @@ export default function App() {
           {!wall && page === 'devices' && <Devices key={JSON.stringify([profileId, replayId, deviceTarget])} {...props} initialQuery={deviceTarget} />}
 
           {!wall && expert && page === 'details' && <>
+            {teamFilterRow}
             <div role="tablist" aria-label={t('cleanup.details')} className="detail-tabs">
               {(['multicast', 'dhcp', 'health', 'config', 'recommendations'] as const).map(tab => <button key={tab} role="tab" id={`tab-${tab}`}
                 aria-controls="detail-panel" aria-selected={activeDetailTab === tab} disabled={!!replay && (tab === 'dhcp' || tab === 'config')} onClick={() => setDetailTab(tab)}>
@@ -381,15 +388,15 @@ export default function App() {
               </button>)}
             </div>
             <div role="tabpanel" id="detail-panel" aria-labelledby={`tab-${activeDetailTab}`}>
-              {activeDetailTab === 'multicast' && <MulticastView {...props} />}
-              {activeDetailTab === 'dhcp' && <DhcpView {...props} />}
-              {activeDetailTab === 'health' && <HealthAudit {...props} select={setSelected} />}
-              {activeDetailTab === 'config' && <ConfigChanges key={status?.profile.id} {...props} />}
-              {activeDetailTab === 'recommendations' && <Recommendations {...props} replayRows={replay?.portRecommendations} />}
+              {activeDetailTab === 'multicast' && <MulticastView {...props} {...activeTeamFilter} />}
+              {activeDetailTab === 'dhcp' && <DhcpView {...props} {...activeTeamFilter} />}
+              {activeDetailTab === 'health' && <HealthAudit {...props} {...activeTeamFilter} select={setSelected} />}
+              {activeDetailTab === 'config' && <ConfigChanges key={status?.profile.id} {...props} {...activeTeamFilter} />}
+              {activeDetailTab === 'recommendations' && <Recommendations {...props} {...activeTeamFilter} replayRows={replay?.portRecommendations} />}
             </div>
           </>}
 
-          {!wall && page === 'logs' && <Logs {...props} />}
+          {!wall && page === 'logs' && <>{teamFilterRow}<Logs {...props} {...activeTeamFilter} /></>}
         </ErrorBoundary>
       </main>
     </div>
