@@ -1,4 +1,4 @@
-import { eventTitle, t } from '../i18n';
+import { eventTitle, getLang, t } from '../i18n';
 import { frontPanelRows } from '../frontPanelLayout';
 import type { Alert, ModelDefinitions, Port } from '../types';
 import { lampState } from '../rackModel';
@@ -16,6 +16,7 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
 }) {
   const definition = model ? definitions?.[model] : undefined;
   const rows = frontPanelRows(ports, definition);
+  const english = getLang() === 'en';
   return (
     <div className="overflow-x-auto rounded bg-slate-700 p-3">
       {rows.map((row, index) => (
@@ -28,22 +29,31 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
               // Keep an unacked PoE fault visible even when another alert is active (active first).
               const isPoeFault = (alert: Alert) => alert.code === 'POE_PORT_FAULT' || alert.code === 'POE_FAULT';
               const fault = state.issues.find(alert => alert.active && isPoeFault(alert)) ?? state.issues.find(isPoeFault);
-              const linkLabel = port.excluded ? t('ui.m133') : port.oper === 'up' ? t('ui.m134') : t('ui.m135');
+              const shortName = port.name.slice(port.name.lastIndexOf('/') + 1) || port.name;
+              const linkUp = port.oper === 'up';
+              const linkLabel = port.excluded ? t('ui.m133') : linkUp ? t('ui.m134') : t('ui.m135');
+              const warningLabel = state.issues.length > 0 ? t('ui.m137') : '';
+              const powered = (port.poe?.power_w || 0) > 0;
+              const poeLabel = fault ? `${t('ui.m138')} · ${eventTitle(fault)}` : powered ? t('ui.m139') : '';
+              const description = [`${port.name} ${port.type}`, linkLabel, t(state.label), warningLabel, poeLabel]
+                .filter(Boolean).join(' · ');
+              const iconOnly = english && ((!port.excluded && !linkUp) || Boolean(warningLabel || poeLabel));
               return (
                 <button
                   key={port.if_index}
-                  title={`${port.name} ${port.type} · ${linkLabel} · ${t(state.label)}`}
+                  title={description}
+                  aria-label={description}
                   aria-current={selected === port.if_index ? 'true' : undefined}
-                  className={`hardware-port lamp-${state.tone} ${port.excluded ? 'excluded' : ''} w-20 shrink-0 text-sm`}
+                  className={`hardware-port lamp-${state.tone} ${port.excluded ? 'excluded' : ''} w-20 shrink-0 px-1 text-sm`}
                   onClick={() => onSelect(port)}
                 >
-                  <span className="block truncate">{state.symbol} {port.name}</span>
-                  <span className="flex items-center justify-center gap-0.5">
-                    <span className="min-w-0 truncate">{linkLabel}</span>
-                    {state.issues.length > 0 && <span className="shrink-0" title={t(state.label)}>{t('ui.m137')}</span>}
-                    {fault
-                      ? <span className="shrink-0" title={eventTitle(fault)}>{t('ui.m138')}</span>
-                      : (port.poe?.power_w || 0) > 0 && <span className="shrink-0" title={t('ui.m139')}>⚡</span>}
+                  <span className="block whitespace-normal break-words">{shortName}</span>
+                  <span className="flex items-center justify-center gap-0.5 text-xs" aria-hidden="true">
+                    <span className="shrink-0">
+                      {iconOnly ? (port.excluded ? '×' : linkUp ? '✓' : '—') : linkLabel}
+                    </span>
+                    {warningLabel && <span className="shrink-0">⚠</span>}
+                    {poeLabel && <span className="shrink-0">{fault ? '⛔' : '⚡'}</span>}
                   </span>
                 </button>
               );

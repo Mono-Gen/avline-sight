@@ -127,17 +127,13 @@ export function SwitchPorts(p: ViewProps) {
         </h2>
         <p>{t('ui.m281')}{formatBps(port.rx_bps)} {t('ui.m282')}{formatBps(port.tx_bps)} {t('ui.m283')}{port.err_delta} {t('ui.m284')}{port.discard_delta}</p>
         <p>{t('ui.m285')}{decimal(port.rx_mc_pps)} {t('ui.m286')}{decimal(port.tx_mc_pps)} pps</p>
-        <p>EEE
-          {port.eee}
-          · PAUSE
-          {port.pause}
-          · UDLD
-          {port.udld}
-          · STP
-          {port.stp_state}
-          · Trust
-          {port.trust}
-        </p>
+        <p>{[
+          [t('portSummary.eee'), port.eee],
+          [t('portSummary.pause'), port.pause],
+          [t('portSummary.udld'), port.udld],
+          [t('portSummary.stp'), port.stp_state],
+          [t('portSummary.trust'), port.trust],
+        ].map(pair => pair.join(' ')).join(' · ')}</p>
         <PortHardware port={port} />
         <h3>{t('ui.m090')}</h3>
         {(port.devices || []).length > 1 && <p>{t('ui.m287')}{port.devices.length}
@@ -166,15 +162,20 @@ export function SwitchPorts(p: ViewProps) {
             </div>}
           </li>)}
         </ul>
-        <div>
-          <label>{t('ui.m101')}<input value={memo} onChange={e => setMemo(e.target.value)} />
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex max-w-full items-center gap-2 whitespace-nowrap">
+            {t('ui.m101')}
+            <input className="min-w-0" value={memo} onChange={e => setMemo(e.target.value)} />
           </label>
 
-          <label>
+          <label className="flex items-center gap-2">
             <input type="checkbox" checked={excluded} onChange={e => setExcluded(e.target.checked)} />
-            {t('ui.m133')}</label>
+            {t('ui.m133')}
+          </label>
 
-          <label>{t('ui.m291')}<input type="number" value={speed} onChange={e => setSpeed(Number(e.target.value))} />
+          <label className="flex max-w-full items-center gap-2 whitespace-nowrap">
+            {t('ui.m291')}
+            <input className="min-w-0" type="number" value={speed} onChange={e => setSpeed(Number(e.target.value))} />
           </label>
 
           <select value={role} onChange={e => setRole(e.target.value)}>

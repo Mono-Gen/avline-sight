@@ -86,11 +86,14 @@ test('port hardware keeps labels intact and stacks values in narrow sections', (
   assert.match(css, /@container[^\{]*\{\s*\.port-hardware-fields\s*\{[^}]*grid-template-columns: max-content minmax\(0, 1fr\)/);
 });
 
-test('port details separate connected device names, metadata and actions', () => {
-  const port = { if_index: 1, name: '1/0/1', devices: [
-    { mac: '02:00:00:00:00:01', label: 'Mixer', lldp_name: 'Audio', vendor: 'Example', ip: '192.0.2.1' },
-    { mac: '02:00:00:00:00:02' },
-  ] };
+test('port details separate summary pairs and memo controls as well as device metadata and actions', () => {
+  const port = {
+    if_index: 1, name: '1/0/1', eee: 'disable', pause: 'disabled', udld: 'notApplicable',
+    stp_state: 'forwarding', trust: 'trustIpDscp', devices: [
+      { mac: '02:00:00:00:00:01', label: 'Mixer', lldp_name: 'Audio', vendor: 'Example', ip: '192.0.2.1' },
+      { mac: '02:00:00:00:00:02' },
+    ],
+  };
   const sw = { id: 1, ports: [port] };
   const { SwitchPorts } = sourceWith('../src/views/SwitchPorts.tsx', {
     react: { useState: initial => [initial === 0 ? 1 : initial, noop], useEffect: noop },
@@ -99,6 +102,12 @@ test('port details separate connected device names, metadata and actions', () =>
     '../components/Common': { FrontPanel: () => null, Chart: () => null, Table: () => null },
   });
   const html = renderToStaticMarkup(SwitchPorts({ overview: { switches: [sw] }, selected: 1, locked: true }));
+  assert.match(html, /<p>EEE disable · PAUSE disabled · UDLD notApplicable · STP forwarding · Trust trustIpDscp<\/p>/);
+  const memoRow = html.match(/<div class="flex flex-wrap items-center gap-2">(<label.*?)(?=<\/div>)/)[1];
+  const inlineLabels = [...memoRow.matchAll(/<label class="([^"]+)">(.*?)<\/label>/g)];
+  assert.deepEqual(inlineLabels.map(([, , content]) => content.match(/<input[^>]*>/)[0].match(/type="(\w+)"/)?.[1]),
+    [undefined, 'checkbox', 'number']);
+  for (const [, classes] of inlineLabels) assert.match(classes, /\bflex\b.*\bitems-center\b.*\bgap-2\b/);
   const devices = html.match(/<ul class="divide-y[^>]*>(.*?)<\/ul>/)[1];
   const blocks = [...devices.matchAll(/<li[^>]*>(.*?)<\/li>/g)].map(match => match[1]);
   assert.equal(blocks.length, 2);
@@ -168,16 +177,39 @@ test('switch action popup dismisses outside, on Escape and when an item is chose
   assert.match(rack, /<ActionPopup[^]*actions\.select\(sw\.id\)[^]*<\/ActionPopup>/);
 });
 
-test('front panel keeps tile width and exposes full text while truncating both lines', context => {
+test('front panel shows full short names and uses icons when a status word would crowd the tile', context => {
   context.after(() => setLang('ja'));
   setLang('en');
   const { FrontPanel } = require('../src/components/FrontPanel.tsx');
-  const name = '1/0/123456789';
-  const port = { name, if_index: 1, type: 'rj45', oper: 'up', poe: { power_w: 2 } };
-  const html = render(FrontPanel, { ports: [port], selected: 1, onSelect: noop });
-  assert.match(html, /<button[^>]*title="1\/0\/123456789 rj45 · Connected · [^"]+"[^>]*w-20 shrink-0/);
-  assert.match(html, /<span class="block truncate">[^<]*1\/0\/123456789<\/span>/);
-  assert.match(html, /<span class="min-w-0 truncate">Connected<\/span><span class="shrink-0"[^>]*>⚡<\/span>/);
+  const port = { name: '1/0/7', if_index: 7, type: 'rj45', oper: 'up' };
+  const lag = { name: 'lag 1', if_index: 8, type: 'lag', oper: 'down' };
+  const draw = (ports, alerts = []) => render(FrontPanel, { ports, alerts, switchId: 1, selected: 7, onSelect: noop });
+  const html = draw([port, lag]);
+  const tiles = [...html.matchAll(/<button\b([^>]*?)>(.*?)<\/button>/g)];
+  assert.equal(tiles.length, 2);
+  for (const [, attrs, contents] of tiles) {
+    assert.match(attrs, /\bw-20 shrink-0\b/);
+    assert.equal(attrs.match(/title="([^"]+)"/)[1], attrs.match(/aria-label="([^"]+)"/)[1]);
+    assert.doesNotMatch(contents, /truncate/);
+  }
+  assert.match(tiles[0][1], /title="1\/0\/7 rj45 · Connected · [^"]+"/);
+  assert.match(tiles[0][2], /^<span[^>]*>7<\/span>.*<span[^>]*>Connected<\/span>/);
+  assert.match(tiles[1][1], /title="lag 1 lag · Disconnected · [^"]+"/);
+  assert.match(tiles[1][2], /^<span[^>]*>lag 1<\/span>.*<span[^>]*>—<\/span>/);
+  assert.match(draw([{ ...port, name: '1/0/123456789' }]), /break-words">123456789<\/span>/);
+
+  const powered = { ...port, poe: { power_w: 2 } };
+  const withPower = draw([powered]);
+  assert.match(withPower, /title="1\/0\/7 rj45 · Connected · [^"]*PoE supplying power"/);
+  assert.match(withPower, /<span[^>]*>✓<\/span><span[^>]*>⚡<\/span>/);
+  const alarm = fault(1, { code: 'POE_PORT_FAULT', active: true, switch_id: 1, if_index: 7 });
+  const withFault = draw([powered], [alarm]);
+  assert.match(withFault, /aria-label="1\/0\/7 rj45 · Connected · [^"]*PoE fault[^"]*"/);
+  assert.match(withFault, /<span[^>]*>✓<\/span><span[^>]*>⚠<\/span><span[^>]*>⛔<\/span>/);
+  assert.doesNotMatch(withFault, /⚡/);
+
+  setLang('ja');
+  assert.match(draw([powered], [alarm]), /<span[^>]*>接続中<\/span><span[^>]*>⚠<\/span><span[^>]*>⛔<\/span>/);
 });
 
 test('switches without credentials show a credential status on the rack and wall', context => {

@@ -59,6 +59,7 @@ export const en: Dictionary = {
     linkMetrics: '{speed} · {utilization} utilization', linkDown: '⚠ Link down',
     deviceCount: '{count} connected devices', deviceList: 'Devices connected to {name}', noDevices: 'No connected devices detected.',
   },
+  portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
   expert: {
     setting: 'Expert display', badge: 'Expert', recommendations: 'Settings that differ from recommendations',
     noRecommendations: 'No differences from recommendations on the ports shown.',

@@ -58,6 +58,7 @@ export const ja = {
     linkMetrics: '{speed} · 使用率 {utilization}', linkDown: '⚠ リンクダウン',
     deviceCount: '接続機器 {count}台', deviceList: '{name} の接続機器', noDevices: '接続機器は確認されていません。',
   },
+  portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
   expert: {
     setting: 'エキスパート表示', badge: 'エキスパート', recommendations: '推奨と違う設定',
     noRecommendations: '表示対象のポートに推奨との差はありません。',
