@@ -23,7 +23,7 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
       'background-color': 'data(statusColor)',
       color: '#f8fafc',
       'text-wrap': 'wrap',
-      'text-outline-color': '#0f172a',
+      'text-outline-color': '#111419',
       'text-outline-width': 2,
       'text-valign': 'bottom'
     }
@@ -47,7 +47,7 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
       label: 'data(edgeLabel)',
       'font-size': 10,
       'text-wrap': 'wrap',
-      'text-outline-color': '#0f172a',
+      'text-outline-color': '#111419',
       'text-outline-width': 2,
       color: '#f8fafc'
     }
@@ -65,7 +65,7 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
     selector: 'node[kind = "device-count"]',
     style: {
       shape: 'round-rectangle', width: 28, height: 22, 'font-size': 11,
-      'background-color': '#0f172a', 'border-color': '#cbd5e1', 'border-width': 1,
+      'background-color': '#111419', 'border-color': '#c4cad4', 'border-width': 1,
       'text-valign': 'center', 'text-outline-width': 0, 'z-index': 10
     }
   },
@@ -170,7 +170,7 @@ export function updateTopology(
     });
     for (const [device, source] of parent) {
       const id = `attachment:${device}`;
-      upsertEdge({ id, source, target: device, edgeLabel: '', lineWidth: 1, lineColor: '#94a3b8', path: path?.has(id) ?? false });
+      upsertEdge({ id, source, target: device, edgeLabel: '', lineWidth: 1, lineColor: '#9aa3b2', path: path?.has(id) ?? false });
     }
   });
   if (initial && nodes.length) {
@@ -189,7 +189,7 @@ export function updateTopology(
         const current = existing.position();
         if (current.x !== position.x || current.y !== position.y) existing.position(position);
       } else {
-        core.add({ group: 'nodes', data: { id, kind: 'device-count', switchNode: node.id, statusLabel: String(count), statusColor: '#0f172a' },
+        core.add({ group: 'nodes', data: { id, kind: 'device-count', switchNode: node.id, statusLabel: String(count), statusColor: '#111419' },
           position, grabbable: false, selectable: false });
       }
     }

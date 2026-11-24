@@ -18,10 +18,10 @@ export function summarizeAlerts(alerts: Alert[]) {
 }
 
 export const alertStates = {
-  critical: { symbol: '!', label: 'rack.active', color: '#f87171' },
-  warning: { symbol: '!', label: 'wall.recovered', color: '#fbbf24' },
-  healthy: { symbol: '✓', label: 'cleanup.switchOK', color: '#86efac' },
-  unknown: { symbol: '—', label: 'cleanup.switchUnknown', color: '#94a3b8' },
+  critical: { symbol: '!', label: 'rack.active', color: '#ff4d5e' },
+  warning: { symbol: '!', label: 'wall.recovered', color: '#facc15' },
+  healthy: { symbol: '✓', label: 'cleanup.switchOK', color: '#2dd4bf' },
+  unknown: { symbol: '—', label: 'cleanup.switchUnknown', color: '#b8a9f5' },
 } as const;
 
 export function alertTone(counts: ReturnType<typeof summarizeAlerts>, known: boolean) {
