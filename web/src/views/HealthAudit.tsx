@@ -76,11 +76,14 @@ export function HealthAudit(p: ViewProps) {
       />
     </>}
     {!p.replay && <>
-      <Chart
-        points={metrics.data?.selected === selected ? metrics.data.result.points || [] : []}
-        keys={['cpu_5s', 'mem_free_pct', 'mbuf_used_pct', 'temp_max_c', 'poe_used_w']}
-      />
-      <PollingStatus {...metrics} />
+      {/* The graph needs a switch; until one is chosen, say so instead of showing an empty chart. */}
+      {selected > 0 ? <>
+        <Chart
+          points={metrics.data?.selected === selected ? metrics.data.result.points || [] : []}
+          keys={['cpu_5s', 'mem_free_pct', 'mbuf_used_pct', 'temp_max_c', 'poe_used_w']}
+        />
+        <PollingStatus {...metrics} />
+      </> : <p className="text-sm text-slate-400">{t('expert.chooseSwitch')}</p>}
       <PollingStatus {...report} />
       <h2>{t('ui.m256')}</h2>
       <Table {...findingColumns} expert={p.expert} rows={asArray(audit?.findings).filter(row =>

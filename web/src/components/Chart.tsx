@@ -2,6 +2,7 @@ import * as echarts from 'echarts';
 import { useEffect, useRef } from 'react';
 import { asArray } from '../format';
 import { pcTimestamp } from '../pcTime';
+import { columnLabels } from './columnLabels';
 
 export function Chart({ points, keys }: {
   points: Record<string, number | string>[];
@@ -20,8 +21,9 @@ export function Chart({ points, keys }: {
         data: p.map(point => pcTimestamp(point.ts, true)),
       },
       yAxis: { type: 'value' },
+      // Series names use the same column labels as the tables (raw keys only when no label exists).
       series: asArray(keys).map(k => ({
-        name: k,
+        name: columnLabels[k] || k,
         type: 'line',
         showSymbol: false,
         data: asArray(p).map(x => x[k] ?? null)

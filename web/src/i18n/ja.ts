@@ -70,6 +70,7 @@ export const ja = {
   },
   portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
   expert: {
+    chooseSwitch: 'スイッチを選ぶと、CPU・メモリ・温度・PoEのグラフを表示します。',
     setting: 'エキスパート表示', badge: 'エキスパート', recommendations: '推奨と違う設定',
     noRecommendations: '表示対象のポートに推奨との差はありません。',
     technical: '技術詳細', mibName: 'MIB名', rawCounter: 'カウンタ生値',

@@ -32,6 +32,12 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
     selector: 'node[kind = "external"], node[kind = "device"]',
     style: { shape: 'diamond' }
   },
+  // Device labels are kept short so neighbours do not overlap; the full name is in the selection list.
+  {
+    selector: 'node[kind = "device"]',
+    style: { width: 14, height: 14, 'font-size': 9, 'text-wrap': 'ellipsis', 'text-max-width': '84px' }
+  },
+  { selector: 'node[kind = "switch"]', style: { 'font-size': 12, 'font-weight': 'bold' } },
   { selector: 'node[statusTone = "warning"]', style: { 'border-color': '#fde68a', 'border-width': 3 } },
   {
     selector: 'edge',
@@ -169,7 +175,8 @@ export function updateTopology(
   });
   if (initial && nodes.length) {
     const saved = model.nodes.some(node => Number.isFinite(node.x) && Number.isFinite(node.y));
-    core.elements().not('node[kind = "device-count"]').layout({ name: saved ? 'preset' : 'grid' }).run();
+    if (saved) core.elements().not('node[kind = "device-count"]').layout({ name: 'preset' }).run();
+    else layoutBySwitch(core, switchNodes.map(node => node.id), parent);
   }
   core.batch(() => {
     for (const node of switchNodes) {
@@ -187,4 +194,31 @@ export function updateTopology(
       }
     }
   });
+}
+
+// First layout without saved positions: switches in one row, each switch's devices in a block of columns below it.
+export function layoutBySwitch(core: cytoscape.Core, switchIds: readonly string[], parent: ReadonlyMap<string, string>) {
+  const COLS = 4;
+  const DX = 96;
+  const DY = 46;
+  const children = new Map<string, string[]>(switchIds.map(id => [id, []]));
+  for (const [device, owner] of parent) children.get(owner)?.push(device);
+  let x = 0;
+  core.batch(() => {
+    for (const id of switchIds) {
+      const devices = children.get(id) ?? [];
+      const width = Math.max(1, Math.min(COLS, devices.length)) * DX;
+      core.getElementById(id).position({ x: x + width / 2, y: 0 });
+      devices.forEach((device, index) => core.getElementById(device).position({
+        x: x + (index % COLS) * DX + DX / 2,
+        y: 110 + Math.floor(index / COLS) * DY,
+      }));
+      x += width + 80;
+    }
+    // Anything not placed above (external nodes) goes on a row of its own above the switches.
+    const placed = new Set([...switchIds, ...parent.keys()]);
+    core.nodes().not('node[kind = "device-count"]').filter(node => !placed.has(node.id()))
+      .forEach((node, index) => { node.position({ x: index * DX, y: -110 }); });
+  });
+  core.fit(undefined, 30);
 }

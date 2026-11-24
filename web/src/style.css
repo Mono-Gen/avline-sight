@@ -392,3 +392,5 @@ td {
 .rack-legend-switch { opacity: .85; }
 /* リンクで書き出す操作もボタンと同じ見た目にそろえる */
 .button-link { display: inline-block; border: 1px solid var(--control-border); border-radius: .25rem; padding: .25rem .5rem; background: var(--control-bg); color: var(--control-text); text-decoration: none; white-space: nowrap; }
+/* VLANごとの要約は1行ずつ */
+.multicast-summary { list-style: none; padding: 0; margin: 0 0 .5rem; font-size: .9rem; line-height: 1.6; }

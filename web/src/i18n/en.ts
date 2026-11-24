@@ -71,6 +71,7 @@ export const en: Dictionary = {
   },
   portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
   expert: {
+    chooseSwitch: 'Choose a switch to show its CPU, memory, temperature and PoE graph.',
     setting: 'Expert display', badge: 'Expert', recommendations: 'Settings that differ from recommendations',
     noRecommendations: 'No differences from recommendations on the ports shown.',
     technical: 'Technical details', mibName: 'MIB name', rawCounter: 'Raw counter value',

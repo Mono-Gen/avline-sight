@@ -34,7 +34,8 @@ export function VlanQuerierTable({ rows, networkRows = rows }: { rows: Multicast
       snoopingOK, snoopingReview: members.length - snoopingOK });
   });
   return <>
-    {summary.length > 0 && <p className="multicast-summary">{summary.join(' · ')}</p>}
+    {/* One line per VLAN so the summary can be scanned. */}
+    {summary.length > 0 && <ul className="multicast-summary">{summary.map(line => <li key={line}>{line}</li>)}</ul>}
     <Table rows={rows} first={['switch_name', 'vlan', 'name', 'snooping', 'querier_oper', 'querier_addr']}
       hide={switchColumn.hide} values={{ snooping: enabledStatus, querier_admin: enabledStatus, querier_oper: localizedStatus }} />
   </>;
