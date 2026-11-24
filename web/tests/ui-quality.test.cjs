@@ -656,8 +656,18 @@ test('本番の一括Pingとカウンタリセットは負荷を説明し、キ�
     react: { useState: value => [value, noop] },
   });
   approved = false;
-  const tree = Devices({ ...props, replay: null, status: { phase: 'show', profile: { id: 1 } } });
-  elements(tree, node => node.props?.['data-action'] === 'ping-visible')[0].props.onClick();
+  // During the show the Ping target starts on manual entry, so nothing is sent until an address is typed.
+  const showTree = Devices({ ...props, replay: null, status: { phase: 'show', profile: { id: 1 } } });
+  assert.equal(elements(showTree, node => node.props?.['data-action'] === 'ping-target')[0].props.value, 'manual');
+  assert.equal(elements(showTree, node => node.props?.['data-action'] === 'ping-run')[0].props.disabled, true);
+  // Choosing the shown devices during the show asks once and sends nothing on cancel.
+  const { Devices: VisibleDevices } = sourceWith('../src/views/Devices.tsx', {
+    '../components/GroupActions': { confirmBulkPing },
+    '../usePolling': { usePolling: (_load, _interval, [key]) => ({ data: { key, rows: [{ ip: '192.0.2.1' }] } }) },
+    react: { useState: value => [value === 'manual' ? 'visible' : value, noop] },
+  });
+  const tree = VisibleDevices({ ...props, replay: null, status: { phase: 'show', profile: { id: 1 } } });
+  elements(tree, node => node.props?.['data-action'] === 'ping-run')[0].props.onClick();
   assert.equal(started, 3);
   assert.match(messages.at(-1), /本番中に1件.*負荷/);
 });

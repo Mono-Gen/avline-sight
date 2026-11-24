@@ -64,6 +64,11 @@ export const en: Dictionary = {
     linkMetrics: '{speed} · {utilization} utilization', linkDown: '⚠ Link down',
     deviceCount: '{count} connected devices', deviceList: 'Devices connected to {name}', noDevices: 'No connected devices detected.',
   },
+  ping: {
+    target: 'Ping target', visible: 'Shown devices ({count})', group: 'Group {name} ({count})', manual: 'Manual entry',
+    ips: 'IP addresses', run: 'Run', running: 'Pinging…', runningCount: 'Pinging… ({count})', about: 'About Ping',
+    summary: 'Ping complete: {ok} responded / {ng} no response ({sec}s)', noReply: 'Devices with no response ({count})',
+  },
   portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
   expert: {
     setting: 'Expert display', badge: 'Expert', recommendations: 'Settings that differ from recommendations',

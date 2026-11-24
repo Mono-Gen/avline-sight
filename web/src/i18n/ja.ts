@@ -63,6 +63,11 @@ export const ja = {
     linkMetrics: '{speed} · 使用率 {utilization}', linkDown: '⚠ リンクダウン',
     deviceCount: '接続機器 {count}台', deviceList: '{name} の接続機器', noDevices: '接続機器は確認されていません。',
   },
+  ping: {
+    target: 'Ping対象', visible: '表示中の機器（{count}台）', group: 'グループ {name}（{count}台）', manual: '手入力',
+    ips: 'IPアドレス', run: '実行', running: 'Ping中…', runningCount: 'Ping中…（{count}台）', about: 'Pingについて',
+    summary: 'Ping完了: 応答 {ok} / 無応答 {ng}（{sec}秒）', noReply: '無応答の機器（{count}台）',
+  },
   portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
   expert: {
     setting: 'エキスパート表示', badge: 'エキスパート', recommendations: '推奨と違う設定',

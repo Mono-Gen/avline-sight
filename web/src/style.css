@@ -370,3 +370,6 @@ td {
 @media (min-width: 768px) and (min-height: 700px) {
   .app-nav-tools { position: sticky; bottom: 0; background: #0f172a; padding-block-end: .8rem; }
 }
+/* Pingは対象・IP欄・実行・説明を1行に並べる */
+.ping-row input { width: 18rem; max-width: 100%; }
+.ping-about { border-radius: 9999px; padding: 0 .45rem; }

@@ -109,23 +109,45 @@ export function Devices(p: ViewProps & { initialQuery?: string }) {
   const rows = scope === 'unnamed' ? unnamedRows : matchingRows;
   const phase = p.operations?.phase || p.status?.phase;
   const [manual, setManual] = useState('');
-  const [manualResults, setManualResults] = useState<BulkPingResult[]>([]);
-  const targets = pingTargets(rows);
+  const [noReply, setNoReply] = useState<BulkPingResult[]>([]);
+  const [pinging, setPinging] = useState(0);
+  // Ping target: shown devices, one group, or manual entry. During the show phase start on manual entry.
+  const [pingTarget, setPingTarget] = useState(phase === 'show' ? 'manual' : 'visible');
+  const groupTargets = [...new Set(rows.map(row => row.group_tag).filter(Boolean))]
+    .map(name => ({ name, ips: pingTargets(rows.filter(row => row.group_tag === name)) }));
+  const chosenGroup = pingTarget.startsWith('group:') ? groupTargets.find(group => `group:${group.name}` === pingTarget) : undefined;
+  const targets = chosenGroup ? chosenGroup.ips : pingTargets(rows);
+  const manualMode = pingTarget === 'manual' || (pingTarget.startsWith('group:') && !chosenGroup);
   const pingDisabledReason = isReplay ? t('ui.m224')
     : p.locked ? t('ui.m225')
     : targets.length === 0 ? t('ui.m226')
       : targets.length > MAX_BULK_PING ? t('ui.m227', { p0: MAX_BULK_PING }) : undefined;
   const manualDisabledReason = isReplay ? t('ui.m224')
     : p.locked ? t('ui.m225') : undefined;
-  const runPing = (body: { ips?: string[]; manual?: string }) => p.run(async () => {
+  const runPing = (body: { ips?: string[]; manual?: string }, count: number) => p.run(async () => {
     setNotice('');
-    const r = await api<BulkPingResponse>('/api/diagnostics/ping-bulk', json('POST', body),
-      bulkPingTimeoutMs(body.ips ? body.ips.length : MAX_BULK_PING));
-    const listed = new Set(pingTargets(rows));
-    setManualResults(asArray(r.results).filter(x => !listed.has(x.ip)));
-    setNotice(t('ui.m228', { p0: r.ok, p1: r.total, p2: (r.elapsed_ms / 1000).toFixed(1) }));
-    setRevision(value => value + 1);
+    setNoReply([]);
+    // Positive: number of targets; -1: manual entry whose count the server decides.
+    setPinging(count);
+    try {
+      const r = await api<BulkPingResponse>('/api/diagnostics/ping-bulk', json('POST', body),
+        bulkPingTimeoutMs(body.ips ? body.ips.length : MAX_BULK_PING));
+      // One summary line; list only the addresses that did not answer.
+      setNoReply(asArray(r.results).filter(x => x.status !== 'ok'));
+      setNotice(t('ping.summary', { ok: r.ok, ng: r.total - r.ok, sec: (r.elapsed_ms / 1000).toFixed(1) }));
+      setRevision(value => value + 1);
+    } finally {
+      setPinging(0);
+    }
   });
+  const startPing = () => {
+    if (manualMode) {
+      const summary = t('ui.m241', { p0: MAX_BULK_PING, p1: manual.trim() });
+      if (window.confirm(phase === 'show' ? `${t('pages.pingLoad')}
+${summary}` : summary)) runPing({ manual }, -1);
+    } else if (confirmBulkPing(targets.length, phase)) runPing({ ips: targets }, targets.length);
+  };
+  const runDisabledReason = manualMode ? manualDisabledReason : pingDisabledReason;
   const importDisabledReason = isReplay ? t('ui.m229')
     : p.locked ? t('ui.m230') : undefined;
 
@@ -158,33 +180,34 @@ export function Devices(p: ViewProps & { initialQuery?: string }) {
         {importDisabledReason && <span className="text-sm text-slate-500 dark:text-slate-400">{importDisabledReason}</span>}
       </div>
       {!isReplay && (
-        <div className="operation-area" role="group" aria-label={t('rack.actions')}>
-          <button data-action="ping-visible" disabled={Boolean(pingDisabledReason) || p.busy} title={pingDisabledReason}
-            onClick={() => { if (confirmBulkPing(targets.length, phase)) runPing({ ips: targets }); }}>{t('ui.m238')}{targets.length}{t('ui.m239')}</button>
-          <label>{t('ui.m240')}<input
-            value={manual}
-            placeholder="192.168.1.10, 192.168.1.20-40, 10.0.0.0/28"
-            disabled={Boolean(manualDisabledReason)}
-            onChange={event => setManual(event.target.value)}
-          /></label>
-          <button disabled={Boolean(manualDisabledReason) || !manual.trim() || p.busy} title={manualDisabledReason} onClick={() => {
-            const summary = t('ui.m241', { p0: MAX_BULK_PING, p1: manual.trim() });
-            if (window.confirm(phase === 'show' ? `${t('pages.pingLoad')}\n${summary}` : summary)) runPing({ manual });
-          }}>{t('ui.m242')}</button>
-          {(pingDisabledReason || manualDisabledReason) && (
-            <span className="text-sm text-slate-500 dark:text-slate-400">{manualDisabledReason || pingDisabledReason}</span>
-          )}
+        <div className="operation-area ping-row" role="group" aria-label={t('ping.target')}>
+          <label>{t('ping.target')}
+            <select data-action="ping-target" value={pingTarget} disabled={p.locked || p.busy} onChange={event => setPingTarget(event.target.value)}>
+              <option value="visible">{t('ping.visible', { count: pingTargets(rows).length })}</option>
+              {groupTargets.map(group => <option key={group.name} value={`group:${group.name}`}>{t('ping.group', { name: group.name, count: group.ips.length })}</option>)}
+              <option value="manual">{t('ping.manual')}</option>
+            </select>
+          </label>
+          {manualMode && <input aria-label={t('ping.ips')} value={manual}
+            placeholder="192.168.1.10, 10.0.0.0/28" title="192.168.1.10, 192.168.1.20-40, 10.0.0.0/28"
+            disabled={Boolean(manualDisabledReason)} onChange={event => setManual(event.target.value)} />}
+          <button data-action="ping-run" disabled={Boolean(runDisabledReason) || p.busy || (manualMode && !manual.trim())}
+            title={runDisabledReason} onClick={startPing}>
+            {pinging < 0 ? t('ping.running') : pinging > 0 ? t('ping.runningCount', { count: pinging }) : t('ping.run')}
+          </button>
+          <button type="button" className="ping-about" aria-label={t('ping.about')} title={t('ui.m243')}
+            onClick={() => window.alert(t('ui.m243'))}>ⓘ</button>
+          {runDisabledReason && <span className="text-sm text-slate-500 dark:text-slate-400">{runDisabledReason}</span>}
         </div>
       )}
-      <p className="text-sm text-slate-500 dark:text-slate-400">{t('ui.m243')}</p>
       {notice && <p role="status">✓ {notice}</p>}
-      {manualResults.length > 0 && (
+      {noReply.length > 0 && (
         <div className="overflow-auto">
-          <h3 className="font-bold">{t('ui.m244')}{manualResults.length}{t('ui.m096')}</h3>
+          <h3 className="font-bold">{t('ping.noReply', { count: noReply.length })}</h3>
           <table className="text-sm">
             <thead><tr><th scope="col">IP</th><th scope="col">{t('ui.m245')}</th><th scope="col">{t('ui.m085')}</th></tr></thead>
             <tbody>
-              {manualResults.map(x => <tr key={x.ip}><td className="font-mono">{x.ip}</td><td>{pingLabel(x.status, x.rtt_ms)}</td><td>{x.detail || emptyCell}</td></tr>)}
+              {noReply.map(x => <tr key={x.ip}><td className="font-mono">{x.ip}</td><td>{pingLabel(x.status, x.rtt_ms)}</td><td>{x.detail || emptyCell}</td></tr>)}
             </tbody>
           </table>
         </div>
