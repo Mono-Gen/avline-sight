@@ -43,13 +43,15 @@ export function collapseRepeated(rows: readonly Event[]) {
   return out;
 }
 
-export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert, count = 1, switches, showAck = true, onPort }: {
+export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert, count = 1, switches, showAck = true, onPort, ongoing = false }: {
   event: Event; ackable: ReadonlySet<number>; disabled: boolean; onAcknowledge: (id: number) => void; expert?: boolean;
   count?: number; switches?: string[]; showAck?: boolean; onPort?: (event: Event) => void;
+  // True only while the alert behind this row is still active (not merely unacknowledged).
+  ongoing?: boolean;
 }) {
   const syslog = event.category === 'SYSLOG' ? syslogMessage(event.title) : undefined;
   const switchLabel = switches && switches.length > 1 ? t('logs.andMore', { name: switches[0], count: switches.length - 1 }) : event.switch_name;
-  return <tr>
+  return <tr className={ongoing ? 'log-row-ongoing' : undefined}>
     <td className="whitespace-nowrap"><time dateTime={event.ts}>{pcTimestamp(event.ts, true)}</time></td>
     {/* Only warnings and critical events get a coloured badge; INFO stays quiet. */}
     <td className="whitespace-nowrap">{event.severity === 'INFO' ? <span className="log-info">{t('ui.m007')}</span> : <Badge text={event.severity} />}</td>
@@ -60,7 +62,7 @@ export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert, c
       {syslog !== undefined ? (expert ? <details className="log-message">
       <summary>{syslog}</summary>
       <pre>{event.title}</pre>
-    </details> : syslog) : <>{eventTitle(event)} {eventHint(event)}
+    </details> : syslog) : <><strong className="log-title">{eventTitle(event)}</strong>{eventHint(event) && <span className="log-hint">{eventHint(event)}</span>}
       {expert && <AlertTechnicalDetails event={event} counters={event.detail?.raw_counters}
         observed={event.code === 'PRE_SHOW_CHECKLIST_REMAINDER' ? event.title : undefined} />}</>}</td>
     {showAck && <td className="whitespace-nowrap">{event.acked && event.severity !== 'INFO' ? t('ui.m269') : canAcknowledgeEvent(event, ackable) ? <button
@@ -182,6 +184,7 @@ export function Logs(props: ViewProps) {
     if (value !== 'custom') setFilter(previous => ({ ...previous, from, to: '' }));
   };
   const grouped = collapseRepeated(rows);
+  const activeIds = new Set(asArray(props.operations?.alerts).filter(alert => alert.active).map(alert => alert.event_id));
   const showAck = rows.some(event => canAcknowledgeEvent(event, ackable) || (event.acked && event.severity !== 'INFO'));
   const openPort = props.openPortMonitor
     ? (event: Event) => props.openPortMonitor?.({ switchId: event.switch_id, ifIndex: event.if_index })
@@ -194,7 +197,8 @@ export function Logs(props: ViewProps) {
           aria-pressed={quick === value} onClick={() => setQuick(value)}>
           {t(value === 'all' ? 'logs.quickAll' : value === 'issues' ? 'logs.quickIssues' : value === 'unacked' ? 'logs.quickUnacked' : 'logs.quickMarker')}
         </button>)}
-        {ackIds.length > 0 && <button className="button-primary" data-action="ack-all" disabled={disabled}
+        <span className="log-quick-spacer" />
+        {ackIds.length > 0 && <button className="log-ack-all" data-action="ack-all" disabled={disabled}
           onClick={() => confirmAck(undefined, props.run, () => acknowledge(ackIds))}>{t('ui.m267')}</button>}
         <details className="log-export">
           <summary>{t('logs.export')} ▾</summary>
@@ -247,7 +251,7 @@ export function Logs(props: ViewProps) {
           <tbody>
             {grouped.map(({ event, count, switches: names }) => (
               <LogEventRow key={event.id} event={event} ackable={ackable} disabled={disabled} expert={props.expert}
-                count={count} switches={names} showAck={showAck} onPort={openPort}
+                count={count} switches={names} showAck={showAck} onPort={openPort} ongoing={activeIds.has(event.id)}
                 onAcknowledge={id => props.run(() => acknowledge([id]))} />
             ))}
           </tbody>

@@ -10,7 +10,7 @@ export function OverallStatus({ count, critical, ready, stopped, replay = false,
   const tone = unknown ? 'unknown' : count ? critical && !onlyUnacked ? 'critical' : 'warning' : 'healthy';
   return <div className={`overall-status status-${tone}`} role="status">
     {label && <span>{label}</span>}
-    <strong>{unknown ? '—' : count ? active !== undefined || critical ? <ErrorSymbol /> : '▲' : '✓'} {unknown
+    <strong>{unknown ? '—' : count ? tone === 'critical' ? <ErrorSymbol /> : <span className="warning-symbol">▲</span> : '✓'} {unknown
       ? t(stopped ? 'cleanup.unknown' : 'cleanup.pending') : count && active !== undefined && unacked !== undefined
         ? t('wall.counts', { active, unacked }) : t(count ? 'cleanup.issues' : 'cleanup.normal', { count })}</strong>
     {replay && <small>{t('rack.replay')}</small>}

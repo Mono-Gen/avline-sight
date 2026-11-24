@@ -186,15 +186,16 @@ export function OverviewView(props: OverviewProps) {
   if (wall) return <div className="wall-monitor">
     {wallFilter && <div className="wall-filter-note">{t('wall.filter', { name: wallFilter.name })} <button onClick={() => setWallSwitch(undefined)}>{t('wall.clearFilter')}</button></div>}
     {outsideNote}
-    {(live || props.replayAlerts !== undefined) && <AlertBand alerts={wallFilter ? alerts.filter(alert => !alert.switch_id || alert.switch_id === wallFilter.id) : alerts}
-      wall expert={props.expert} pending={live && !operations?.ready} busy={busy} locked={locked} ackMany={live ? operations?.ackMany : undefined}
-      undoCount={live ? operations?.undoCount : undefined} undo={live ? operations?.undoAck : undefined} />}
+    {/* Switch state first: it is what the wall is read for from a distance. */}
     <h2 className="wall-switches-heading">{t('wall.current')}</h2>
     <div className="wall-switches" style={{ '--switch-count': visible.length } as React.CSSProperties}>
       {!visible.length && <p>{rack.data ? t('rack.empty') : t('rack.loading')}</p>}
       {wallTiles.map(sw => <WallSwitchTile key={sw.id} summary={sw} alerts={byAlert.get(sw.id) || []}
         stale={!!rack.error} selected={wallFilter?.id === sw.id} onSelect={() => setWallSwitch(current => current === sw.id ? undefined : sw.id)} />)}
     </div>
+    {(live || props.replayAlerts !== undefined) && <AlertBand alerts={wallFilter ? alerts.filter(alert => !alert.switch_id || alert.switch_id === wallFilter.id) : alerts}
+      wall expert={props.expert} pending={live && !operations?.ready} busy={busy} locked={locked} ackMany={live ? operations?.ackMany : undefined}
+      undoCount={live ? operations?.undoCount : undefined} undo={live ? operations?.undoAck : undefined} />}
   </div>;
   return <div className="rack-overview">
     {outsideNote}

@@ -7,17 +7,17 @@ const levels: Record<string, {
   CRITICAL: {
     icon: '⛔',
     get text() { return t('ui.m005'); },
-    className: 'bg-red-200 text-red-950'
+    className: 'badge-critical'
   },
   WARNING: {
     icon: '⚠',
     get text() { return t('ui.m006'); },
-    className: 'bg-amber-200 text-amber-950'
+    className: 'badge-warning'
   },
   INFO: {
     icon: 'ℹ',
     get text() { return t('ui.m007'); },
-    className: 'bg-sky-200 text-sky-950'
+    className: 'badge-info'
   },
 };
 

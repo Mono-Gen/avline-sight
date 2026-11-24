@@ -28,7 +28,7 @@ export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, e
   return <header className="app-header">
     <div className="header-controls">
       <strong className="text-xl">AVLine-Sight</strong>
-      <span>{replay ? t('rack.replay') : online ? '● LIVE' : t('rack.connecting')}</span>
+      <span className={online && !replay ? 'live-dot' : undefined}>{replay ? t('rack.replay') : online ? '● LIVE' : t('rack.connecting')}</span>
       {status?.profile.name && <small className="header-project">{t('project.active', { name: status.profile.name })}</small>}
       {phaseControl}
       {!replay && (phase === 'setup' || phase === 'rehearsal') &&

@@ -1,4 +1,5 @@
-import { t } from '../i18n';
+import { eventTitle, t } from '../i18n';
+import { matchingPortAlerts } from '../wallAlerts';
 import { useEffect, useState } from 'react';
 import { api, json } from '../api';
 import { Chart, FrontPanel, Table } from '../components/Common';
@@ -6,7 +7,7 @@ import { PollingStatus } from '../components/PollingStatus';
 import { PortHardware } from '../components/PortHardware';
 import { confirmCounterReset } from '../components/GroupActions';
 import { asArray, decimal, formatBps, resolveSwitchId } from '../format';
-import type { Event, MetricResult, ModelDefinitions, Port } from '../types';
+import type { Alert, Event, MetricResult, ModelDefinitions, Port } from '../types';
 import { METRICS_REFRESH_MS, usePolling } from '../usePolling';
 import { useSwitchState } from '../useSwitchState';
 import type { ViewProps } from './props';
@@ -25,6 +26,19 @@ const roles = [
   'control',
   'uplink'
 ];
+// One line per alert title (ongoing first), with a count for repeats, so the reason is readable at a glance.
+function portAlertLines(alerts: Alert[]) {
+  const lines = new Map<string, { key: string; title: string; active: boolean; count: number }>();
+  for (const alert of alerts.filter(item => item.active || !item.acked)) {
+    const title = eventTitle(alert);
+    const line = lines.get(title) ?? { key: String(alert.event_id), title, active: false, count: 0 };
+    line.count++;
+    line.active = line.active || alert.active;
+    lines.set(title, line);
+  }
+  return [...lines.values()].sort((a, b) => Number(b.active) - Number(a.active));
+}
+
 export function SwitchPorts(p: ViewProps) {
   const [idx, setIdx] = useState(0);
   const [range, setRange] = useState(15);
@@ -118,6 +132,11 @@ export function SwitchPorts(p: ViewProps) {
         ports={asArray((s.ports || [])).filter(x => !preset?.vlans?.length || asArray(preset.vlans).includes(x.pvid))}
       />
       {port && <section className="panel space-y-3">
+        {/* Why this port is flagged, first and in its state colour (ongoing red, recovered/unacknowledged yellow). */}
+        {!p.replay && portAlertLines(matchingPortAlerts(asArray(p.operations?.alerts), s.id, port.if_index))
+          .map(line => <p key={line.key} className={`port-alert-line ${line.active ? 'state-active' : 'state-recovered'}`}>
+            {line.active ? '!' : '▲'} {line.title}{line.count > 1 && <span className="port-alert-count"> ×{line.count}</span>}
+          </p>)}
         <h2 className="text-xl">
           {port.name}
           ·
@@ -128,8 +147,8 @@ export function SwitchPorts(p: ViewProps) {
         </h2>
         {/* Same shape for bandwidth and packet rates: "RX value / TX value", with a space after every label. */}
         <p className="metric-line">{t('metrics.rxtx', { rx: formatBps(port.rx_bps), tx: formatBps(port.tx_bps) })}
-          <span className="metric-sep"> · </span>{t('metrics.errors', { value: port.err_delta })}
-          <span className="metric-sep"> · </span>{t('metrics.discards', { value: port.discard_delta })}</p>
+          <span className="metric-sep"> · </span><span className={port.err_delta > 0 ? 'metric-bad' : undefined}>{t('metrics.errors', { value: port.err_delta })}</span>
+          <span className="metric-sep"> · </span><span className={port.discard_delta > 0 ? 'metric-bad' : undefined}>{t('metrics.discards', { value: port.discard_delta })}</span></p>
         <p className="metric-line">{t('metrics.multicast')} {t('metrics.rxtx', { rx: `${decimal(port.rx_mc_pps)} pps`, tx: `${decimal(port.tx_mc_pps)} pps` })}</p>
         <p>{[
           [t('portSummary.eee'), port.eee],

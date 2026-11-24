@@ -424,3 +424,26 @@ td {
 .alert-state-badge.state-recovered { background: #facc15; color: #2a1d00; }
 .alert-times { font-variant-numeric: tabular-nums; opacity: .85; }
 .metric-line .metric-sep { opacity: .6; }
+/* 一目で分かる表示（2026-11-25 AGY画面レビュー）: 形で状態を分ける（発生中=丸の!、復旧・未確認=三角） */
+.warning-symbol { color: #facc15; font-weight: 900; }
+.alert-band-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-block-end: var(--space-2); }
+.alert-list { max-height: 11rem; }
+.alert-title { font-weight: 700; }
+.alert-hint-fold > summary { cursor: pointer; font-size: var(--text-sm); opacity: .8; }
+.badge-critical { background: #3a1017; color: #ffb3bb; box-shadow: inset 0 0 0 1px #ff4d5e; }
+.badge-warning { background: #2a2205; color: #fde68a; box-shadow: inset 0 0 0 1px #facc15; }
+.badge-info { background: #0c2433; color: #bae6fd; box-shadow: inset 0 0 0 1px #38bdf8; }
+.log-row-ongoing { background: rgba(255, 77, 94, .12); box-shadow: inset 4px 0 0 #ff4d5e; }
+.log-title { display: block; }
+.log-hint { display: block; font-size: var(--text-sm); color: #9aa3b2; }
+.log-quick-spacer { flex: 1; }
+.log-export { margin-inline-start: 0; }
+.live-dot { color: #2dd4bf; }
+/* 壁表示: スイッチの状態を大きく上に */
+.wall-monitor .wall-switches { margin-block-end: var(--space-3); }
+.wall-switch-tile { font-size: 1.25em; }
+/* ポート詳細: このポートの警告を最初に状態色で。0より大きいエラー・破棄は色で目立たせる */
+.port-alert-line { border-radius: .35rem; padding: var(--space-1) var(--space-2); font-weight: 700; }
+.port-alert-line.state-active { background: #3a1017; color: #ffb3bb; box-shadow: inset 4px 0 0 #ff4d5e; }
+.port-alert-line.state-recovered { background: #2a2205; color: #fde68a; box-shadow: inset 4px 0 0 #facc15; }
+.metric-bad { color: #facc15; font-weight: 700; }
