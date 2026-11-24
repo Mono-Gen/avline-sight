@@ -864,7 +864,9 @@ test('通常・壁の更新時刻とカードの発生・復旧をJSTでそろ�
   const recovered = fault(1, { active: false, ts: '2026-11-22T09:29:32Z', cleared_at: '2026-11-22T09:30:10Z' });
   const html = render(AlertEntry, { alert: recovered });
   assert.match(html, /alert-warning alert-recovered/);
-  assert.match(html, /発生 <time[^>]*>18:29:32<\/time> → 復旧 <time[^>]*>18:30:10 JST<\/time>/);
+  // Short times without the zone (the header clock shows JST), time first, state as a badge.
+  assert.match(html, /<time[^>]*>18:29:32<\/time> 発生 → <time[^>]*>18:30:10<\/time> 復旧/);
+  assert.match(html, /alert-state-badge state-recovered">復旧・未確認/);
 });
 
 test('External topology nodes use all linked switch ports and select the highest-priority edge', () => {
@@ -1280,7 +1282,7 @@ test('同じスイッチとポートの同一分だけをまとめ、全メン�
   assert.deepEqual(new Set(clicked[1]), new Set([1, 2, 3, 4, 5]));
   const html = render(AlertBand, { alerts, wall: true, ackMany: noop });
   assert.match(html, /<details><summary>Fault（関連2件）/);
-  assert.match(html, /復旧済み・未確認/);
+  assert.match(html, /復旧・未確認/);
 });
 
 test('Alert band and bulk acknowledgement use the same eligible IDs', async () => {
@@ -1321,7 +1323,7 @@ test('確認・取り消しは処理中に無効化し、ロック中は隠し�
   assert.match(locked, /ロック中のため確認できません/);
   const recovered = render(AlertBand, { alerts: [{ ...alert, active: false, cleared_at: new Date().toISOString() }], wall: true });
   assert.match(recovered, /alert-recovered/);
-  assert.match(recovered, /発生 .*→ 復旧 /);
+  assert.match(recovered, / 発生 → .* 復旧/);
   assert.doesNotMatch(active, /復旧:|復旧 <time/);
   assert.match(render(AlertEntry, { alert: { ...alert, severity: 'CRITICAL' } }), /class="error-symbol"[^>]*>!</);
   assert.doesNotMatch(active, /[✖✕]/);

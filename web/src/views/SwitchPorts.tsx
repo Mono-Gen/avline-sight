@@ -126,8 +126,11 @@ export function SwitchPorts(p: ViewProps) {
           {port.speed_mbps}
           Mbps
         </h2>
-        <p>{t('ui.m281')}{formatBps(port.rx_bps)} {t('ui.m282')}{formatBps(port.tx_bps)} {t('ui.m283')}{port.err_delta} {t('ui.m284')}{port.discard_delta}</p>
-        <p>{t('ui.m285')}{decimal(port.rx_mc_pps)} {t('ui.m286')}{decimal(port.tx_mc_pps)} pps</p>
+        {/* Same shape for bandwidth and packet rates: "RX value / TX value", with a space after every label. */}
+        <p className="metric-line">{t('metrics.rxtx', { rx: formatBps(port.rx_bps), tx: formatBps(port.tx_bps) })}
+          <span className="metric-sep"> · </span>{t('metrics.errors', { value: port.err_delta })}
+          <span className="metric-sep"> · </span>{t('metrics.discards', { value: port.discard_delta })}</p>
+        <p className="metric-line">{t('metrics.multicast')} {t('metrics.rxtx', { rx: `${decimal(port.rx_mc_pps)} pps`, tx: `${decimal(port.tx_mc_pps)} pps` })}</p>
         <p>{[
           [t('portSummary.eee'), port.eee],
           [t('portSummary.pause'), port.pause],

@@ -409,3 +409,10 @@ td {
 .dark .app-header { border-bottom-color: var(--border); }
 .dark button.button-primary:hover:not(:disabled), .dark button[aria-pressed="true"]:hover:not(:disabled) { background-color: var(--accent-hover); }
 .dark :is(button, select, input, textarea):focus-visible { outline-color: var(--focus-ring); }
+/* アラートの状態は色付きバッジで先に出す（文字を読まなくても状態が分かるように） */
+.alert-state-badge { display: inline-block; border-radius: 9999px; padding: 0 .55em; font-size: .85em; font-weight: 800; }
+.alert-state-badge.state-active { background: #ff4d5e; color: #fff; }
+.alert-state-badge.state-ackedActive { background: #7f1d1d; color: #fecaca; }
+.alert-state-badge.state-recovered { background: #facc15; color: #2a1d00; }
+.alert-times { font-variant-numeric: tabular-nums; opacity: .85; }
+.metric-line .metric-sep { opacity: .6; }
