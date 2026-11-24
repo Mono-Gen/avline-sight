@@ -447,3 +447,7 @@ td {
 .port-alert-line.state-active { background: #3a1017; color: #ffb3bb; box-shadow: inset 4px 0 0 #ff4d5e; }
 .port-alert-line.state-recovered { background: #2a2205; color: #fde68a; box-shadow: inset 4px 0 0 #facc15; }
 .metric-bad { color: #facc15; font-weight: 700; }
+/* アラートは2段: 1段目「どこ」を大きめ、2段目「何」を状態色で */
+.alert-entry > div > div > strong:first-child { font-size: 1.1em; }
+.alert-entry.alert-critical .alert-title { color: #ffb3bb; }
+.alert-entry.alert-warning .alert-title { color: #fde68a; }

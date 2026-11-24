@@ -1,7 +1,7 @@
 import { api, json } from '../api';
 import { asArray, decimal, formatBps, formatTime } from '../format';
 import { frontPanelRows } from '../frontPanelLayout';
-import { eventTitle, t } from '../i18n';
+import { eventHeadline, eventTitle, t } from '../i18n';
 import { ActionPopup } from './ActionPopup';
 import { ErrorSymbol } from './ErrorSymbol';
 import { lampState } from '../rackModel';
@@ -116,7 +116,7 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlan
           {uplinks.has(`${sw.id}/${port.name}`) && <Sparkline samples={samples[`${sw.id}/${port.name}`] || []} label={`${port.name} ${t('rack.uplink')} ${formatBps(port.rx_bps)} / ${formatBps(port.tx_bps)}`} />}
         </div> : <span className="rack-port-gap" key={`gap-${position}`} />)}</div>)}
       {callouts.size > 0 && <div className="rack-callouts">{[...callouts.values()].slice(0, 3).map(alert => {
-        const cause = alert.code === 'PHY_ERRORS' ? t('pages.physicalError') : eventTitle(alert);
+        const cause = alert.code === 'PHY_ERRORS' ? t('pages.physicalError') : eventHeadline(alert);
         const text = `${alert.device_name || t('operations.unknownDevice')} · ${alert.port} ${cause}`;
         return <span key={alert.if_index} title={text} className={alert.active ? 'text-red-400' : 'text-amber-400'}>
           {alert.active ? <ErrorSymbol /> : '!'} {text}

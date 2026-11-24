@@ -70,7 +70,7 @@ export const en: Dictionary = {
     summary: 'Ping complete: {ok} responded / {ng} no response ({sec}s)', noReply: 'Devices with no response ({count})',
   },
   metrics: { rxtx: 'RX {rx} / TX {tx}', errors: 'Errors {value}', discards: 'Discards {value}', multicast: 'Multicast' },
-  alertState: { whatToDo: 'What to do', active: 'Ongoing', ackedActive: 'Ongoing · acknowledged', recovered: 'Recovered · unacknowledged', raisedAt: 'Raised {time}', clearedAt: 'Cleared {time}' },
+  alertState: { whatToDo: 'Possible causes and where to look (reference)', active: 'Ongoing', ackedActive: 'Ongoing · acknowledged', recovered: 'Recovered · unacknowledged', raisedAt: 'Raised {time}', clearedAt: 'Cleared {time}' },
   portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
   expert: {
     chooseSwitch: 'Choose a switch to show its CPU, memory, temperature and PoE graph.',

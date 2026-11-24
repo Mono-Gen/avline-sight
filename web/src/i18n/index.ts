@@ -96,6 +96,21 @@ export function configFieldName(field: string): string {
     ? t(`configChanges.fields.${field as keyof typeof ja.configChanges.fields}`)
     : field;
 }
+// Short headline for the normal display: what happened, without counter values or the "where" part
+// (switch, port and device are shown on the line above). The full title stays for the expert display.
+export function eventHeadline(event: LocalizedEvent): string {
+  const copy = copyFor(event.code);
+  if (!copy || event.code === 'MARKER') return eventTitle(event);
+  const template = copy.title
+    .replace(/\s*[（(][^（）()]*\{[^}]+\}[^（）()]*[）)]/g, '')
+    .replace(/\s*[:：]\s*\{[^}]*\}.*$/, '')
+    .trim();
+  const rendered = renderEventCopy(template, eventParams(event));
+  const headline = rendered && !/\{[^}]+\}/.test(rendered) ? rendered : copy.fallbackTitle ?? eventTitle(event);
+  const vlan = event.detail?.vlan;
+  return !isRecommendationEvent(event.code) && typeof vlan === 'number' ? `VLAN ${vlan} · ${headline}` : headline;
+}
+
 export function eventHint(event: LocalizedEvent): string {
   const copy = copyFor(event.code);
   return copy ? renderEventCopy(copy.hint, event.detail) ?? '' : event.hint || '';

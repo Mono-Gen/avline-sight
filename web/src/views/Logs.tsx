@@ -1,4 +1,4 @@
-import { eventHint, eventTitle, isRecommendationEvent, t } from '../i18n';
+import { eventHeadline, eventHint, eventTitle, isRecommendationEvent, t } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { acknowledgeEvents } from '../acknowledge';
@@ -62,7 +62,8 @@ export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert, c
       {syslog !== undefined ? (expert ? <details className="log-message">
       <summary>{syslog}</summary>
       <pre>{event.title}</pre>
-    </details> : syslog) : <><strong className="log-title">{eventTitle(event)}</strong>{eventHint(event) && <span className="log-hint">{eventHint(event)}</span>}
+    </details> : syslog) : <><strong className="log-title">{expert ? eventTitle(event) : eventHeadline(event)}</strong>
+      {expert && eventHint(event) && <span className="log-hint">{t('alertState.whatToDo')}: {eventHint(event)}</span>}
       {expert && <AlertTechnicalDetails event={event} counters={event.detail?.raw_counters}
         observed={event.code === 'PRE_SHOW_CHECKLIST_REMAINDER' ? event.title : undefined} />}</>}</td>
     {showAck && <td className="whitespace-nowrap">{event.acked && event.severity !== 'INFO' ? t('ui.m269') : canAcknowledgeEvent(event, ackable) ? <button

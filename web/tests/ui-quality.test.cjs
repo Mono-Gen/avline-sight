@@ -288,7 +288,9 @@ test('日英のプレースホルダーと技術詳細は保存済みイベン�
     assert.match(eventTitle({ code: 'DISCARDS', detail: { delta: 0 } }), /\+0/);
     assert.doesNotMatch(eventTitle({ code: 'DISCARDS', title: 'Stored technical title' }), /\{|Stored technical/);
     const normal = render(AlertEntry, { alert, busy: false });
-    assert.ok(normal.includes(eventHint(alert)));
+    // Normal display: no cause/hint text; the expert display shows it as reference.
+    assert.ok(!normal.includes(eventHint(alert)));
+    assert.ok(render(AlertEntry, { alert, busy: false, expert: true }).includes(eventHint(alert)));
     assert.doesNotMatch(normal, /DEVICE_MISSING|00:11:22:33:44:55/);
     assert.match(render(AlertEntry, { alert, busy: false, expert: true }), /00:11:22:33:44:55[^]*DEVICE_MISSING/);
   }
@@ -302,9 +304,11 @@ test('AlertEntry uses the API detail fields in the English clock skew title', co
     title: 'Stored title',
     detail: { offset_seconds: -61 },
   });
-  assert.match(render(AlertEntry, { alert, busy: false }), /Clock offset from monitoring PC: -61 s/);
+  // Values belong to the expert display; the normal display shows the headline only.
+  assert.match(render(AlertEntry, { alert, busy: false, expert: true }), /Clock offset from monitoring PC: -61 s/);
+  assert.doesNotMatch(render(AlertEntry, { alert, busy: false }), /-61 s/);
   assert.match(render(AlertEntry, { alert: { ...alert, detail: undefined }, busy: false }),
-    /Clock offset from monitoring PC detected/);
+    /Clock offset from monitoring PC</);
 });
 
 const groupedSwitches = [
@@ -1846,4 +1850,16 @@ test('Wall alert groups put ongoing faults before recovered ones', () => {
   const alert = (id, active, ts, port) => ({ event_id: id, active, acked: false, severity: 'CRITICAL', ts, switch_id: 1, if_index: port, code: 'X', title: 'X' });
   const groups = groupWallAlerts([alert(1, false, '2026-11-25T01:00:00Z', 2), alert(2, false, '2026-11-25T00:59:00Z', 3), alert(3, true, '2026-11-25T00:10:00Z', 4)]);
   assert.equal(groups[0].alert.event_id, 3);
+});
+
+test('Normal display headline has no counter values or location; expert keeps the full title', () => {
+  setLang('ja');
+  const { eventHeadline, eventTitle } = require('../src/i18n/index.ts');
+  const phy = { code: 'PHY_ERRORS', detail: { fcs: 22, symbol: 6, align: 0 } };
+  assert.equal(eventHeadline(phy), '物理エラーが増加');
+  assert.match(eventTitle(phy), /FCS\+22/);
+  assert.equal(eventHeadline({ code: 'PING_FAIL', detail: { name: 'Mixer', last_ip: '192.0.2.1' } }), 'Ping応答なし');
+  setLang('en');
+  assert.equal(eventHeadline(phy), 'Physical layer errors increasing');
+  setLang('ja');
 });

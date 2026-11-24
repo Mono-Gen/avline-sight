@@ -69,7 +69,7 @@ export const ja = {
     summary: 'Ping完了: 応答 {ok} / 無応答 {ng}（{sec}秒）', noReply: '無応答の機器（{count}台）',
   },
   metrics: { rxtx: '受信 {rx} / 送信 {tx}', errors: 'エラー {value}', discards: '破棄 {value}', multicast: 'マルチキャスト' },
-  alertState: { whatToDo: '対処', active: '継続中', ackedActive: '継続中・確認済み', recovered: '復旧・未確認', raisedAt: '{time} 発生', clearedAt: '{time} 復旧' },
+  alertState: { whatToDo: '考えられる原因・確認箇所（参考）', active: '継続中', ackedActive: '継続中・確認済み', recovered: '復旧・未確認', raisedAt: '{time} 発生', clearedAt: '{time} 復旧' },
   portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
   expert: {
     chooseSwitch: 'スイッチを選ぶと、CPU・メモリ・温度・PoEのグラフを表示します。',

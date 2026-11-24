@@ -1,4 +1,4 @@
-import { eventTitle, t } from '../i18n';
+import { eventHeadline, eventTitle, t } from '../i18n';
 import { matchingPortAlerts } from '../wallAlerts';
 import { useEffect, useState } from 'react';
 import { api, json } from '../api';
@@ -27,10 +27,10 @@ const roles = [
   'uplink'
 ];
 // One line per alert title (ongoing first), with a count for repeats, so the reason is readable at a glance.
-function portAlertLines(alerts: Alert[]) {
+function portAlertLines(alerts: Alert[], expert = false) {
   const lines = new Map<string, { key: string; title: string; active: boolean; count: number }>();
   for (const alert of alerts.filter(item => item.active || !item.acked)) {
-    const title = eventTitle(alert);
+    const title = expert ? eventTitle(alert) : eventHeadline(alert);
     const line = lines.get(title) ?? { key: String(alert.event_id), title, active: false, count: 0 };
     line.count++;
     line.active = line.active || alert.active;
@@ -133,7 +133,7 @@ export function SwitchPorts(p: ViewProps) {
       />
       {port && <section className="panel space-y-3">
         {/* Why this port is flagged, first and in its state colour (ongoing red, recovered/unacknowledged yellow). */}
-        {!p.replay && portAlertLines(matchingPortAlerts(asArray(p.operations?.alerts), s.id, port.if_index))
+        {!p.replay && portAlertLines(matchingPortAlerts(asArray(p.operations?.alerts), s.id, port.if_index), p.expert)
           .map(line => <p key={line.key} className={`port-alert-line ${line.active ? 'state-active' : 'state-recovered'}`}>
             {line.active ? '!' : '▲'} {line.title}{line.count > 1 && <span className="port-alert-count"> ×{line.count}</span>}
           </p>)}
