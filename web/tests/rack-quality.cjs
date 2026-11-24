@@ -79,7 +79,7 @@ test('ラックのランプは発生中を赤、復旧未確認を枠付きの�
   const input = { port: { if_index: 1, name: '1/0/1', oper: 'up', devices: [{ mac: 'AA' }] }, devices: [], alerts: [], reachable: true, wall: false, onSelect: noop };
   const css = fs.readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
   for (const [alerts, expected, symbol, color] of [
-    [[alert({ severity: 'WARNING', active: true, acked: true })], 'critical', '!', '#7f1d1d'],
+    [[alert({ severity: 'WARNING', active: true, acked: true })], 'critical', '!', '#b4232f'],
     // 正常は案1の青緑（赤と区別しやすい）
     [[alert()], 'warning', '▲', '#713f12'],
     [[alert({ acked: true })], 'healthy', '✓', '#0e3a36'],

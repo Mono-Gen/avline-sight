@@ -21,7 +21,7 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
     style: {
       label: 'data(statusLabel)',
       'background-color': 'data(statusColor)',
-      color: '#f8fafc',
+      color: '#f7f8fa',
       'text-wrap': 'wrap',
       'text-outline-color': '#111419',
       'text-outline-width': 2,
@@ -49,7 +49,7 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
       'text-wrap': 'wrap',
       'text-outline-color': '#111419',
       'text-outline-width': 2,
-      color: '#f8fafc'
+      color: '#f7f8fa'
     }
   },
   {
@@ -60,7 +60,7 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
   { selector: 'edge[?path], edge[?selected]', style: linkHighlight('#c4b5fd', 4) },
   { selector: 'edge[?down]', style: { 'line-style': 'dashed' } },
   { selector: 'node[?path], node[?selected]', style: { 'border-color': '#c4b5fd', 'border-width': 4 } },
-  { selector: 'node[?impacted]', style: { 'background-color': '#f87171', 'border-color': '#fecaca', 'border-width': 3 } },
+  { selector: 'node[?impacted]', style: { 'background-color': '#ff4d5e', 'border-color': '#fecaca', 'border-width': 3 } },
   {
     selector: 'node[kind = "device-count"]',
     style: {

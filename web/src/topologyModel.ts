@@ -254,6 +254,6 @@ export function linkAppearance(metrics: { speed?: number; util?: number } | unde
   const util = !down && speed !== undefined && metrics?.util !== undefined && Number.isFinite(metrics.util) && metrics.util >= 0
     ? metrics.util : undefined;
   const width = speed === undefined ? 2 : speed < 1000 ? 3 : speed < 10000 ? 5 : 7;
-  const color = down ? '#f87171' : util === undefined ? '#94a3b8' : util >= 90 ? '#fb923c' : util >= 70 ? '#fde047' : '#67e8f9';
+  const color = down ? '#ff4d5e' : util === undefined ? '#9aa3b2' : util >= 90 ? '#fb923c' : util >= 70 ? '#fde047' : '#67e8f9';
   return { speed, util, width, color };
 }

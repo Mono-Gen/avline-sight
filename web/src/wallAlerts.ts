@@ -21,7 +21,7 @@ export const alertStates = {
   critical: { symbol: '!', label: 'rack.active', color: '#ff4d5e' },
   warning: { symbol: '!', label: 'wall.recovered', color: '#facc15' },
   healthy: { symbol: '✓', label: 'cleanup.switchOK', color: '#2dd4bf' },
-  unknown: { symbol: '—', label: 'cleanup.switchUnknown', color: '#b8a9f5' },
+  unknown: { symbol: '—', label: 'cleanup.switchUnknown', color: '#9aa3b2' },
 } as const;
 
 export function alertTone(counts: ReturnType<typeof summarizeAlerts>, known: boolean) {
