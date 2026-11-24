@@ -670,7 +670,7 @@ test('本番の一括Pingとカウンタリセットは負荷を説明し、キ�
   const { Devices: VisibleDevices } = sourceWith('../src/views/Devices.tsx', {
     '../components/GroupActions': { confirmBulkPing },
     '../usePolling': { usePolling: (_load, _interval, [key]) => ({ data: { key, rows: [{ ip: '192.0.2.1' }] } }) },
-    react: { useState: value => [value === 'manual' ? 'visible' : value, noop] },
+    react: { useState: value => [value?.target === 'manual' ? { target: 'visible', phase: 'show' } : value, noop] },
   });
   const tree = VisibleDevices({ ...props, replay: null, status: { phase: 'show', profile: { id: 1 } } });
   elements(tree, node => node.props?.['data-action'] === 'ping-run')[0].props.onClick();
@@ -1822,4 +1822,19 @@ test('Consecutive syslog lines of the same kind collapse into one row with a cou
   const rows = collapseRepeated([line(1, '1/0/1', 'A'), line(2, '1/0/9', 'B'), line(3, '1/0/30', 'A'), warn, line(4, '1/0/2', 'A')]);
   assert.deepEqual(rows.map(row => [row.event.id, row.count]), [[1, 3], [9, 1], [4, 1]]);
   assert.deepEqual(rows[0].switches, ['A', 'B']);
+});
+
+test('Entering the show switches a remembered Ping target to manual entry; a vanished group never pings everything', () => {
+  const draw = choice => {
+    const { Devices } = sourceWith('../src/views/Devices.tsx', {
+      '../usePolling': { usePolling: (_load, _interval, [key]) => ({ data: { key, rows: [{ ip: '192.0.2.1', group_tag: 'Audio' }] } }) },
+      react: { useState: value => [value && typeof value === 'object' && 'target' in value ? choice : value, noop] },
+    });
+    const tree = Devices({ replay: null, status: { phase: 'show', profile: { id: 1 } }, run: noop, notice: noop });
+    return elements(tree, node => node.props?.['data-action'] === 'ping-target')[0].props.value;
+  };
+  assert.equal(draw({ target: 'visible', phase: 'rehearsal' }), 'manual');
+  assert.equal(draw({ target: 'visible', phase: 'show' }), 'visible');
+  assert.equal(draw({ target: 'group:Gone', phase: 'show' }), 'manual');
+  assert.equal(draw({ target: 'group:Audio', phase: 'show' }), 'group:Audio');
 });

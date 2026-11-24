@@ -72,9 +72,10 @@ export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert, c
 type Quick = 'all' | 'issues' | 'unacked' | 'marker';
 type Period = 'all' | 'hour' | 'today' | 'show' | 'custom';
 
-// datetime-local input value (YYYY-MM-DDTHH:MM in JST, as shown everywhere else) for a Date.
+// datetime-local input value (YYYY-MM-DDTHH:MM:SS in JST, as shown everywhere else) for a Date.
+// Seconds are kept so "during the show" does not pull in events from the minute before the show started.
 function jstInput(date: Date) {
-  return new Date(date.getTime() + 9 * 3600_000).toISOString().slice(0, 16);
+  return new Date(date.getTime() + 9 * 3600_000).toISOString().slice(0, 19);
 }
 
 export function Logs(props: ViewProps) {
@@ -95,6 +96,10 @@ export function Logs(props: ViewProps) {
   const filter = groupFiltered && !visibleIds.has(Number(localFilter.switch_id)) ? { ...localFilter, switch_id: '' } : localFilter;
   const ackable = acknowledgeableEventIds(asArray(props.operations?.alerts));
   const queryKey = JSON.stringify([filter, filter.unackedOnly ? [...ackable].sort((a, b) => a - b) : []]);
+  // Show start is looked up first and on its own (see showStart below).
+  const inShow = (props.operations?.phase || props.status?.phase) === 'show';
+  const phaseEvents = usePolling(signal => api<Event[]>(`/api/events?category=SYSTEM&limit=${SEARCH_EVENT_LIMIT}`, { signal }),
+    0, [inShow], inShow && !props.replay, 300);
   const alertRevision = useRef({ observed: 0, requested: 0 });
   const result = usePolling(signal => {
     alertRevision.current.requested = alertRevision.current.observed;
@@ -146,15 +151,25 @@ export function Logs(props: ViewProps) {
     props.setEvents(old => old.map(event => confirmed.has(event.id) ? { ...event, acked: true } : event));
   });
   const quick: Quick = filter.category === 'MARKER' ? 'marker' : filter.unackedOnly ? 'unacked' : filter.issuesOnly ? 'issues' : 'all';
+  // Quick filters replace the severity and category choices so the two levels never contradict each other.
   const setQuick = (value: Quick) => setFilter(previous => ({
     ...previous,
     issuesOnly: value === 'issues',
     unackedOnly: value === 'unacked',
+    severity: value === 'all' ? previous.severity : '',
     category: value === 'marker' ? 'MARKER' : previous.category === 'MARKER' ? '' : previous.category,
   }));
+  // Choosing INFO or the marker category in "more filters" leaves the issues-only and unacknowledged quick views.
+  const changeDetail = (key: 'category' | 'severity', value: string) => setFilter(previous => ({
+    ...previous,
+    [key]: value,
+    ...((key === 'severity' && value === 'INFO') || (key === 'category' && value === 'MARKER')
+      ? { issuesOnly: false, unackedOnly: false } : {}),
+  }));
   // "During the show": from the latest change to the show phase, while the show phase is current.
-  const showStart = (props.operations?.phase || props.status?.phase) === 'show'
-    ? [...asArray(result.data), ...asArray(props.events)]
+  // Looked up on its own so the quick filters and a page reload do not hide it.
+  const showStart = inShow
+    ? [...asArray(phaseEvents.data), ...asArray(props.events)]
       .filter(event => event.code === 'PHASE_CHANGED' && event.detail?.phase === 'show')
       .map(event => event.ts).sort().pop()
     : undefined;
@@ -186,18 +201,20 @@ export function Logs(props: ViewProps) {
           <div className="log-export-items">
             <a href="/api/export/csv?type=events">CSV</a>
             <a href="/api/export/json?type=events">JSON</a>
-            {!props.replay && <ShowReportButton run={props.run} busy={props.busy} from={filter.from} to={filter.to} />}
+            {/* A preset period has no end; the report then runs up to now. */}
+            {!props.replay && <ShowReportButton run={props.run} busy={props.busy} from={filter.from}
+              to={filter.to || (filter.from ? jstInput(new Date()) : '')} />}
           </div>
         </details>
       </div>
       <details className="log-more">
         <summary>{t('logs.more')}</summary>
         <div className="flex flex-wrap items-center gap-2">
-          <label>{t('ui.m083')} <select value={filter.category} onChange={event => changeFilter('category', event.target.value)}>
+          <label>{t('ui.m083')} <select value={filter.category} onChange={event => changeDetail('category', event.target.value)}>
             <option value="">{t('rack.all')}</option>
             {categories.map(category => <option key={category} value={category}>{categoryLabel(category)}</option>)}
           </select></label>
-          <label>{t('ui.m026')} <select value={filter.severity} onChange={event => changeFilter('severity', event.target.value)}>
+          <label>{t('ui.m026')} <select value={filter.severity} onChange={event => changeDetail('severity', event.target.value)}>
             <option value="">{t('rack.all')}</option>
             {Object.entries(severities).map(([severity, label]) => <option key={severity} value={severity}>{t(label)}</option>)}
           </select></label>

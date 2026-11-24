@@ -3,12 +3,14 @@ import { useEffect, useRef } from 'react';
 import { asArray } from '../format';
 import { pcTimestamp } from '../pcTime';
 import { columnLabels } from './columnLabels';
+import { useLang } from '../i18n';
 
 export function Chart({ points, keys }: {
   points: Record<string, number | string>[];
   keys: string[];
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [language] = useLang();
   useEffect(() => {
     if (!ref.current) return;
     const chart = echarts.init(ref.current);
@@ -35,7 +37,7 @@ export function Chart({ points, keys }: {
       window.removeEventListener('resize', resize);
       chart.dispose();
     };
-  }, [points, asArray(keys).join(',')]);
+  }, [points, asArray(keys).join(','), language]);
   return <div ref={ref} style={{
     height: 280,
     width: '100%'

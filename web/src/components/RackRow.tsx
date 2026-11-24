@@ -127,7 +127,7 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlan
       const known = sw.reachable && !stale;
       const details = health.map(item => `${t(`rack.${item.key}`)} ${known ? item.value : t('pages.unknown')}`).join(' · ');
       const bad = known ? health.filter(item => item.bad) : [];
-      return <div className="rack-health" title={details} aria-label={`${t('pages.bodyLabel')}: ${details}`}>
+      return <div className="rack-health" title={details} tabIndex={0} role="group" aria-label={`${t('pages.bodyLabel')}: ${details}`}>
         {!known ? <span>{t('pages.bodyUnknown')}</span> : !bad.length ? <span className="health-ok">{t('pages.bodyOk')}</span>
           : bad.map(item => <span key={item.key} className="health-abnormal">⚠ {t(`rack.${item.key}`)} {item.value}</span>)}
       </div>;

@@ -214,7 +214,7 @@ export function SwitchPorts(p: ViewProps) {
           >{t('ui.m293')}</button>
         </div>
         <div className="operation-area" role="group" aria-label={t('rack.actions')}><button
-          className="button-danger"
+          className=""
           disabled={p.busy || p.locked}
           onClick={() => {
             if (confirmCounterReset(t('ui.m294'), p.operations?.phase || p.status?.phase)) p.run(async () => {

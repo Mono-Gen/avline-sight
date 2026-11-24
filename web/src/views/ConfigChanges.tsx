@@ -34,7 +34,7 @@ export function ConfigChanges(p: ViewProps) {
   const visibleIds = new Set(switches.map(sw => sw.id));
   const filtered = hasGroupFilter(p);
   const latest = comparison.data?.latest;
-  const diffs = asArray(comparison.data?.diffs).filter(row => !filtered || visibleIds.has(row.switch_id));
+  const diffs = asArray(comparison.data?.diffs).filter(row => inGroupScope(row, visibleIds, filtered));
   const events = asArray(history.data).filter(event => inGroupScope(event, visibleIds, filtered)).slice(0, 30);
   return <section className="panel space-y-4">
     <section>

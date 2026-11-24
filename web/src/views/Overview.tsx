@@ -237,7 +237,7 @@ export function OverviewView(props: OverviewProps) {
           <div className="rack-group-header">
             <h2>{name || t('rack.ungrouped')}</h2>
             <span className="rack-group-counts" aria-label={t('wall.counts', counts)}>
-              <span className={counts.active ? 'rack-critical-count' : 'rack-count-zero'}>{t('pages.groupCounts', counts)}</span>
+              <span className={counts.active ? 'rack-critical-count' : counts.unacked ? 'rack-warning-count' : 'rack-count-zero'}>{t('pages.groupCounts', counts)}</span>
             </span>
             <button className="group-collapse" aria-label={t(isClosed ? 'rack.expand' : 'rack.collapse')} aria-expanded={!isClosed} onClick={collapse}>{isClosed ? '+' : '−'}</button>
           </div>

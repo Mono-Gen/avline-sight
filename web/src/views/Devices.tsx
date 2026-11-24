@@ -111,13 +111,18 @@ export function Devices(p: ViewProps & { initialQuery?: string }) {
   const [manual, setManual] = useState('');
   const [noReply, setNoReply] = useState<BulkPingResult[]>([]);
   const [pinging, setPinging] = useState(0);
-  // Ping target: shown devices, one group, or manual entry. During the show phase start on manual entry.
-  const [pingTarget, setPingTarget] = useState(phase === 'show' ? 'manual' : 'visible');
+  // Ping target: shown devices, one group, or manual entry. The choice remembers the phase it was made in,
+  // so entering the show phase (or learning the phase after mount) switches to manual entry.
+  const [pingChoice, setPingChoice] = useState<{ target: string; phase?: string }>({ target: phase === 'show' ? 'manual' : 'visible', phase });
+  const chosenTarget = phase === 'show' && pingChoice.phase !== 'show' ? 'manual' : pingChoice.target;
+  const setPingTarget = (target: string) => setPingChoice({ target, phase });
   const groupTargets = [...new Set(rows.map(row => row.group_tag).filter(Boolean))]
     .map(name => ({ name, ips: pingTargets(rows.filter(row => row.group_tag === name)) }));
-  const chosenGroup = pingTarget.startsWith('group:') ? groupTargets.find(group => `group:${group.name}` === pingTarget) : undefined;
+  const chosenGroup = chosenTarget.startsWith('group:') ? groupTargets.find(group => `group:${group.name}` === chosenTarget) : undefined;
+  // A group that is no longer shown falls back to manual entry, never to "all shown devices".
+  const pingTarget = chosenTarget.startsWith('group:') && !chosenGroup ? 'manual' : chosenTarget;
   const targets = chosenGroup ? chosenGroup.ips : pingTargets(rows);
-  const manualMode = pingTarget === 'manual' || (pingTarget.startsWith('group:') && !chosenGroup);
+  const manualMode = pingTarget === 'manual';
   const pingDisabledReason = isReplay ? t('ui.m224')
     : p.locked ? t('ui.m225')
     : targets.length === 0 ? t('ui.m226')
