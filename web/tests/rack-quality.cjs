@@ -48,7 +48,7 @@ test('英語のイベントはコードと引数で表示し、未知のコー�
   context.after(() => setLang('ja'));
   setLang('en');
   assert.equal(t('rack.phase'), 'Operating phase');
-  assert.equal(eventTitle({ code: 'DEVICE_MISSING', detail: { name: 'Mixer', mac: 'AA' } }), 'Registered device is missing: Mixer');
+  assert.equal(eventTitle({ code: 'DEVICE_MISSING', detail: { name: 'Mixer', mac: 'AA' } }), 'Registered device missing: Mixer');
   assert.equal(eventTitle({ code: 'LEGACY', title: 'Former title' }), 'Former title');
   const html = render(DeviceInventoryTable, { rows: [{ mac: 'AA', seen: true, planned_ip: '192.0.2.5', ip_mismatch: true, ping_ok: false }] });
   assert.match(html, /Planned IP/);

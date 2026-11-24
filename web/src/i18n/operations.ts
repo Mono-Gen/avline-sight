@@ -4,7 +4,7 @@ export const operationsJa = {
   mergeConfirm: '「{from}」を既存の「{to}」へ統合します。対象スイッチすべてのグループ名が変わります。続行しますか？',
   up: '上へ', down: '下へ', save: '保存', collapseAll: 'すべて折りたたむ', expandAll: 'すべて展開',
   mismatch: '▲ 予定IPと不一致', pingAt: 'Ping時刻', unknownDevice: '機器名なし',
-  copy: 'コピー', copied: 'コピーしました', copyFailed: 'コピーできません。コマンドを選択して手動でコピーしてください。',
+  copy: 'コピー', copied: 'コピー済み', copyFailed: 'コピーできません。コマンドを選択して手動でコピーしてください。',
   trapHelpTitle: 'SNMP Trap の受信を確認する',
   trapIntro: 'Trapを受けると障害にすぐ気づけて、スイッチへの問い合わせも減らせます。受信できていなくても監視は続きますが、一瞬のリンク断などは見逃しやすくなります。',
   trapCheck: '1. アプリの表示を見る',

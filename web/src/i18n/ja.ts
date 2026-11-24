@@ -104,7 +104,7 @@ export const ja = {
     quick: '表示', quickAll: 'すべて', quickIssues: '異常・警告', quickUnacked: '未確認', quickMarker: 'マーカー',
     more: '詳しい絞り込み', period: '期間', periodAll: 'すべて', periodHour: '直近1時間', periodToday: '今日',
     periodShow: '本番中', periodCustom: '指定', export: '書出', repeated: '×{count}', openPort: 'ポート詳細へ', andMore: '{name} 他{count}台',
-    repeatedTitle: '同じ種類のsyslogが{count}件続いています',
+    repeatedTitle: '同じ種類のsyslogが{count}件連続',
   },
   deviceCsv: {
     header: 'MAC,名称,メモ,予定IP,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元,Ping',
@@ -112,8 +112,8 @@ export const ja = {
   },
   wall: {
     counts: '発生中 {active}件 / 未確認 {unacked}件', exit: '通常表示に戻る',
-    locked: 'ロック中のため確認できません', recovered: '復旧済み・未確認',
-    related: '（関連{count}件）', undo: '元に戻す', acknowledged: '{count}件を確認しました',
+    locked: 'ロック中のため確認不可', recovered: '復旧済み・未確認',
+    related: '（関連{count}件）', undo: '元に戻す', acknowledged: '{count}件を確認済み',
     current: 'スイッチ別の現在状態', filter: '{name} の未確認アラート', clearFilter: '絞り込みを解除',
     more: '他 {count}件', global: 'その他・全体',
   },
@@ -395,7 +395,7 @@ export const ja = {
   "m246": "再生時刻を取得中…",
   "m247": "該当する接続機器はありません。",
   "m248": "機器名CSVを反映しました。{p0}",
-  "m249": "⚠ 複数のDHCPサーバーが稼働しています",
+  "m249": "⚠ 複数のDHCPサーバーが稼働中",
   "m250": "サーバー・Snooping",
   "m251": "リース",
   "m252": "IP衝突",

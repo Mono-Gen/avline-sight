@@ -278,8 +278,8 @@ test('日英のプレースホルダーと技術詳細は保存済みイベン�
   const alert = fault(1, { code: 'DEVICE_MISSING', detail: { name: 'Mixer', mac: '00:11:22:33:44:55' } });
   const config = { code: 'PORT_CONFIG_CHANGED', detail: { port: '1/0/7', field: 'max_frame', before: '1522', after: '9216' } };
   for (const [lang, title, shortConfig, detailConfig] of [
-    ['ja', '登録機器が未検出になりました: Mixer', '1/0/7 の 最大フレーム が変わりました', '1/0/7 最大フレーム 1522 → 9216'],
-    ['en', 'Registered device is missing: Mixer', '1/0/7 Maximum frame size changed', '1/0/7 Maximum frame size 1522 → 9216'],
+    ['ja', '登録機器が未検出: Mixer', '1/0/7 の 最大フレーム が変化', '1/0/7 最大フレーム 1522 → 9216'],
+    ['en', 'Registered device missing: Mixer', '1/0/7 Maximum frame size changed', '1/0/7 Maximum frame size 1522 → 9216'],
   ]) {
     setLang(lang);
     assert.equal(eventTitle(alert), title);
@@ -1320,7 +1320,7 @@ test('確認・取り消しは処理中に無効化し、ロック中は隠し�
   assert.match(active, /data-action="undo" disabled/);
   const locked = render(AlertBand, { alerts: [alert], wall: true, locked: true, ackMany: noop, undoCount: 1, undo: noop });
   assert.doesNotMatch(locked, /<button/);
-  assert.match(locked, /ロック中のため確認できません/);
+  assert.match(locked, /ロック中のため確認不可/);
   const recovered = render(AlertBand, { alerts: [{ ...alert, active: false, cleared_at: new Date().toISOString() }], wall: true });
   assert.match(recovered, /alert-recovered/);
   assert.match(recovered, / 発生 → .* 復旧/);

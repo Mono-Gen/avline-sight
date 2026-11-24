@@ -6,7 +6,7 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "hint": ""
   },
   "DEVICE_MISSING": {
-    "title": "Registered device is missing: {name}",
+    "title": "Registered device missing: {name}",
     "hint": "Check that the device is powered on. Check and firmly re-seat the Ethernet cable.",
     "details": "Registered MAC ({mac}) previously observed, now missing across consecutive polls",
     "fallbackTitle": "Registered device missing"
@@ -24,12 +24,12 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "fallbackTitle": "IP address does not match the planned IP"
   },
   "LINK_DOWN": {
-    "title": "Port link is down",
+    "title": "Port link down",
     "hint": "Check both ends of the cable and re-seat firmly. Verify the connected device is powered on.",
     "details": "Port link down detected"
   },
   "LINK_UP": {
-    "title": "Port link is back up",
+    "title": "Port link back up",
     "hint": "Verify audio, video, or control on the connected device has recovered. Swap to a spare cable if drops repeat.",
     "details": "Port link up detected"
   },
@@ -60,13 +60,13 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "Port Rx/Tx bandwidth utilization exceeded threshold"
   },
   "DISCARDS": {
-    "title": "Packet drops (Discards) are increasing (+{delta})",
+    "title": "Packet drops (Discards) increasing (+{delta})",
     "hint": "Check for audio or video dropouts. If drops continue, check Storm Control and QoS.",
     "details": "Packet discards increased (+{delta}); possible congestion, Storm Control, or QoS queue overflow",
-    "fallbackTitle": "Packet drops (Discards) are increasing"
+    "fallbackTitle": "Packet drops (Discards) increasing"
   },
   "SPEED_BELOW_EXPECTED": {
-    "title": "Link speed is below expected speed",
+    "title": "Link speed below expected speed",
     "hint": "Re-seat the cable; if unchanged, swap to a spare cable. Check couplers, cable category, and auto-negotiation settings.",
     "details": "Link speed below expected speed; possible damaged pair (4-wire fallback), bad termination, or auto-negotiation mismatch"
   },
@@ -96,10 +96,10 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "Port PoE power state changed"
   },
   "PHY_ERRORS": {
-    "title": "Physical layer errors are increasing (FCS+{fcs} / Symbol+{symbol} / Align+{align})",
+    "title": "Physical layer errors increasing (FCS+{fcs} / Symbol+{symbol} / Align+{align})",
     "hint": "Re-seat the cable and swap to a spare if possible. For SFP fiber links, clean the connector endfaces and check for sharp bends.",
     "details": "Physical layer errors increased (FCS+{fcs} / Symbol+{symbol} / Align+{align}); healthy baseline is zero",
-    "fallbackTitle": "Physical errors are increasing"
+    "fallbackTitle": "Physical errors increasing"
   },
   "MTU_MISMATCH": {
     "title": "Possible MTU mismatch (oversized frames detected)",
@@ -112,12 +112,12 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "Half-Duplex operation or Late Collision increase; possible fixed vs. auto-negotiation mismatch"
   },
   "COS_DROP": {
-    "title": "CoS queue drops are increasing",
+    "title": "CoS queue drops increasing",
     "hint": "Check for audio or video dropouts. Check bandwidth utilization and QoS priorities.",
     "details": "CoS queue drops increased; check bandwidth saturation, microbursts, and QoS priorities"
   },
   "PAUSE_FRAMES": {
-    "title": "PAUSE frames are increasing",
+    "title": "PAUSE frames increasing",
     "hint": "Check for audio or video delays and dropouts. Check Flow Control on this port.",
     "details": "PAUSE frame counter increased; active Flow Control may introduce stream latency"
   },
@@ -127,10 +127,10 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "SFP Loss of Signal (LOS) or Transmit Fault (TxFault) detected"
   },
   "SFP_LOW_RX": {
-    "title": "SFP optical RX power is low ({rx_dbm} dBm)",
+    "title": "SFP optical RX power low ({rx_dbm} dBm)",
     "hint": "Check the fiber cable for tight bends or pressure. Clean the endface and re-seat when safe; replace the SFP or fiber if unchanged.",
     "details": "SFP optical RX power fell below threshold ({rx_dbm} dBm)",
-    "fallbackTitle": "SFP receive optical power is low"
+    "fallbackTitle": "SFP receive optical power low"
   },
   "SFP_RX_DROP": {
     "title": "SFP optical RX power dropped from baseline",
@@ -143,7 +143,7 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "AVB / Milan MSRP bandwidth reservation failed; check bandwidth, AVB support, and VLAN match"
   },
   "MVR_RX_FAIL": {
-    "title": "MVR IGMP receive failures are increasing",
+    "title": "MVR IGMP receive failures increasing",
     "hint": "Check for stream dropouts on receivers. Check the MVR ports and VLAN settings.",
     "details": "MVR IGMP receive failure counter increased; check source/receiver ports and MVR VLAN config"
   },
@@ -153,12 +153,12 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "Switch 5-second CPU utilization exceeded threshold"
   },
   "MEM_LOW": {
-    "title": "Switch free memory is low",
+    "title": "Switch free memory low",
     "hint": "Check switch and device responsiveness. Monitor available memory.",
     "details": "Switch free memory percentage fell below threshold"
   },
   "TEMP_HIGH": {
-    "title": "Switch temperature is abnormal",
+    "title": "Switch temperature abnormal",
     "hint": "Check that rack intake/exhaust vents are not blocked. Improve airflow (open rack doors, add fans) and lower ambient temperature.",
     "details": "Switch internal temperature exceeded threshold or thermal status is warning/critical/shutdown"
   },
@@ -178,7 +178,7 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "Mbuf allocation failures increased; check congestion, microbursts, and QoS"
   },
   "POE_BUDGET": {
-    "title": "PoE budget usage is approaching limit",
+    "title": "PoE budget usage approaching limit",
     "hint": "Do not plug additional PoE devices into this switch. Move some devices to local power adapters or another switch if possible.",
     "details": "Switch total PoE budget utilization exceeded threshold"
   },
@@ -188,17 +188,17 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "Port shut down by UDLD unidirectional link fault; possible single-strand break or Tx/Rx fault"
   },
   "STP_BLOCKING": {
-    "title": "Port is blocked by STP Blocking",
+    "title": "Port blocked by STP Blocking",
     "hint": "Check for cabling loops. Verify whether the path is intentionally redundant before unplugging.",
     "details": "STP state is discarding (Blocking) while link is up; physical loop or redundant path blocked"
   },
   "STP_TCN_BURST": {
-    "title": "STP Topology Change Notifications (TCN) are surging",
+    "title": "STP Topology Change Notifications (TCN) surging",
     "hint": "Check for link flaps and cabling loops.",
     "details": "STP Topology Change Notification (TCN) burst detected; possible physical loop or flapping link"
   },
   "DHCP_ROGUE": {
-    "title": "Invalid / rogue DHCP server messages are increasing",
+    "title": "Invalid / rogue DHCP server messages increasing",
     "hint": "Check for unintended routers or DHCP servers.",
     "details": "Invalid/rogue DHCP server messages increased; check unauthorized routers or duplicate DHCP"
   },
@@ -213,7 +213,7 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "Cross-switch audit pending first slow polling cycle completion on all switches"
   },
   "DHCP_DOUBLE": {
-    "title": "DHCP server is enabled on multiple switches",
+    "title": "DHCP server enabled on multiple switches",
     "hint": "Check DHCP server settings and address pools for each VLAN.",
     "details": "DHCP server enabled on multiple switches (per-VLAN separation is not evaluated)"
   },
@@ -233,7 +233,7 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "Multiple IGMP Querier IPs observed in the same VLAN"
   },
   "IGMP_VERSION_MIX": {
-    "title": "Multiple IGMP versions are mixed in the same VLAN",
+    "title": "Multiple IGMP versions mixed in the same VLAN",
     "hint": "Check multicast reception and the IGMP versions required by AV devices.",
     "details": "Multiple IGMP versions observed in the same VLAN"
   },
@@ -277,12 +277,12 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "hint": "Monitoring resumed for this group."
   },
   "linkDown": {
-    "title": "Port link is down (SNMP Trap)",
+    "title": "Port link down (SNMP Trap)",
     "hint": "Check both ends of the cable and re-seat firmly. Verify the connected device is powered on.",
     "details": "Port link down reported via SNMP Trap"
   },
   "linkUp": {
-    "title": "Port link is back up (SNMP Trap)",
+    "title": "Port link back up (SNMP Trap)",
     "hint": "Verify audio, video, or control on the connected device has recovered. Swap to a spare cable if drops repeat.",
     "details": "Port link up reported via SNMP Trap"
   },
@@ -492,49 +492,49 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "An SNMP Trap was received."
   },
   "EEE_ON_AV_PORT": {
-    "title": "EEE (Energy Efficient Ethernet / 802.3az) is enabled on this port (LPI transitions: +{lpi}).",
+    "title": "EEE (Energy Efficient Ethernet / 802.3az) enabled on this port (LPI transitions: +{lpi}).",
     "hint": "",
     "details": "Disabling EEE is commonly recommended for sync-sensitive AV protocols such as Dante/PTP.",
-    "fallbackTitle": "EEE (Energy Efficient Ethernet / 802.3az) is enabled on this port."
+    "fallbackTitle": "EEE (Energy Efficient Ethernet / 802.3az) enabled on this port."
   },
   "FLOWCTRL_ON_AV_PORT": {
-    "title": "Flow Control (PAUSE) is enabled on this port (setting: {pause}).",
+    "title": "Flow Control (PAUSE) enabled on this port (setting: {pause}).",
     "hint": "",
     "details": "Disabling Flow Control is commonly recommended for AV ports other than NDI 4.",
-    "fallbackTitle": "Flow Control (PAUSE) is enabled on this port."
+    "fallbackTitle": "Flow Control (PAUSE) enabled on this port."
   },
   "NDI4_NEEDS_FLOWCTRL": {
-    "title": "Flow Control is disabled on a port assigned role ndi4.",
+    "title": "Flow Control disabled on a port assigned role ndi4.",
     "hint": "",
     "details": "Enabling Flow Control may be recommended/required for NDI 4 deployments."
   },
   "DSCP_TRUST": {
-    "title": "Port QoS Trust is set to {trust} (not trustIpDscp).",
+    "title": "Port QoS Trust set to {trust} (not trustIpDscp).",
     "hint": "",
     "details": "Trust DSCP is commonly recommended when using DSCP prioritization for Dante/AES67/PTP.",
-    "fallbackTitle": "Port QoS Trust is set to a value other than trustIpDscp."
+    "fallbackTitle": "Port QoS Trust set to a value other than trustIpDscp."
   },
   "QSYS_MTU": {
-    "title": "Max frame size is {max_frame} (>1522) on a port assigned role qsys.",
+    "title": "Max frame size {max_frame} (>1522) on a port assigned role qsys.",
     "hint": "",
     "details": "Q-SYS deployments typically specify MTU 1500 / max frame 1522.",
     "fallbackTitle": "Max frame size exceeds 1522 on a port assigned role qsys."
   },
   "STORM_CTRL_UPLINK": {
-    "title": "Storm Control (multicast/broadcast) is enabled on this uplink port.",
+    "title": "Storm Control (multicast/broadcast) enabled on this uplink port.",
     "hint": "",
     "details": "Disabling it on uplinks may be recommended to avoid dropping high-bandwidth multicast or gigaACE/CobraNet traffic."
   },
   "STP_MSTP": {
-    "title": "STP is running in MSTP mode on this switch.",
+    "title": "STP running in MSTP mode on this switch.",
     "hint": "",
     "details": "RSTP is commonly recommended for ProAV deployments."
   },
   "FW_MISMATCH": {
-    "title": "Monitored switches are running different firmware versions ({versions}).",
+    "title": "Monitored switches running different firmware versions ({versions}).",
     "hint": "",
     "details": "Aligning firmware versions across switches is recommended.",
-    "fallbackTitle": "Monitored switches are running different firmware versions."
+    "fallbackTitle": "Monitored switches running different firmware versions."
   },
   "STP_PRIORITY_DEFAULT": {
     "title": "All monitored switches use the default STP priority 32768.",
@@ -542,21 +542,21 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "Setting explicit STP priorities (e.g., core=0, backup core=8192) is commonly recommended to control Root Bridge election."
   },
   "STP_EDGE_ROOT": {
-    "title": "A switch with <=1 detected uplink is elected as the STP Root Bridge.",
+    "title": "A switch with <=1 detected uplink elected as the STP Root Bridge.",
     "hint": "",
     "details": "Designing STP priorities so the core switch becomes Root Bridge is commonly recommended."
   },
   "QUERIER_ON_EDGE": {
-    "title": "A non-root switch with <=1 detected uplink is elected as the IGMP Querier on VLAN {vlan}.",
+    "title": "A non-root switch with <=1 detected uplink elected as the IGMP Querier on VLAN {vlan}.",
     "hint": "",
     "details": "Placing the IGMP Querier on the core switch is commonly recommended.",
-    "fallbackTitle": "A non-root switch with at most one uplink is elected as the IGMP Querier."
+    "fallbackTitle": "A non-root switch with at most one uplink elected as the IGMP Querier."
   },
   "DAISY_CHAIN": {
-    "title": "Switch chain depth from the STP Root Bridge is {depth} hops (>=3).",
+    "title": "Switch chain depth from the STP Root Bridge {depth} hops (>=3).",
     "hint": "",
     "details": "Star topology from the core is commonly recommended for SMPTE/AES67/PTPv2.",
-    "fallbackTitle": "Switch chain depth from the STP Root Bridge is at least three hops."
+    "fallbackTitle": "Switch chain depth from the STP Root Bridge at least three hops."
   },
   "VLAN_CROWDED": {
     "title": "VLAN {vlan} has {count} non-uplink devices (>200).",
@@ -565,12 +565,12 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "fallbackTitle": "A VLAN has more than 200 non-uplink devices."
   },
   "BCAST_STORM_CTRL_UPLINK": {
-    "title": "Broadcast Storm Control is enabled on the uplink.",
+    "title": "Broadcast Storm Control enabled on the uplink.",
     "hint": "",
     "details": "It may drop high-bandwidth broadcast traffic."
   },
   "MCAST_STORM_CTRL_UPLINK": {
-    "title": "Multicast Storm Control is enabled on the uplink.",
+    "title": "Multicast Storm Control enabled on the uplink.",
     "hint": "",
     "details": "It may drop high-bandwidth multicast traffic."
   }
