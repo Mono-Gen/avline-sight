@@ -1,4 +1,4 @@
-import { eventHint, eventTitle, getLang, isRecommendationEvent, t } from '../i18n';
+import { eventHeadline, eventHint, eventTitle, getLang, isRecommendationEvent, t } from '../i18n';
 import React, { useState } from 'react';
 import { asArray, decimal, formatBps, formatTime } from '../format';
 import { Badge } from './Badge';
@@ -38,7 +38,8 @@ function cellValue(key: string, value: unknown, row: Record<string, unknown>, ex
     const text = typeof value === 'string' ? value : undefined;
     if (key === 'hint') return eventHint({ code: row.code, hint: text, detail });
     const event = { code: row.code, title: text, detail };
-    return <>{eventTitle(event)}{expert && <AlertTechnicalDetails event={event}
+    // Normal display: headline without counter values; expert: full title with the technical details.
+    return <>{expert ? eventTitle(event) : eventHeadline(event)}{expert && <AlertTechnicalDetails event={event}
       observed={isRecommendationEvent(event.code) ? undefined : text} />}</>;
   }
   if (value == null) return '—';

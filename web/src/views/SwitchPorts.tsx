@@ -263,7 +263,7 @@ export function SwitchPorts(p: ViewProps) {
           />
           <h3>{t('ui.m301')}</h3>
           <PollingStatus {...metrics} />
-          <Table rows={metrics.data?.history || []} hide={p.expert ? [] : ['detail']} />
+          <Table rows={metrics.data?.history || []} hide={p.expert ? [] : ['detail', 'hint']} expert={p.expert} />
         </>}
       </section>}
     </>}

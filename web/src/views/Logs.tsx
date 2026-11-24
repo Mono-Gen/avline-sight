@@ -62,7 +62,8 @@ export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert, c
       {syslog !== undefined ? (expert ? <details className="log-message">
       <summary>{syslog}</summary>
       <pre>{event.title}</pre>
-    </details> : syslog) : <><strong className="log-title">{expert ? eventTitle(event) : eventHeadline(event)}</strong>
+    </details> : syslog) : <><strong className="log-title">{expert || event.severity === 'INFO' ? eventTitle(event)
+      : [eventHeadline(event), typeof event.detail?.name === 'string' ? event.detail.name : ''].filter(Boolean).join(' · ')}</strong>
       {expert && eventHint(event) && <span className="log-hint">{t('alertState.whatToDo')}: {eventHint(event)}</span>}
       {expert && <AlertTechnicalDetails event={event} counters={event.detail?.raw_counters}
         observed={event.code === 'PRE_SHOW_CHECKLIST_REMAINDER' ? event.title : undefined} />}</>}</td>

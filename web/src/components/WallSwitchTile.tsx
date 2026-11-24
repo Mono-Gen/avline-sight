@@ -3,9 +3,9 @@ import { alertStates, alertTone, summarizeAlerts } from '../wallAlerts';
 import { ErrorSymbol } from './ErrorSymbol';
 import type { Alert, InventoryRow, Port, SwitchSummary } from '../types';
 
-export function WallSwitchTile({ summary, alerts, stale, selected = false, onSelect }: {
+export function WallSwitchTile({ summary, alerts, stale, selected = false, onSelect, expert = false }: {
   summary: SwitchSummary; alerts: Alert[]; ports?: Port[]; devices?: InventoryRow[]; stale: boolean; suppressed?: boolean;
-  selected?: boolean; onSelect?: () => void;
+  selected?: boolean; onSelect?: () => void; expert?: boolean;
 }) {
   const counts = summarizeAlerts(alerts);
   const current = counts.activeItems;
@@ -18,7 +18,7 @@ export function WallSwitchTile({ summary, alerts, stale, selected = false, onSel
     <strong>{tone === 'critical' ? <><ErrorSymbol /> </> : tone === 'warning' ? <><span className="warning-symbol">▲</span> </> : null}{t(state.label)}</strong>
     {counts.count > 0 && <p className="wall-switch-counts">{t('wall.counts', counts)}</p>}
     {current.length > 0 && <ul>{current.slice(0, 3).map(alert => <li key={alert.event_id}>
-      {alert.device_name || alert.port || summary.name} · {eventHeadline(alert)}
+      {alert.device_name || alert.port || summary.name} · {expert ? eventTitle(alert) : eventHeadline(alert)}
     </li>)}</ul>}
     {current.length > 3 && <p>{t('wall.more', { count: current.length - 3 })}</p>}
     {summary.needs_credentials ? <p>{t('configFile.credentialsRequired')}</p> :

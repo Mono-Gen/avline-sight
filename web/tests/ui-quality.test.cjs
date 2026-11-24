@@ -1863,3 +1863,19 @@ test('Normal display headline has no counter values or location; expert keeps th
   assert.equal(eventHeadline(phy), 'Physical layer errors increasing');
   setLang('ja');
 });
+
+test('Every alert headline is free of counter values, placeholders and dangling text in both languages', () => {
+  const { eventHeadline } = require('../src/i18n/index.ts');
+  const { eventJa } = require('../src/i18n/eventJa.ts');
+  const detail = new Proxy({}, { get: (_target, key) => typeof key === 'string' ? '987654' : undefined, has: () => true });
+  for (const lang of ['ja', 'en']) {
+    setLang(lang);
+    for (const code of Object.keys(eventJa)) {
+      if (code === 'MARKER' || code === 'PORT_CONFIG_CHANGED') continue;
+      const headline = eventHeadline({ code, detail });
+      assert.ok(headline && !/987654|\{|\}/.test(headline), `${lang} ${code}: ${headline}`);
+      assert.doesNotMatch(headline, /^[\s:：のをが、。]/, `${lang} ${code}: ${headline}`);
+    }
+  }
+  setLang('ja');
+});

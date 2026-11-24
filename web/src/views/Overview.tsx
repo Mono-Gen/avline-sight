@@ -190,7 +190,7 @@ export function OverviewView(props: OverviewProps) {
     <h2 className="wall-switches-heading">{t('wall.current')}</h2>
     <div className="wall-switches" style={{ '--switch-count': visible.length } as React.CSSProperties}>
       {!visible.length && <p>{rack.data ? t('rack.empty') : t('rack.loading')}</p>}
-      {wallTiles.map(sw => <WallSwitchTile key={sw.id} summary={sw} alerts={byAlert.get(sw.id) || []}
+      {wallTiles.map(sw => <WallSwitchTile key={sw.id} summary={sw} alerts={byAlert.get(sw.id) || []} expert={props.expert}
         stale={!!rack.error} selected={wallFilter?.id === sw.id} onSelect={() => setWallSwitch(current => current === sw.id ? undefined : sw.id)} />)}
     </div>
     {(live || props.replayAlerts !== undefined) && <AlertBand alerts={wallFilter ? alerts.filter(alert => !alert.switch_id || alert.switch_id === wallFilter.id) : alerts}

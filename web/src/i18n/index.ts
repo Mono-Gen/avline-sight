@@ -105,8 +105,9 @@ export function eventHeadline(event: LocalizedEvent): string {
     .replace(/\s*[（(][^（）()]*\{[^}]+\}[^（）()]*[）)]/g, '')
     .replace(/\s*[:：]\s*\{[^}]*\}.*$/, '')
     .trim();
-  const rendered = renderEventCopy(template, eventParams(event));
-  const headline = rendered && !/\{[^}]+\}/.test(rendered) ? rendered : copy.fallbackTitle ?? eventTitle(event);
+  const leftover = /\{[^}]+\}/.test(template);
+  const rendered = leftover ? undefined : renderEventCopy(template, eventParams(event))?.trim();
+  const headline = rendered || copy.fallbackTitle || eventTitle(event);
   const vlan = event.detail?.vlan;
   return !isRecommendationEvent(event.code) && typeof vlan === 'number' ? `VLAN ${vlan} · ${headline}` : headline;
 }
