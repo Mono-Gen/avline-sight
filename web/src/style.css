@@ -115,7 +115,7 @@ td {
 .phase-selector option { color: #eef1f6; }
 .phase-setup { color: #a5b4fc; }
 .phase-rehearsal { color: #fde68a; }
-.phase-show { color: #2dd4bf; }
+.phase-show { color: #eef1f6; }
 .trap-ready { color: #0f766e; }
 .trap-failed { color: #991b1b; }
 .pc-clock {
@@ -352,7 +352,7 @@ td {
 .ack-undo { display: flex; flex-wrap: wrap; gap: .5em; align-items: center; padding: .3em 0; }
 .wall-switches-heading { font-weight: 700; font-size: 1em; }
 .wall-alerts-dense .alert-list { grid-template-columns: repeat(auto-fit, minmax(min(30rem, 100%), 1fr)); }
-.wall-switches { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr)); gap: var(--space-3); align-content: start; align-items: start; }
+.wall-switches { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr)); gap: var(--space-3); align-content: start; align-items: stretch; }
 .wall-switch-tile { border: 2px solid; border-radius: .7rem; padding: var(--space-2) var(--space-3); overflow-wrap: anywhere; font-size: clamp(.95rem, 1.3vw, 1.4rem); }
 .wall-switch-tile h2 { font-size: 1.4em; font-weight: 800; line-height: 1.2; }
 .wall-switch-tile p { font-size: .8em; }

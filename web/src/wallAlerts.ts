@@ -57,11 +57,12 @@ export function groupWallAlerts(alerts: Alert[]): AlertGroup[] {
     members.push(alert);
     groups.set(key, members);
   }
+  // Ongoing groups always come first so a live fault is never pushed down by recovered ones (newest first within each).
   return [...groups].map(([key, members]) => ({
     key,
     alert: members.find(alert => alert.active && alert.severity === 'CRITICAL') || members.find(alert => alert.active) || members[0],
     members,
-  }));
+  })).sort((a, b) => Number(b.members.some(alert => alert.active)) - Number(a.members.some(alert => alert.active)));
 }
 
 export function wallAlertCount(heights: number[], available: number, gap: number, moreHeight: number): number {

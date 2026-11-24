@@ -1840,3 +1840,10 @@ test('Entering the show switches a remembered Ping target to manual entry; a van
   assert.equal(draw({ target: 'group:Gone', phase: 'show' }), 'manual');
   assert.equal(draw({ target: 'group:Audio', phase: 'show' }), 'group:Audio');
 });
+
+test('Wall alert groups put ongoing faults before recovered ones', () => {
+  const { groupWallAlerts } = require('../src/wallAlerts.ts');
+  const alert = (id, active, ts, port) => ({ event_id: id, active, acked: false, severity: 'CRITICAL', ts, switch_id: 1, if_index: port, code: 'X', title: 'X' });
+  const groups = groupWallAlerts([alert(1, false, '2026-11-25T01:00:00Z', 2), alert(2, false, '2026-11-25T00:59:00Z', 3), alert(3, true, '2026-11-25T00:10:00Z', 4)]);
+  assert.equal(groups[0].alert.event_id, 3);
+});
