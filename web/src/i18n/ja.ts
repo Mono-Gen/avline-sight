@@ -96,7 +96,13 @@ export const ja = {
       bcast_storm_ctl: 'ブロードキャストストーム制御', mcast_storm_ctl: 'マルチキャストストーム制御',
     },
   },
-  logs: { receivedAt: 'PC受信時刻 (JST)', issuesOnly: '異常・警告のみ', unackedOnly: '未確認のみ', marker: 'マーカー' },
+  logs: {
+    receivedAt: 'PC受信時刻 (JST)', issuesOnly: '異常・警告のみ', unackedOnly: '未確認のみ', marker: 'マーカー',
+    quick: '表示', quickAll: 'すべて', quickIssues: '異常・警告', quickUnacked: '未確認', quickMarker: 'マーカー',
+    more: '詳しい絞り込み', period: '期間', periodAll: 'すべて', periodHour: '直近1時間', periodToday: '今日',
+    periodShow: '本番中', periodCustom: '指定', export: '書出', repeated: '×{count}', openPort: 'ポート詳細へ', andMore: '{name} 他{count}台',
+    repeatedTitle: '同じ種類のsyslogが{count}件続いています',
+  },
   deviceCsv: {
     header: 'MAC,名称,メモ,予定IP,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元,Ping',
     notDetected: '未検出',

@@ -97,7 +97,13 @@ export const en: Dictionary = {
       bcast_storm_ctl: 'Broadcast storm control', mcast_storm_ctl: 'Multicast storm control',
     },
   },
-  logs: { receivedAt: 'PC receive time (JST)', issuesOnly: 'Issues and warnings only', unackedOnly: 'Unacknowledged only', marker: 'Markers' },
+  logs: {
+    receivedAt: 'PC receive time (JST)', issuesOnly: 'Issues and warnings only', unackedOnly: 'Unacknowledged only', marker: 'Markers',
+    quick: 'Show', quickAll: 'All', quickIssues: 'Issues and warnings', quickUnacked: 'Unacknowledged', quickMarker: 'Markers',
+    more: 'More filters', period: 'Period', periodAll: 'All', periodHour: 'Last hour', periodToday: 'Today',
+    periodShow: 'During the show', periodCustom: 'Custom', export: 'Export', repeated: '×{count}', openPort: 'Open port detail', andMore: '{name} +{count}',
+    repeatedTitle: '{count} syslog messages of the same kind in a row',
+  },
   deviceCsv: {
     header: 'MAC,name,note,planned_ip,IP,vendor,lldp_name,switch,port,VLAN,PoE(W),link_speed,last_seen,source,Ping',
     notDetected: 'Not detected',

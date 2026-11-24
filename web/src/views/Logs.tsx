@@ -21,24 +21,60 @@ const categories = ['ANOMALY', 'CONNECT', 'TRAP', 'SYSLOG', 'BASELINE', 'CONFIG'
 const categoryLabel = (category: string) => category === 'CONFIG' ? t('configChanges.title') : category;
 const severities = { CRITICAL: 'ui.m005', WARNING: 'ui.m006', INFO: 'ui.m007' } as const;
 
-export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert }: {
+// Key for "the same kind of syslog": message with port names and numbers removed.
+function repeatKey(event: Event) {
+  if (event.category !== 'SYSLOG' || event.severity !== 'INFO') return '';
+  return (syslogMessage(event.title) ?? event.title).replace(/\d+\/\d+\/\d+/g, '#').replace(/\d+/g, '#');
+}
+
+// Collapse consecutive INFO syslog lines of the same kind (LLDP keepalive and the like) into one row with a count.
+export function collapseRepeated(rows: readonly Event[]) {
+  const out: { event: Event; count: number; switches: string[] }[] = [];
+  for (const event of rows) {
+    const key = repeatKey(event);
+    const last = out[out.length - 1];
+    if (key && last && repeatKey(last.event) === key) {
+      last.count++;
+      if (event.switch_name && !last.switches.includes(event.switch_name)) last.switches.push(event.switch_name);
+      continue;
+    }
+    out.push({ event, count: 1, switches: event.switch_name ? [event.switch_name] : [] });
+  }
+  return out;
+}
+
+export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert, count = 1, switches, showAck = true, onPort }: {
   event: Event; ackable: ReadonlySet<number>; disabled: boolean; onAcknowledge: (id: number) => void; expert?: boolean;
+  count?: number; switches?: string[]; showAck?: boolean; onPort?: (event: Event) => void;
 }) {
   const syslog = event.category === 'SYSLOG' ? syslogMessage(event.title) : undefined;
+  const switchLabel = switches && switches.length > 1 ? t('logs.andMore', { name: switches[0], count: switches.length - 1 }) : event.switch_name;
   return <tr>
     <td className="whitespace-nowrap"><time dateTime={event.ts}>{pcTimestamp(event.ts, true)}</time></td>
-    <td><Badge text={event.severity} /></td><td>{categoryLabel(event.category)}</td>
-    <td>{event.switch_name}</td>
-    <td>{syslog !== undefined ? (expert ? <details className="log-message">
+    {/* Only warnings and critical events get a coloured badge; INFO stays quiet. */}
+    <td className="whitespace-nowrap">{event.severity === 'INFO' ? <span className="log-info">{t('ui.m007')}</span> : <Badge text={event.severity} />}</td>
+    <td className="whitespace-nowrap">{categoryLabel(event.category)}</td>
+    <td className="whitespace-nowrap" title={switches && switches.length > 1 ? switches.join(', ') : undefined}>{switchLabel}{onPort && event.switch_id > 0 && event.if_index > 0 &&
+      <> <button type="button" className="log-port-link" data-action="open-port" onClick={() => onPort(event)}>{t('logs.openPort')}</button></>}</td>
+    <td className="log-content">{count > 1 && <span className="log-repeat" title={t('logs.repeatedTitle', { count })}>{t('logs.repeated', { count })} </span>}
+      {syslog !== undefined ? (expert ? <details className="log-message">
       <summary>{syslog}</summary>
       <pre>{event.title}</pre>
     </details> : syslog) : <>{eventTitle(event)} {eventHint(event)}
       {expert && <AlertTechnicalDetails event={event} counters={event.detail?.raw_counters}
         observed={event.code === 'PRE_SHOW_CHECKLIST_REMAINDER' ? event.title : undefined} />}</>}</td>
-    <td className="whitespace-nowrap">{event.acked && event.severity !== 'INFO' ? t('ui.m269') : canAcknowledgeEvent(event, ackable) ? <button
+    {showAck && <td className="whitespace-nowrap">{event.acked && event.severity !== 'INFO' ? t('ui.m269') : canAcknowledgeEvent(event, ackable) ? <button
       className="button-primary" data-action="ack" disabled={disabled} onClick={() => onAcknowledge(event.id)}
-    >{t('ui.m268')}</button> : '—'}</td>
+    >{t('ui.m268')}</button> : '—'}</td>}
   </tr>;
+}
+
+type Quick = 'all' | 'issues' | 'unacked' | 'marker';
+type Period = 'all' | 'hour' | 'today' | 'show' | 'custom';
+
+// datetime-local input value (YYYY-MM-DDTHH:MM in JST, as shown everywhere else) for a Date.
+function jstInput(date: Date) {
+  return new Date(date.getTime() + 9 * 3600_000).toISOString().slice(0, 16);
 }
 
 export function Logs(props: ViewProps) {
@@ -48,8 +84,11 @@ export function Logs(props: ViewProps) {
     switch_id: '',
     q: '',
     from: '',
-    to: ''
+    to: '',
+    // Default view: warnings and above.
+    issuesOnly: true,
   });
+  const [period, setPeriod] = useState<Period>('all');
   const groupFiltered = hasGroupFilter(props);
   const groupMembers = groupSwitches(props);
   const visibleIds = new Set(groupMembers.map(item => item.id));
@@ -106,51 +145,92 @@ export function Logs(props: ViewProps) {
     const confirmed = new Set(saved);
     props.setEvents(old => old.map(event => confirmed.has(event.id) ? { ...event, acked: true } : event));
   });
+  const quick: Quick = filter.category === 'MARKER' ? 'marker' : filter.unackedOnly ? 'unacked' : filter.issuesOnly ? 'issues' : 'all';
+  const setQuick = (value: Quick) => setFilter(previous => ({
+    ...previous,
+    issuesOnly: value === 'issues',
+    unackedOnly: value === 'unacked',
+    category: value === 'marker' ? 'MARKER' : previous.category === 'MARKER' ? '' : previous.category,
+  }));
+  // "During the show": from the latest change to the show phase, while the show phase is current.
+  const showStart = (props.operations?.phase || props.status?.phase) === 'show'
+    ? [...asArray(result.data), ...asArray(props.events)]
+      .filter(event => event.code === 'PHASE_CHANGED' && event.detail?.phase === 'show')
+      .map(event => event.ts).sort().pop()
+    : undefined;
+  const choosePeriod = (value: Period) => {
+    setPeriod(value);
+    const now = new Date();
+    const from = value === 'hour' ? jstInput(new Date(now.getTime() - 3600_000))
+      : value === 'today' ? `${jstInput(now).slice(0, 10)}T00:00`
+        : value === 'show' && showStart ? jstInput(new Date(showStart)) : '';
+    if (value !== 'custom') setFilter(previous => ({ ...previous, from, to: '' }));
+  };
+  const grouped = collapseRepeated(rows);
+  const showAck = rows.some(event => canAcknowledgeEvent(event, ackable) || (event.acked && event.severity !== 'INFO'));
+  const openPort = props.openPortMonitor
+    ? (event: Event) => props.openPortMonitor?.({ switchId: event.switch_id, ifIndex: event.if_index })
+    : undefined;
   return (
-    <section className="panel space-y-2">
+    <section className="panel space-y-2 log-screen">
       <PollingStatus {...result} />
-      <div className="flex flex-wrap gap-2">
-        <label>{t('ui.m083')} <select value={filter.category} onChange={event => changeFilter('category', event.target.value)}>
-          <option value="">{t('rack.all')}</option>
-          {categories.map(category => <option key={category} value={category}>{categoryLabel(category)}</option>)}
-        </select></label>
-        <label>{t('ui.m026')} <select value={filter.severity} onChange={event => changeFilter('severity', event.target.value)}>
-          <option value="">{t('rack.all')}</option>
-          {Object.entries(severities).map(([severity, label]) => <option key={severity} value={severity}>{t(label)}</option>)}
-        </select></label>
-        <label>{t('ui.m018')} <select value={filter.switch_id} onChange={event => {
-          setSelectedSwitchName(switches.get(event.target.value) || '');
-          changeFilter('switch_id', event.target.value);
-        }}>
-          <option value="">{t('rack.all')}</option>
-          {[...switches].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select></label>
-        {(['q', 'from', 'to'] as const).map(key => (
-          <label key={key}>{t(key === 'q' ? 'ui.m264' : key === 'from' ? 'ui.m265' : 'ui.m266')}
-            <input
-              type={key === 'from' || key === 'to' ? 'datetime-local' : 'text'}
-              value={filter[key]}
-              onChange={event => changeFilter(key, event.target.value)}
-            />
-          </label>
-        ))}
-        <button aria-pressed={!!filter.issuesOnly} onClick={() => changeFilter('issuesOnly', !filter.issuesOnly)}>{t('logs.issuesOnly')}</button>
-        <button aria-pressed={!!filter.unackedOnly} onClick={() => changeFilter('unackedOnly', !filter.unackedOnly)}>{t('logs.unackedOnly')}</button>
-        <button aria-pressed={filter.category === 'MARKER'} onClick={() => changeFilter('category', filter.category === 'MARKER' ? '' : 'MARKER')}>{t('logs.marker')}</button>
-        <a href="/api/export/csv?type=events">CSV</a>
-        <a href="/api/export/json?type=events">JSON</a>
-        {!props.replay && <ShowReportButton run={props.run} busy={props.busy} from={filter.from} to={filter.to} />}
+      <div className="log-quick" role="group" aria-label={t('logs.quick')}>
+        {(['all', 'issues', 'unacked', 'marker'] as const).map(value => <button key={value} data-quick={value}
+          aria-pressed={quick === value} onClick={() => setQuick(value)}>
+          {t(value === 'all' ? 'logs.quickAll' : value === 'issues' ? 'logs.quickIssues' : value === 'unacked' ? 'logs.quickUnacked' : 'logs.quickMarker')}
+        </button>)}
+        {ackIds.length > 0 && <button className="button-primary" data-action="ack-all" disabled={disabled}
+          onClick={() => confirmAck(undefined, props.run, () => acknowledge(ackIds))}>{t('ui.m267')}</button>}
+        <details className="log-export">
+          <summary>{t('logs.export')} ▾</summary>
+          <div className="log-export-items">
+            <a href="/api/export/csv?type=events">CSV</a>
+            <a href="/api/export/json?type=events">JSON</a>
+            {!props.replay && <ShowReportButton run={props.run} busy={props.busy} from={filter.from} to={filter.to} />}
+          </div>
+        </details>
       </div>
-      <div className="operation-area" role="group" aria-label={t('rack.actions')}>
-        <button className="button-primary" data-action="ack-all" disabled={disabled || !ackIds.length}
-          onClick={() => confirmAck(undefined, props.run, () => acknowledge(ackIds))}>{t('ui.m267')}</button>
-      </div>
+      <details className="log-more">
+        <summary>{t('logs.more')}</summary>
+        <div className="flex flex-wrap items-center gap-2">
+          <label>{t('ui.m083')} <select value={filter.category} onChange={event => changeFilter('category', event.target.value)}>
+            <option value="">{t('rack.all')}</option>
+            {categories.map(category => <option key={category} value={category}>{categoryLabel(category)}</option>)}
+          </select></label>
+          <label>{t('ui.m026')} <select value={filter.severity} onChange={event => changeFilter('severity', event.target.value)}>
+            <option value="">{t('rack.all')}</option>
+            {Object.entries(severities).map(([severity, label]) => <option key={severity} value={severity}>{t(label)}</option>)}
+          </select></label>
+          <label>{t('ui.m018')} <select value={filter.switch_id} onChange={event => {
+            setSelectedSwitchName(switches.get(event.target.value) || '');
+            changeFilter('switch_id', event.target.value);
+          }}>
+            <option value="">{t('rack.all')}</option>
+            {[...switches].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select></label>
+          <label>{t('ui.m264')} <input type="text" value={filter.q} onChange={event => changeFilter('q', event.target.value)} /></label>
+          <label>{t('logs.period')} <select data-action="period" value={period} onChange={event => choosePeriod(event.target.value as Period)}>
+            <option value="all">{t('logs.periodAll')}</option>
+            <option value="hour">{t('logs.periodHour')}</option>
+            <option value="today">{t('logs.periodToday')}</option>
+            <option value="show" disabled={!showStart}>{t('logs.periodShow')}</option>
+            <option value="custom">{t('logs.periodCustom')}</option>
+          </select></label>
+          {period === 'custom' && (['from', 'to'] as const).map(key => (
+            <label key={key}>{t(key === 'from' ? 'ui.m265' : 'ui.m266')}
+              <input type="datetime-local" value={filter[key]} onChange={event => changeFilter(key, event.target.value)} />
+            </label>
+          ))}
+        </div>
+      </details>
       <div className="overflow-auto">
-        <table>
-          <thead><tr><th className="whitespace-nowrap">{t('logs.receivedAt')}</th><th>{t('ui.m026')}</th><th>{t('ui.m083')}</th><th>{t('ui.m018')}</th><th>{t('ui.m028')}</th><th className="whitespace-nowrap">{t('ui.m268')}</th></tr></thead>
+        <table className="log-table">
+          <thead><tr><th className="whitespace-nowrap">{t('logs.receivedAt')}</th><th className="whitespace-nowrap">{t('ui.m026')}</th><th className="whitespace-nowrap">{t('ui.m083')}</th><th className="whitespace-nowrap">{t('ui.m018')}</th><th className="log-content">{t('ui.m028')}</th>
+            {showAck && <th className="whitespace-nowrap">{t('ui.m268')}</th>}</tr></thead>
           <tbody>
-            {rows.map(event => (
+            {grouped.map(({ event, count, switches: names }) => (
               <LogEventRow key={event.id} event={event} ackable={ackable} disabled={disabled} expert={props.expert}
+                count={count} switches={names} showAck={showAck} onPort={openPort}
                 onAcknowledge={id => props.run(() => acknowledge([id]))} />
             ))}
           </tbody>

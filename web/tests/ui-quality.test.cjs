@@ -995,7 +995,7 @@ test('Syslog retains the received time and shows the raw line only in expert dis
   assert.equal(syslogMessage('LLDP: neighbor keepalive'), 'LLDP: neighbor keepalive');
   const event = { id: 9, ts: '2026-11-07T15:16:45Z', title: raw, code: 'SWITCH_LOG', category: 'SYSLOG', severity: 'INFO' };
   const normal = render(LogEventRow, { event, ackable: new Set([9]) });
-  assert.match(normal, /<td>LLDP: neighbor keepalive<\/td>/);
+  assert.match(normal, /<td class="log-content">LLDP: neighbor keepalive<\/td>/);
   assert.doesNotMatch(normal, /<details|<pre|SwitchWest/);
   const html = render(LogEventRow, { event, ackable: new Set([9]), expert: true });
   assert.equal((html.match(/<time /g) || []).length, 1);
@@ -1194,9 +1194,13 @@ test('ログのクイック絞り込みと確認ボタンは対象行だけに�
   assert.deepEqual(logRows(events, [{ ...events[0], acked: true }], { ...filter, unackedOnly: true }, ids).map(event => event.id), [1]);
   const { Logs } = sourceWith('../src/views/Logs.tsx', { '../usePolling': { usePolling: () => ({ data: events }) } });
   const html = render(Logs, { overview: { switches: [] }, events, operations: { alerts }, locked: false });
-  assert.equal((html.match(/<select/g) || []).length, 3);
+  // Category, severity, switch and period live in the folded "more filters" panel.
+  assert.equal((html.match(/<select/g) || []).length, 4);
   assert.match(html, /<option value="7">West<\/option>/);
-  assert.match(html, /異常・警告のみ[^]*未確認のみ[^]*マーカー/);
+  // Quick filters on one row; the default view is warnings and above.
+  assert.match(html, /data-quick="all"[^]*data-quick="issues" aria-pressed="true"[^]*data-quick="unacked"[^]*data-quick="marker"/);
+  assert.match(html, /data-action="ack-all"/);
+  assert.match(html, /<details class="log-more">/);
   assert.equal((html.match(/data-action="ack"/g) || []).length, 1);
 });
 
@@ -1242,7 +1246,8 @@ test('Log acknowledgement refreshes after remote ack and unack, including during
     requests[2]([event]);
     await flush();
     assert.match(draw([fault(1)]), /data-action="ack"/);
-    assert.match(draw([]), /class="whitespace-nowrap">—<\/td>/);
+    // With nothing to acknowledge the acknowledgement column is hidden.
+    assert.doesNotMatch(draw([]), /data-action="ack"|<th class="whitespace-nowrap">確認<\/th>/);
     notify('phase_changed');
     await flush();
     assert.equal(requests.length, 3);
@@ -1800,4 +1805,15 @@ test('logs and expert detail tabs get the team filter, the wall display never do
     assert.match(app, new RegExp(`<${view} [^>]*\{\.\.\.activeTeamFilter\}`));
   }
   assert.match(app, /\.\.\.\(wall \? emptySwitchFilter : monitorFilter\)/);
+});
+
+test('Consecutive syslog lines of the same kind collapse into one row with a count', () => {
+  const { collapseRepeated } = require('../src/views/Logs.tsx');
+  const line = (id, port, name) => ({ id, ts: '2026-11-07T15:16:45Z', category: 'SYSLOG', severity: 'INFO', code: '',
+    title: `LLDP: neighbor keepalive on ${port}`, switch_id: id, if_index: 0, acked: false, switch_name: name });
+  const warn = { id: 9, ts: '2026-11-07T15:16:45Z', category: 'ANOMALY', severity: 'WARNING', code: 'X', title: 'Fault',
+    switch_id: 1, if_index: 0, acked: false };
+  const rows = collapseRepeated([line(1, '1/0/1', 'A'), line(2, '1/0/9', 'B'), line(3, '1/0/30', 'A'), warn, line(4, '1/0/2', 'A')]);
+  assert.deepEqual(rows.map(row => [row.event.id, row.count]), [[1, 3], [9, 1], [4, 1]]);
+  assert.deepEqual(rows[0].switches, ['A', 'B']);
 });
