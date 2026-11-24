@@ -47,7 +47,138 @@ const { PollingStatus } = require('../src/components/PollingStatus.tsx');
 const render = (component, props) => renderToStaticMarkup(React.createElement(component, props));
 const noop = () => {};
 const fault = (id, extra = {}) => ({ event_id: id, severity: 'WARNING', suppressed: false, acked: false, code: 'CUSTOM', title: 'Fault', ...extra });
-const headers = html => [...html.matchAll(/<th\b[^>]*>([^<]+)<\/th>/g)].map(match => match[1]);
+const headers = html => [...html.matchAll(/<th\b[^>]*>(.*?)<\/th>/g)].map(match => match[1].replace(/<[^>]*>/g, ''));
+
+test('shared table headers toggle numeric and natural sorting, with blanks last in both directions', () => {
+  let sort;
+  const { Table } = sourceWith('../src/components/Table.tsx', {
+    react: { ...React, useState: () => [sort, update => { sort = update(sort); }] },
+  });
+  const rows = [{ port: '1/0/10', count: -2 }, { port: ' ', count: null },
+    { port: '1/0/2', count: 10 }, { port: '1/0/1', count: 0 }];
+  const draw = () => Table({ rows, labels: { port: 'Port', count: 'Count' } });
+  const click = label => elements(draw(), node => node.type === 'button' && node.props.children[0] === label)[0].props.onClick();
+  const markup = () => renderToStaticMarkup(draw());
+  const ports = () => [...markup().matchAll(/<tr><td>(.*?)<\/td>/g)].map(match => match[1]);
+
+  assert.deepEqual(ports(), ['1/0/10', ' ', '1/0/2', '1/0/1']);
+  click('Port');
+  assert.deepEqual(ports(), ['1/0/1', '1/0/2', '1/0/10', ' ']);
+  assert.match(markup(), /aria-sort="ascending"><button[^>]*>Port<span aria-hidden="true">.*▲/);
+  click('Port');
+  assert.deepEqual(ports(), ['1/0/10', '1/0/2', '1/0/1', ' ']);
+  assert.match(markup(), /aria-sort="descending"><button[^>]*>Port<span aria-hidden="true">.*▼/);
+  click('Count');
+  assert.deepEqual(ports(), ['1/0/10', '1/0/1', '1/0/2', ' ']);
+  assert.equal([...markup().matchAll(/aria-sort=/g)].length, 1);
+  click('Count');
+  assert.deepEqual(ports(), ['1/0/2', '1/0/1', '1/0/10', ' ']);
+  assert.equal(rows[1].port, ' ');
+});
+
+test('port hardware keeps labels intact and stacks values in narrow sections', () => {
+  const { PortHardware } = require('../src/components/PortHardware.tsx');
+  const html = render(PortHardware, { port: { poe: { detect: 'delivering' } } });
+  const css = fs.readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
+  assert.match(html, /<dt class="whitespace-nowrap">[^<]+<\/dt><dd>delivering<\/dd>/);
+  assert.match(css, /\.port-hardware-section\s*\{[^}]*container-type: inline-size/);
+  assert.match(css, /\.port-hardware-fields dd\s*\{[^}]*overflow-wrap: anywhere/);
+  assert.match(css, /@container[^\{]*\{\s*\.port-hardware-fields\s*\{[^}]*grid-template-columns: max-content minmax\(0, 1fr\)/);
+});
+
+test('port details separate connected device names, metadata and actions', () => {
+  const port = { if_index: 1, name: '1/0/1', devices: [
+    { mac: '02:00:00:00:00:01', label: 'Mixer', lldp_name: 'Audio', vendor: 'Example', ip: '192.0.2.1' },
+    { mac: '02:00:00:00:00:02' },
+  ] };
+  const sw = { id: 1, ports: [port] };
+  const { SwitchPorts } = sourceWith('../src/views/SwitchPorts.tsx', {
+    react: { useState: initial => [initial === 0 ? 1 : initial, noop], useEffect: noop },
+    '../useSwitchState': { useSwitchState: () => ({ state: sw }) },
+    '../usePolling': { usePolling: () => ({}) },
+    '../components/Common': { FrontPanel: () => null, Chart: () => null, Table: () => null },
+  });
+  const html = renderToStaticMarkup(SwitchPorts({ overview: { switches: [sw] }, selected: 1, locked: true }));
+  const devices = html.match(/<ul class="divide-y[^>]*>(.*?)<\/ul>/)[1];
+  const blocks = [...devices.matchAll(/<li[^>]*>(.*?)<\/li>/g)].map(match => match[1]);
+  assert.equal(blocks.length, 2);
+  assert.match(blocks[0], /<strong[^>]*>Mixer<\/strong>.*<p[^>]*>02:00:00:00:00:01 · Example · 192\.0\.2\.1<\/p>/);
+  assert.match(blocks[0], /gap-2.*<button[^>]*disabled[^>]*>Ping<\/button>.*href="http:\/\/192\.0\.2\.1">HTTP<\/a>.*href="https:\/\/192\.0\.2\.1">HTTPS<\/a>/);
+  assert.match(blocks[1], /<strong[^>]*>02:00:00:00:00:02<\/strong>/);
+  assert.doesNotMatch(blocks[1], /<button|<a | · /);
+});
+
+test('switch action popup dismisses outside, on Escape and when an item is chosen', () => {
+  let open = false;
+  let effect;
+  let focusCount = 0;
+  let actionCount = 0;
+  const listeners = new Map();
+  class Target {
+    constructor(action = false) { this.action = action; }
+    closest() { return this.action ? this : null; }
+  }
+  const inside = new Target(true);
+  const outside = new Target();
+  const popup = { contains: target => target === inside };
+  const trigger = { focus() { focusCount++; } };
+  const document = {
+    addEventListener: (kind, handler) => listeners.set(kind, handler),
+    removeEventListener(kind, handler) {
+      assert.equal(listeners.get(kind), handler);
+      listeners.delete(kind);
+    },
+  };
+  let refs;
+  const { ActionPopup } = sourceWith('../src/components/ActionPopup.tsx', {
+    react: {
+      useState: () => [open, value => { open = value; }], useId: () => 'test-items',
+      useRef: () => ({ current: refs.shift() }), useEffect: callback => { effect = callback; },
+      useCallback: callback => callback,
+    },
+  }, { document, Node: Target, Element: Target });
+  const draw = () => {
+    refs = [popup, trigger];
+    return ActionPopup({ label: 'Core actions', children: React.createElement('button', { onClick: () => { actionCount++; } }, 'Ports') });
+  };
+  for (const dismiss of [
+    () => listeners.get('click')({ target: outside }),
+    () => listeners.get('keydown')({ key: 'Escape', preventDefault: noop, stopPropagation: noop }),
+    menu => {
+      menu.props.onClickCapture({ target: inside });
+      menu.props.children.props.onClick();
+      assert.equal(actionCount, 1);
+    },
+  ]) {
+    draw().props.children[0].props.onClick({ currentTarget: trigger });
+    const [button, menu] = draw().props.children;
+    assert.equal(button.props['aria-expanded'], true);
+    assert.equal(button.props['aria-controls'], menu.props.id);
+    const cleanup = effect();
+    listeners.get('click')({ target: inside });
+    assert.equal(open, true);
+    const priorFocus = focusCount;
+    dismiss(menu);
+    assert.equal(open, false);
+    assert.equal(focusCount, priorFocus + 1);
+    cleanup();
+    assert.equal(listeners.size, 0);
+  }
+  const rack = fs.readFileSync(path.join(__dirname, '../src/components/RackRow.tsx'), 'utf8');
+  assert.match(rack, /<ActionPopup[^]*actions\.select\(sw\.id\)[^]*<\/ActionPopup>/);
+});
+
+test('front panel keeps tile width and exposes full text while truncating both lines', context => {
+  context.after(() => setLang('ja'));
+  setLang('en');
+  const { FrontPanel } = require('../src/components/FrontPanel.tsx');
+  const name = '1/0/123456789';
+  const port = { name, if_index: 1, type: 'rj45', oper: 'up', poe: { power_w: 2 } };
+  const html = render(FrontPanel, { ports: [port], selected: 1, onSelect: noop });
+  assert.match(html, /<button[^>]*title="1\/0\/123456789 rj45 · Connected · [^"]+"[^>]*w-20 shrink-0/);
+  assert.match(html, /<span class="block truncate">[^<]*1\/0\/123456789<\/span>/);
+  assert.match(html, /<span class="min-w-0 truncate">Connected<\/span><span class="shrink-0"[^>]*>⚡<\/span>/);
+});
 
 test('switches without credentials show a credential status on the rack and wall', context => {
   context.after(() => setLang('ja'));
@@ -838,7 +969,10 @@ test('Expert settings, terminal entries and alert details respect the display pr
   input.props.onChange({ target: { checked: true } });
   assert.deepEqual(changes, [true]);
 
-  const { RackRow } = require('../src/components/RackRow.tsx');
+  const { ActionPopup } = sourceWith('../src/components/ActionPopup.tsx', {
+    react: { ...React, useState: () => [true, noop] },
+  });
+  const { RackRow } = sourceWith('../src/components/RackRow.tsx', { './ActionPopup': { ActionPopup } });
   const { SwitchPorts } = require('../src/views/SwitchPorts.tsx');
   const props = { overview: { switches: groupedSwitches }, selected: 1, openTerminal: noop, replay: null };
   const rack = { summary: groupedSwitches[0], ports: [], devices: [], alerts: [], definitions: {}, uplinks: new Set(), samples: {} };

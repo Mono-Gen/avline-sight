@@ -2,6 +2,7 @@ import { api, json } from '../api';
 import { asArray, decimal, formatBps, formatTime } from '../format';
 import { frontPanelRows } from '../frontPanelLayout';
 import { eventTitle, t } from '../i18n';
+import { ActionPopup } from './ActionPopup';
 import { ErrorSymbol } from './ErrorSymbol';
 import { lampState } from '../rackModel';
 import { isPortAlert, matchingPortAlerts, summarizeAlerts } from '../wallAlerts';
@@ -75,7 +76,7 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, wall
       <strong title={sw.name}>{sw.reachable ? '●' : '⚠'} {sw.name}</strong><span>{sw.ip}</span>
       {!wall && <div className="rack-switch-actions">
         {!sw.last_trap_ts && <button className="trap-help-button" title={t('rack.noTrap')} aria-label={t('rack.noTrap')} onClick={onHelp}>ⓘ</button>}
-        <details className="group-menu"><summary aria-label={`${sw.name} ${t('rack.actions')}`}>⋯</summary><div className="group-menu-items">
+        <ActionPopup label={`${sw.name} ${t('rack.actions')}`}>
           <button onClick={() => actions.select(sw.id)}>{t('rack.ports')}</button>
           {!actions.replay && <button disabled={actions.busy} onClick={() => actions.run(async () => {
             const access = await api<{ web_url: string }>(`/api/switches/${sw.id}/access-info`);
@@ -97,7 +98,7 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, wall
               });
             }}>{t('rack.remove')}</button>
           </>}
-        </div></details>
+        </ActionPopup>
       </div>}
     </div>
     <div className="rack-front">

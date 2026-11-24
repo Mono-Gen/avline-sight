@@ -28,21 +28,23 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
               // Keep an unacked PoE fault visible even when another alert is active (active first).
               const isPoeFault = (alert: Alert) => alert.code === 'POE_PORT_FAULT' || alert.code === 'POE_FAULT';
               const fault = state.issues.find(alert => alert.active && isPoeFault(alert)) ?? state.issues.find(isPoeFault);
+              const linkLabel = port.excluded ? t('ui.m133') : port.oper === 'up' ? t('ui.m134') : t('ui.m135');
               return (
                 <button
                   key={port.if_index}
-                  title={`${port.name} ${port.type} · ${t(state.label)}`}
+                  title={`${port.name} ${port.type} · ${linkLabel} · ${t(state.label)}`}
                   aria-current={selected === port.if_index ? 'true' : undefined}
                   className={`hardware-port lamp-${state.tone} ${port.excluded ? 'excluded' : ''} w-20 shrink-0 text-sm`}
                   onClick={() => onSelect(port)}
                 >
-                  {state.symbol} {port.name}
-                  <br />
-                  {port.excluded ? t('ui.m133') : port.oper === 'up' ? t('ui.m134') : t('ui.m135')}
-                  {state.issues.length > 0 && <span title={t(state.label)}> {t('ui.m137')}</span>}
-                  {fault
-                    ? <span title={eventTitle(fault)}> {t('ui.m138')}</span>
-                    : (port.poe?.power_w || 0) > 0 && <span title={t('ui.m139')}> ⚡</span>}
+                  <span className="block truncate">{state.symbol} {port.name}</span>
+                  <span className="flex items-center justify-center gap-0.5">
+                    <span className="min-w-0 truncate">{linkLabel}</span>
+                    {state.issues.length > 0 && <span className="shrink-0" title={t(state.label)}>{t('ui.m137')}</span>}
+                    {fault
+                      ? <span className="shrink-0" title={eventTitle(fault)}>{t('ui.m138')}</span>
+                      : (port.poe?.power_w || 0) > 0 && <span className="shrink-0" title={t('ui.m139')}>⚡</span>}
+                  </span>
                 </button>
               );
             })}

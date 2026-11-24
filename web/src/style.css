@@ -229,7 +229,7 @@ td {
 .rack-health { display: flex; flex-wrap: wrap; gap: .45rem; color: #e2e8f0; font-size: 1.1em; font-variant-numeric: tabular-nums; }
 .rack-health .health-abnormal { color: #fde68a; }
 .group-menu { position: relative; flex-shrink: 0; }
-.group-menu summary { cursor: pointer; list-style: none; padding: .12em .3em; }
+.group-menu-trigger { cursor: pointer; padding: .12em .3em; background: transparent; color: inherit; border: 0; }
 .group-menu-items {
   position: absolute;
   z-index: 12;
@@ -268,6 +268,14 @@ td {
   @apply bg-white dark:bg-slate-900;
 }
 .port-detail h2 { font-size: 1.2rem; font-weight: 750; }
+.port-hardware { grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
+.port-hardware-section { container-type: inline-size; }
+.port-hardware-fields dd { overflow-wrap: anywhere; }
+.port-hardware-fields dd + dt { margin-block-start: .25rem; }
+@container (min-width: 14rem) {
+  .port-hardware-fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .25rem 1rem; }
+  .port-hardware-fields dd + dt { margin-block-start: 0; }
+}
 
 * { box-sizing: border-box; }
 .app-header, .app-nav { background: #0f172a; color: #f1f5f9; }

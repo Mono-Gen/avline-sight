@@ -142,40 +142,30 @@ export function SwitchPorts(p: ViewProps) {
         <h3>{t('ui.m090')}</h3>
         {(port.devices || []).length > 1 && <p>{t('ui.m287')}{port.devices.length}
           {t('ui.m288')}</p>}
-        {asArray((port.devices || [])).map(d => <div key={d.mac}>
-          {d.mac}
-
-          {d.vendor}
-
-          {d.ip}
-
-          {d.lldp_name}
-
-          {d.label}
-
-          {d.link_local ? 'Link-Local' : ''}
-
-          {d.ip && <>
-            <button
-              disabled={p.busy || p.locked}
-              onClick={() => p.run(async () => {
-                const r = await api<{
-                  ok: boolean;
-                  rtt_ms: number;
-                  output: string;
-                }>('/api/diagnostics/ping', json('POST', { ip: d.ip }));
-                alert(`${r.ok ? t('ui.m289') : t('ui.m290')} ${r.rtt_ms}ms ${r.output}`);
-              })}
-            >Ping
-            </button>
-
-            <a target="_blank" rel="noreferrer" href={`http://${d.ip}`}>HTTP
-            </a>
-
-            <a target="_blank" rel="noreferrer" href={`https://${d.ip}`}>HTTPS
-            </a>
-          </>}
-        </div>)}
+        <ul className="divide-y divide-slate-500">
+          {asArray(port.devices).map(d => <li key={d.mac} className="space-y-1 py-2">
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <strong className="min-w-0 break-words" title={d.label && d.lldp_name || undefined}>{d.label || d.lldp_name || d.mac}</strong>
+              {d.link_local && <span className="text-xs">Link-Local</span>}
+            </div>
+            <p className="break-words text-sm opacity-80">{[d.mac, d.vendor, d.ip].filter(Boolean).join(' · ')}</p>
+            {d.ip && <div className="flex flex-wrap items-center gap-2 text-sm">
+              <button type="button" className="px-1.5 py-0.5"
+                disabled={p.busy || p.locked}
+                onClick={() => p.run(async () => {
+                  const r = await api<{
+                    ok: boolean;
+                    rtt_ms: number;
+                    output: string;
+                  }>('/api/diagnostics/ping', json('POST', { ip: d.ip }));
+                  alert(`${r.ok ? t('ui.m289') : t('ui.m290')} ${r.rtt_ms}ms ${r.output}`);
+                })}
+              >Ping</button>
+              <a className="px-1.5 py-0.5 underline" target="_blank" rel="noreferrer" href={`http://${d.ip}`}>HTTP</a>
+              <a className="px-1.5 py-0.5 underline" target="_blank" rel="noreferrer" href={`https://${d.ip}`}>HTTPS</a>
+            </div>}
+          </li>)}
+        </ul>
         <div>
           <label>{t('ui.m101')}<input value={memo} onChange={e => setMemo(e.target.value)} />
           </label>

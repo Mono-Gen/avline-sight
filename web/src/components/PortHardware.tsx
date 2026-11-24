@@ -8,12 +8,12 @@ function Details({ title, rows }: {
   rows: [string, React.ReactNode][];
 }) {
   return (
-    <section>
+    <section className="port-hardware-section">
       <h3 className="font-bold">{title}</h3>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+      <dl className="port-hardware-fields">
         {asArray(rows).map(([label, value]) => (
           <React.Fragment key={label}>
-            <dt>{label}</dt><dd>{value ?? '—'}</dd>
+            <dt className="whitespace-nowrap">{label}</dt><dd>{value ?? '—'}</dd>
           </React.Fragment>
         ))}
       </dl>
@@ -26,7 +26,7 @@ export function PortHardware({ port }: {
 }) {
   const { poe, sfp, cable } = port;
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="port-hardware grid gap-4">
       {poe && <Details
         title="PoE"
         rows={[
