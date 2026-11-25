@@ -6,7 +6,7 @@ export const rackJa = {
   setupEffect: '登録機器を設定した間隔でPingします。全ポートのアラート・機器消失・Ping失敗・IP不一致を抑止します。Fast/Mediumは設定の3倍、Slowは2倍の間隔です。',
   rehearsalEffect: '登録機器を60秒ごとにPingします。全アラートが有効です。ポーリングは設定どおりの間隔です。',
   showEffect: '定期Pingを停止します。全アラートと未確認のラッチが有効です。ポーリングは設定どおりの間隔です。',
-  trap: 'Trap受信', trapOK: '✓ Trap待受中', trapFail: '⚠ Trap受信停止', lastTrap: '最終Trap: {at}', noTrap: 'Trap未受信・設定方法',
+  trap: 'Trap受信', trapOK: '✓ Trap待受中', trapFail: '⚠ Trap受信停止', lastTrap: '最終Trap: {at}', noTrap: 'Trap未受信・設定方法', noTrapShort: 'Trap未受信', groupActions: 'グループ操作', noTrapHint: 'このスイッチからTrapを1度も受信していません。何も起きていないだけのこともあります。スイッチの送信先設定を確認してください。',
   trapHelp: 'Trap送信設定', trapHelpText: 'M4250のCLIで送信先を設定してください（構文は要実機確認）。監視PCのIPとcommunityを指定し、UDPの待受ポート・ファイアウォールを確認します。設定後は最終Trap時刻の更新で受信を確認してください。',
   loopback: '待受が127.0.0.1のため、他のPCからは接続できません。LANで共有する場合はサーバーの--listen設定を変更してください。',
   actions: '操作', connectionState: '状態',
@@ -18,7 +18,7 @@ export const rackJa = {
   critical: '重大', warning: '▲ 注意', healthy: '● 接続中', unused: '· 未使用', offline: '⚠ 未接続', stale: '⚠ データ未更新',
   more: '+{count}件', moreAlerts: '+{count}件', unknownTime: '不明', loading: '読込中…', empty: 'スイッチが登録されていません。追加または探索してください。', lastUpdated: '更新: {at}',
   device: '機器', plannedIP: '予定IP', pingStatus: 'Ping結果', notPinged: '未実施', portDetail: 'ポート詳細', bandwidth: '直近15分の帯域（bps）', noMetrics: '帯域データなし', close: '閉じる',
-  cpu: 'CPU', temp: '温度', psu: '電源', fan: 'ファン', poe: 'PoE予算', uplink: 'アップリンク RX/TX',
+  cpu: 'CPU', temp: '温度', psu: '電源', fan: 'ファン', poe: 'PoEバジェット', uplink: 'アップリンク RX/TX',
   profile: 'プロジェクト', part: '担当パート', replay: '⏪ オフライン再生', connecting: '⚠ 接続待機', light: '☀ ライト', dark: '☾ ダーク', pin: 'PINを入力してください', locked: '🔒 ロック中', lock: '🔓 編集可（ロックする）', export: '書出', settings: '設定', marker: 'マーカーのメモを入力してください', busy: '処理中…', error: '操作に失敗しました（{reason}）。接続や入力を確認して再試行してください。', unknown: '原因不明', invalidURL: 'URLが不正です。アクセス設定を確認してください。',
 };
 export const rackEn: typeof rackJa = {
@@ -29,7 +29,7 @@ export const rackEn: typeof rackJa = {
   setupEffect: 'Ping registered devices at the configured interval. Suppress all port alerts, missing devices, ping failures and IP mismatches. Fast/Medium polling intervals are 3 times the configured values; Slow is 2 times.',
   rehearsalEffect: 'Ping registered devices at the configured interval. Enable all alerts. Use configured polling intervals.',
   showEffect: 'Stop periodic ping. Enable all alerts and retain unacknowledged alerts after recovery. Use configured polling intervals.',
-  trap: 'Trap receiver', trapOK: '✓ Trap receiver ready', trapFail: '⚠ Trap receiver stopped', lastTrap: 'Last trap: {at}', noTrap: 'No traps received / setup help',
+  trap: 'Trap receiver', trapOK: '✓ Trap receiver ready', trapFail: '⚠ Trap receiver stopped', lastTrap: 'Last trap: {at}', noTrap: 'No traps received / setup help', noTrapShort: 'No traps yet', groupActions: 'Group actions', noTrapHint: 'No trap has arrived from this switch yet. It may simply be quiet; check the trap destination on the switch.',
   trapHelp: 'Configure trap delivery', trapHelpText: 'Configure the destination in the M4250 CLI (syntax requires hardware verification). Set the monitoring PC IP and community, check the UDP listening port and firewall, then verify that the last trap time updates.',
   loopback: 'The server listens on 127.0.0.1. Other PCs cannot connect. Change the server --listen setting to share on your LAN.',
   actions: 'Actions', connectionState: 'Status',

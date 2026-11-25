@@ -9,7 +9,7 @@ import { isPortAlert, matchingPortAlerts, summarizeAlerts } from '../wallAlerts'
 import type { Alert, InventoryRow, ModelDefinitions, Port, SwitchConfig, SwitchSummary } from '../types';
 import type { ViewProps } from '../views/props';
 
-const lampStates = {
+export const lampStates = {
   critical: { symbol: '!', label: 'pages.abnormal' },
   caution: { symbol: '▲', label: 'pages.caution' },
   warning: { symbol: '▲', label: 'pages.unconfirmed' },
@@ -18,14 +18,22 @@ const lampStates = {
   unknown: { symbol: '?', label: 'pages.unknown' },
 } as const;
 
-export function PortLegend() {
-  return <ul className="rack-legend" aria-label={t('pages.legend')}>
+// single: the one-switch front panel, which has no switch dots but shows excluded and PoE marks.
+export function PortLegend({ single = false }: { single?: boolean } = {}) {
+  return <ul className={`rack-legend${single ? ' front-legend' : ''}`} aria-label={t('pages.legend')}>
     {Object.entries(lampStates).map(([tone, { symbol, label }]) => <li key={tone}>
       <span className={`lamp-${tone}`} aria-hidden="true">{symbol}</span>{t(label)}
     </li>)}
-    {/* The dot before a switch name: responding or not. */}
-    <li className="rack-legend-switch"><span aria-hidden="true">●</span>{t('pages.switchReachable')}</li>
-    <li className="rack-legend-switch"><span aria-hidden="true">⚠</span>{t('pages.switchUnreachable')}</li>
+    {single ? <>
+      <li><span aria-hidden="true">×</span>{t('ui.m133')}</li>
+      <li><span aria-hidden="true">⚡</span>{t('ui.m139')}</li>
+      {/* This label already starts with ⛔. */}
+      <li>{t('ui.m138')}</li>
+    </> : <>
+      {/* The dot before a switch name: responding or not. */}
+      <li className="rack-legend-switch"><span aria-hidden="true">●</span>{t('pages.switchReachable')}</li>
+      <li className="rack-legend-switch"><span aria-hidden="true">⚠</span>{t('pages.switchUnreachable')}</li>
+    </>}
   </ul>;
 }
 

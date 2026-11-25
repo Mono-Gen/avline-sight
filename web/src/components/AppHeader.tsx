@@ -35,8 +35,9 @@ export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, e
       {phaseControl}
       {!replay && (phase === 'setup' || phase === 'rehearsal') &&
         <button type="button" data-action="pre-show-checklist" disabled={busy} onClick={() => openChecklist?.(false)}>{t('checklist.title')}</button>}
-      {status?.trap && <button onClick={onTrapHelp} title={[status.trap.addr, status.trap.error].filter(Boolean).join(' · ')}
-        className={status.trap.ok ? 'trap-ready' : 'trap-failed'}>{t(status.trap.ok ? 'rack.trapOK' : 'rack.trapFail')} ⓘ</button>}
+      {/* Silent when OK: the header shows the trap receiver only when it cannot receive. */}
+      {status?.trap && !status.trap.ok && <button onClick={onTrapHelp} title={[status.trap.addr, status.trap.error].filter(Boolean).join(' · ')}
+        className="trap-failed">{t('rack.trapFail')} ⓘ</button>}
       <form className="header-marker" onSubmit={event => {
         event.preventDefault();
         if (busy || locked) return;

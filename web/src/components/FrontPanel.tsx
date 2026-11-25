@@ -1,4 +1,6 @@
-import { eventTitle, getLang, t } from '../i18n';
+import type React from 'react';
+import { eventTitle, t } from '../i18n';
+import { lampStates } from './RackRow';
 import { asArray } from '../format';
 import { frontPanelRows } from '../frontPanelLayout';
 import type { Alert, ModelDefinitions, Port } from '../types';
@@ -19,18 +21,20 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
 }) {
   const definition = model ? definitions?.[model] : undefined;
   const rows = frontPanelRows(ports, definition);
-  const english = getLang() === 'en';
   // Short numbers are unambiguous only when every slash-named port shares one prefix; stacks (1/0/1 and 2/0/1) keep full names.
   const prefixes = new Set(asArray(ports).filter(port => port.name.includes('/')).map(port => port.name.slice(0, port.name.lastIndexOf('/'))));
   const shortNames = prefixes.size <= 1;
+  // One column count for every row (the longest defined row), so columns line up and an extra row wraps in the same grid.
+  const defined = rows.filter(row => !row.label);
+  const columns = Math.max(1, ...(defined.length ? defined : rows).map(row => row.slots.length));
   return (
-    <div className="overflow-x-auto rounded bg-slate-700 p-3">
-      {rows.map((row, index) => (
+    <div className="front-panel rounded bg-slate-700 p-3">
+      {rows.filter(row => row.slots.length > 0).map((row, index) => (
         <div key={index} className="mb-1">
           {row.label && <p className="text-sm text-white">{row.label}</p>}
-          <div className="flex w-max gap-1">
+          <div className="front-row" style={{ '--slots': columns } as React.CSSProperties}>
             {row.slots.map((port, position) => {
-              if (!port) return <span key={`gap-${position}`} className="w-20 shrink-0" aria-hidden="true" />;
+              if (!port) return <span key={`gap-${position}`} aria-hidden="true" />;
               const state = lampState(port, matchingPortAlerts(alerts, switchId, port.if_index), reachable);
               // Keep an unacked PoE fault visible even when another alert is active (active first).
               const isPoeFault = (alert: Alert) => alert.code === 'POE_PORT_FAULT' || alert.code === 'POE_FAULT';
@@ -44,23 +48,23 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
               const poeLabel = fault ? `${t('ui.m138')} · ${eventTitle(fault)}` : powered ? t('ui.m139') : '';
               const description = [`${port.name} ${port.type}`, linkLabel, t(state.label), warningLabel, poeLabel]
                 .filter(Boolean).join(' · ');
-              const iconOnly = english && ((!port.excluded && (!linkUp || !reachable)) || Boolean(warningLabel || poeLabel));
+              // Same visual language as the all-switches rack: number + state symbol; the words are in the tooltip and legend.
+              const tone = state.label === 'rack.unused' && port.oper === 'down' ? 'unused' : state.tone;
+              // An excluded port shows ×, but an alert still on it keeps its ! or ▲.
+              const symbol = port.excluded && !['critical', 'caution', 'warning'].includes(tone) ? '×' : lampStates[tone as keyof typeof lampStates]?.symbol ?? '?';
               return (
                 <button
                   key={port.if_index}
                   title={description}
                   aria-label={description}
                   aria-current={selected === port.if_index ? 'true' : undefined}
-                  className={`hardware-port lamp-${state.tone} ${port.excluded ? 'excluded' : ''} w-20 shrink-0 px-1 text-sm`}
+                  className={`hardware-port lamp-${tone} ${port.excluded ? 'excluded' : ''} text-sm`}
                   onClick={() => onSelect(port)}
                 >
-                  <span className="block whitespace-normal break-words">{shortName}</span>
-                  <span className="flex items-center justify-center gap-0.5 text-xs" aria-hidden="true">
-                    <span className="shrink-0">
-                      {iconOnly ? (port.excluded ? '×' : !reachable ? '?' : linkUp ? '✓' : '—') : linkLabel}
-                    </span>
-                    {warningLabel && <span className="shrink-0">⚠</span>}
-                    {poeLabel && <span className="shrink-0">{fault ? '⛔' : '⚡'}</span>}
+                  <span className="front-port-number">{shortName}</span>
+                  <span className="front-port-marks" aria-hidden="true">
+                    <span>{symbol}</span>
+                    {poeLabel && <span>{fault ? '⛔' : '⚡'}</span>}
                   </span>
                 </button>
               );

@@ -142,9 +142,10 @@ test('Front panel badges follow the lamp and shared alerts', () => {
     assert.match(html, /lamp-healthy/);
     assert.doesNotMatch(html, /⚠|⛔/);
   }
-  assert.match(panel({}, [{ ...alert, code: 'PHY_ERRORS' }]), /lamp-critical[^]*⚠/);
-  assert.match(panel({}, [alert]), /lamp-critical[^]*⚠[^]*⛔/);
-  assert.match(panel({}, [{ ...alert, active: false }]), /lamp-warning[^]*⚠[^]*⛔/);
+  // The state symbol (! critical, ▲ warning) carries the issue, as on the all-switches rack.
+  assert.match(panel({}, [{ ...alert, code: 'PHY_ERRORS' }]), /lamp-critical[^]*>!</);
+  assert.match(panel({}, [alert]), /lamp-critical[^]*>!<[^]*⛔/);
+  assert.match(panel({}, [{ ...alert, active: false }]), /lamp-warning[^]*>▲<[^]*⛔/);
   assert.doesNotMatch(panel({ ...counters, excluded: true }, [{ ...alert, suppressed: true }]), /⚠|⛔/);
 });
 

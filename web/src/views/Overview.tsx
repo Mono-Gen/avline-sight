@@ -304,8 +304,8 @@ export function OverviewView(props: OverviewProps) {
             <span className="rack-group-counts" aria-label={t('wall.counts', counts)}>
               <span className={hasCriticalActive(counts) ? 'rack-critical-count' : counts.active ? 'rack-caution-count' : counts.unacked ? 'rack-warning-count' : 'rack-count-zero'}>{t('pages.groupCounts', counts)}</span>
             </span>
-            {/* Group actions sit in one "Actions" menu in the header, the same as each switch row. */}
-            {!locked && !isClosed && <ActionPopup label={`${name || t('rack.ungrouped')} ${t('rack.actions')}`} text={`${t('rack.actions')} ▾`}>
+            {/* Group actions sit in one "Actions" menu next to the group name, above the switch rows' own menus. */}
+            {!locked && !isClosed && <ActionPopup label={`${name || t('rack.ungrouped')} ${t('rack.groupActions')}`} text={`${t('rack.groupActions')} ▾`}>
               {props.switchId === undefined && <GroupActions {...actionProps} group={name} onPing={pingFor(name)} />}
               <button disabled={busy} data-action="rename-group" onClick={() => setGroupEdit({ name })}>{t('operations.rename')}</button>
             </ActionPopup>}

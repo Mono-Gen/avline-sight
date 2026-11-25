@@ -46,7 +46,7 @@ export function PortHardware({ port }: {
         rows={[
           [t('ui.m159'), `${decimal(sfp.rx_dbm, 2)} dBm`],
           [t('ui.m160'), `${decimal(sfp.tx_dbm, 2)} dBm`],
-          [t('ui.m161'), `${decimal(sfp.temp_c)} ℃`],
+          [t('ui.m161'), `${decimal(sfp.temp_c)}°C`],
           [t('ui.m152'), `${decimal(sfp.volts, 2)} V`],
           [t('ui.m162'), `${decimal(sfp.bias_ma)} mA`],
           [t('ui.m074'), sfp.vendor],

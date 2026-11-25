@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { StateMark } from '../components/SwitchIndex';
 import { DeviceInfo } from '../components/DeviceInfo';
 import { VlanFacts } from '../components/VlanFacts';
-import { switchHealth } from '../components/RackRow';
+import { PortLegend, switchHealth } from '../components/RackRow';
 import { jstTime, pcTimestamp } from '../pcTime';
 import { withoutUnusedLags } from '../rackModel';
 import { issueAlerts } from '../monitorHealth';
@@ -51,6 +51,8 @@ function portAlertLines(alerts: Alert[], expert = false) {
 
 // Single-switch view of the port monitor (plan section 21): the former port detail page rearranged into switch health, port panel, linked-port table and a right-hand detail.
 type SwitchPortsProps = ViewProps & {
+  // Opens the trap setup help from the "no traps yet" hint.
+  onTrapHelp?: () => void;
   // Summary for the one-line switch health (passed from the port monitor).
   focusSummary?: SwitchSummary;
   // Port requested by "open port" and similar; opened in the detail once the state arrives.
@@ -226,7 +228,11 @@ export function SwitchPorts(p: SwitchPortsProps) {
       {/* Switch health on one line; only abnormal values are coloured. */}
       {summary && <section className="panel focus-health" aria-label={t('focus.health')}>
         <span className="focus-health-name"><StateMark tone={alertTone(summarizeAlerts(switchAlerts), summary.reachable)} />{summary.name}</span>
-        <span className="focus-health-meta">{[summary.model, summary.ip, summary.fw && `FW ${summary.fw}`].filter(Boolean).join(' · ')}</span>
+        {/* Model and firmware live in the device info panel; keep only the IP here (used for Ping and other tools). */}
+        <span className="focus-health-meta">{summary.ip}</span>
+        {/* Traps arrive only on events, so this is a hint, not a fault: shown only until the first trap from this switch. */}
+        {!p.replay && !summary.last_trap_ts && p.onTrapHelp && <button type="button" className="focus-trap-hint" title={t('rack.noTrapHint')}
+          aria-label={`${t('rack.noTrapShort')}: ${t('rack.noTrapHint')}`} onClick={p.onTrapHelp}>{t('rack.noTrapShort')} ⓘ</button>}
         {summary.reachable && <span className="focus-health-items">
           {switchHealth(summary, p.thresholds).filter(item => item.key !== 'poe' || summary.poe_budget_w > 0).map(item =>
             <span key={item.key}>{t(`rack.${item.key}`)} <span className={item.bad ? 'health-abnormal' : undefined}>{item.bad ? '⚠ ' : ''}{item.value}</span></span>)}
@@ -234,6 +240,8 @@ export function SwitchPorts(p: SwitchPortsProps) {
       </section>}
       {summary && <DeviceInfo device={{ ...s, ip: summary.ip, last_trap_ts: summary.last_trap_ts }} peers={asArray(p.overview?.switches)} />}
       <section className="panel focus-card"><h3>{t('focus.ports')}</h3>
+      {/* Tiles show symbols only, so the legend sits with them (no hover on touch screens). */}
+      <PortLegend single />
       <FrontPanel
         showNote={p.expert}
         alerts={switchAlerts}
@@ -293,7 +301,7 @@ export function SwitchPorts(p: SwitchPortsProps) {
           <div className="detail-sub">{[s.name, (port.type || '').toUpperCase(), port.pvid ? `VLAN ${port.pvid}` : ''].filter(Boolean).join(' · ')}</div></div>
           <button type="button" aria-label={t('focus.closeDetail')} onClick={closePort}>{t('rack.close')}</button></div>
         <p className={`detail-state ${port.oper === 'up' ? 'detail-up' : 'detail-down'}`}>
-          {port.oper === 'up' ? [t('focus.linked'), port.speed_mbps ? `${port.speed_mbps} Mbps` : '', duplexLabel(port.duplex)].filter(Boolean).join(' · ') : t('focus.down')}</p>
+          {port.oper === 'up' ? [t('focus.linked'), port.speed_mbps ? speedLabel(port.speed_mbps) : '', duplexLabel(port.duplex)].filter(Boolean).join(' · ') : t('focus.down')}</p>
         {/* Why this port is flagged, first and in its state colour (ongoing critical red, ongoing warning orange, recovered yellow). */}
         {portAlertLines(portAlerts(port), p.expert)
           .map(line => <p key={line.key} className={`port-alert-line ${line.critical ? 'state-active' : line.active ? 'state-caution' : 'state-recovered'}`}>
@@ -301,9 +309,10 @@ export function SwitchPorts(p: SwitchPortsProps) {
           </p>)}
         <section className="detail-section"><h4>{t('focus.nowValues')}</h4>
           <dl className="detail-kv">
-            <dt>{t('focus.bandwidth')}</dt><dd className="detail-big">{t('metrics.rxtx', { rx: formatBps(port.rx_bps), tx: formatBps(port.tx_bps) })}</dd>
+            {/* Receive and send on their own lines so a value never breaks in the middle. */}
+            <dt>{t('focus.bandwidth')}</dt><dd className="detail-big detail-pair"><span>{t('metrics.rxOnly', { value: formatBps(port.rx_bps) })}</span><span>{t('metrics.txOnly', { value: formatBps(port.tx_bps) })}</span></dd>
             <dt>{t('focus.colErrors')}</dt><dd><span className={port.err_delta > 0 ? 'metric-bad' : undefined}>{port.err_delta}</span> / <span className={port.discard_delta > 0 ? 'metric-bad' : undefined}>{port.discard_delta}</span></dd>
-            <dt>{t('metrics.multicast')}</dt><dd>{t('metrics.rxtx', { rx: `${decimal(port.rx_mc_pps)} pps`, tx: `${decimal(port.tx_mc_pps)} pps` })}</dd>
+            <dt>{t('metrics.multicast')}</dt><dd className="detail-pair"><span>{t('metrics.rxOnly', { value: `${decimal(port.rx_mc_pps)} pps` })}</span><span>{t('metrics.txOnly', { value: `${decimal(port.tx_mc_pps)} pps` })}</span></dd>
             {port.poe && !poeShown && <><dt>PoE</dt><dd className="detail-muted">{t('focus.poeNone')}</dd></>}
           </dl>
         </section>

@@ -190,7 +190,7 @@ test('switch action popup dismisses outside, on Escape and when an item is chose
   assert.match(form, /window\.confirm\(t\('rack\.removeConfirm'[^]*json\('DELETE'\)/);
 });
 
-test('front panel shows full short names and uses icons when a status word would crowd the tile', context => {
+test('front panel tiles show the short name and the rack state symbol, and share the panel width', context => {
   context.after(() => setLang('ja'));
   setLang('en');
   const { FrontPanel } = require('../src/components/FrontPanel.tsx');
@@ -198,31 +198,33 @@ test('front panel shows full short names and uses icons when a status word would
   const lag = { name: 'lag 1', if_index: 8, type: 'lag', oper: 'down' };
   const draw = (ports, alerts = []) => render(FrontPanel, { ports, alerts, switchId: 1, selected: 7, onSelect: noop });
   const html = draw([port, lag]);
+  // Tiles fill a grid sized by the slot count, so a 48-port switch fits without horizontal scrolling.
+  assert.match(html, /class="front-row" style="--slots:2"/);
   const tiles = [...html.matchAll(/<button\b([^>]*?)>(.*?)<\/button>/g)];
   assert.equal(tiles.length, 2);
-  for (const [, attrs, contents] of tiles) {
-    assert.match(attrs, /\bw-20 shrink-0\b/);
+  for (const [, attrs] of tiles) {
+    assert.doesNotMatch(attrs, /\bw-20\b/);
     assert.equal(attrs.match(/title="([^"]+)"/)[1], attrs.match(/aria-label="([^"]+)"/)[1]);
-    assert.doesNotMatch(contents, /truncate/);
   }
+  // State words stay in the tooltip; the tile shows number + symbol only (no overflowing "Connected").
   assert.match(tiles[0][1], /title="1\/0\/7 rj45 · Connected · [^"]+"/);
-  assert.match(tiles[0][2], /^<span[^>]*>7<\/span>.*<span[^>]*>Connected<\/span>/);
+  assert.match(tiles[0][2], /^<span[^>]*>7<\/span><span[^>]*><span>✓<\/span><\/span>$/);
+  assert.doesNotMatch(tiles[0][2], /Connected/);
   assert.match(tiles[1][1], /title="lag 1 lag · Disconnected · [^"]+"/);
-  assert.match(tiles[1][2], /^<span[^>]*>lag 1<\/span>.*<span[^>]*>—<\/span>/);
-  assert.match(draw([{ ...port, name: '1/0/123456789' }]), /break-words">123456789<\/span>/);
+  assert.match(tiles[1][2], /^<span[^>]*>lag 1<\/span><span[^>]*><span>·<\/span><\/span>$/);
 
   const powered = { ...port, poe: { power_w: 2 } };
   const withPower = draw([powered]);
   assert.match(withPower, /title="1\/0\/7 rj45 · Connected · [^"]*PoE supplying power"/);
-  assert.match(withPower, /<span[^>]*>✓<\/span><span[^>]*>⚡<\/span>/);
+  assert.match(withPower, /<span>✓<\/span><span>⚡<\/span>/);
   const alarm = fault(1, { code: 'POE_PORT_FAULT', active: true, switch_id: 1, if_index: 7 });
   const withFault = draw([powered], [alarm]);
   assert.match(withFault, /aria-label="1\/0\/7 rj45 · Connected · [^"]*PoE fault[^"]*"/);
-  assert.match(withFault, /<span[^>]*>✓<\/span><span[^>]*>⚠<\/span><span[^>]*>⛔<\/span>/);
+  assert.match(withFault, /lamp-caution[^]*<span>▲<\/span><span>⛔<\/span>/);
   assert.doesNotMatch(withFault, /⚡/);
 
   setLang('ja');
-  assert.match(draw([powered], [alarm]), /<span[^>]*>接続中<\/span><span[^>]*>⚠<\/span><span[^>]*>⛔<\/span>/);
+  assert.doesNotMatch(draw([powered], [alarm]), />接続中</);
 });
 
 test('switches without credentials show a credential status on the rack and wall', context => {
@@ -696,8 +698,11 @@ test('Header and sidebar place project, monitoring and edit controls in the appr
   setLang('ja');
   const status = { profile: { id: 1, name: 'Studio' }, trap: { ok: true } };
   const header = render(AppHeader, { status, online: true, phase: 'show', locked: false });
-  assert.match(header, /AVLine-Sight[^]*● LIVE[^]*<small class="header-project">プロジェクト: Studio<\/small>[^]*data-action="phase"[^]*trap-ready[^]*header-marker[^]*>記録<[^]*>壁表示<[^]*header-time/);
+  assert.match(header, /AVLine-Sight[^]*● LIVE[^]*<small class="header-project">プロジェクト: Studio<\/small>[^]*data-action="phase"[^]*header-marker[^]*>記録<[^]*>壁表示<[^]*header-time/);
   assert.doesNotMatch(header, /スイッチグループ|編集可|>設定<|<option value="1"/);
+  // The trap receiver is silent while it works and appears only when it cannot receive.
+  assert.doesNotMatch(header, /trap-ready|Trap待受中/);
+  assert.match(render(AppHeader, { status: { ...status, trap: { ok: false } }, online: true, phase: 'show', locked: false }), /class="trap-failed">⚠ Trap受信停止/);
   const sidebar = render(AppSidebar, { status, profiles: [status.profile], locked: false, expert: false,
     children: React.createElement('button', null, 'ポートモニター') });
   assert.match(sidebar, /<nav[^]*ポートモニター[^]*<\/nav>[^]*プロジェクト<select[^]*Studio[^]*編集可（ロックする）[^]*>設定<[^]*class="app-nav-expert">エキスパート表示<input[^]*role="switch"/);

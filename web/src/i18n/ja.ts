@@ -68,7 +68,7 @@ export const ja = {
     ips: 'IPアドレス', run: '実行', running: 'Ping中…', runningCount: 'Ping中…（{count}台）', about: 'Pingについて',
     summary: 'Ping完了: 応答 {ok} / 無応答 {ng}（{sec}秒）', noReply: '無応答の機器（{count}台）',
   },
-  metrics: { rxtx: '受信 {rx} / 送信 {tx}', errors: 'エラー {value}', discards: '破棄 {value}', multicast: 'マルチキャスト' },
+  metrics: { rxtx: '受信 {rx} / 送信 {tx}', rxOnly: '受信 {value}', txOnly: '送信 {value}', errors: 'エラー {value}', discards: '破棄 {value}', multicast: 'マルチキャスト' },
   // ポートモニターのスイッチ索引・数字パネル・1台表示（計画§21）
   // VLANごとの事実（SNMPで読めた設定）と、ポート説明欄に書かれた文字。判定はしない
   vlan: {
@@ -153,7 +153,7 @@ export const ja = {
     toc: '設定の目次', monitor: '監視の基準', trap: 'Trap・接続', parts: '担当パート', display: '表示', data: 'データの書出・読込', groups: 'グループ',
     scopeApp: 'このPCのアプリ全体', scopeProject: 'プロジェクト共通', scopeBrowser: 'このブラウザーだけ',
     save: 'この節を保存', reset: '元に戻す', unsaved: '未保存の変更あり', was: '変更前 {value}',
-    atLeastPct: '% 以上で検知', atMostPct: '% 以下で検知', atLeastC: '℃ 以上で検知', belowDbm: 'dBm 未満で検知',
+    atLeastPct: '% 以上で検知', atMostPct: '% 以下で検知', atLeastC: '°C 以上で検知', belowDbm: 'dBm 未満で検知',
     dropDb: 'dB 以上の低下で検知', errors: '件以上（1回の取得あたり）で検知', seconds: '秒',
     partsHelp: 'ログ・詳細の絞り込みに使う「パート」。VLANかスイッチのグループで決めます。',
     theme: 'テーマ', dark: 'ダーク', light: 'ライト', notifications: 'デスクトップ通知', langJa: '日本語',
@@ -261,10 +261,10 @@ export const ja = {
   "m051": "Mbuf使用率 (%)",
   "m052": "Mbuf確保失敗累計",
   "m053": "Mbuf確保失敗増分",
-  "m054": "最高温度 (℃)",
+  "m054": "最高温度 (°C)",
   "m055": "温度状態",
-  "m056": "温度 (℃)",
-  "m057": "PoE予算 (W)",
+  "m056": "温度 (°C)",
+  "m057": "PoEバジェット (W)",
   "m058": "PoE使用量 (W)",
   "m059": "ファン",
   "m060": "電源",
