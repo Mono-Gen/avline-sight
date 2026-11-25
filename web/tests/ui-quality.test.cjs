@@ -1994,3 +1994,17 @@ test('Switch details show facts only and list a different firmware of the same m
   const same = render(DeviceInfo, { device, peers: peers.slice(0, 1) });
   assert.doesNotMatch(same, /device-info-flag|device-info-peers/);
 });
+
+test('Unused LAG interfaces are hidden from the port panels but a LAG that is linked or has an alert stays', () => {
+  const { withoutUnusedLags } = require('../src/rackModel.ts');
+  const ports = [
+    { if_index: 1, name: '0/1', type: 'rj45', oper: 'down' },
+    { if_index: 50, name: 'lag 1', type: 'lag', oper: 'down' },
+    { if_index: 51, name: 'lag 2', type: 'lag', oper: 'up' },
+    { if_index: 52, name: 'lag 3', type: 'lag', oper: 'down' },
+  ];
+  // lag 3 went down and its alert is still unacknowledged, so it must stay visible.
+  const alerts = [fault(1, { switch_id: 1, if_index: 52, active: true, severity: 'CRITICAL', code: 'LINK_DOWN' })];
+  assert.deepEqual(withoutUnusedLags(ports, alerts).map(port => port.name), ['0/1', 'lag 2', 'lag 3']);
+  assert.deepEqual(withoutUnusedLags(ports, []).map(port => port.name), ['0/1', 'lag 2']);
+});

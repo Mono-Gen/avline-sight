@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { StateMark } from '../components/SwitchIndex';
 import { DeviceInfo } from '../components/DeviceInfo';
 import { switchHealth } from '../components/RackRow';
+import { withoutUnusedLags } from '../rackModel';
 import { issueAlerts } from '../monitorHealth';
 import { api, json } from '../api';
 import { Chart, FrontPanel, Table } from '../components/Common';
@@ -221,7 +222,7 @@ export function SwitchPorts(p: SwitchPortsProps) {
         definitions={models.data}
         selected={idx}
         onSelect={choose}
-        ports={asArray((s.ports || [])).filter(x => !preset?.vlans?.length || asArray(preset.vlans).includes(x.pvid))}
+        ports={withoutUnusedLags(asArray((s.ports || [])).filter(x => !preset?.vlans?.length || asArray(preset.vlans).includes(x.pvid)), switchAlerts)}
       />
       </section>
       {/* Linked ports: device name first, MAC and IP on the second line; fault rows get a state-coloured edge. */}

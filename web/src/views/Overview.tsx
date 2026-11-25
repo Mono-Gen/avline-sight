@@ -8,7 +8,7 @@ import { PortDetail } from '../components/PortDetail';
 import { PortLegend, RackRow } from '../components/RackRow';
 import { asArray } from '../format';
 import { t } from '../i18n';
-import { sortedAlerts, uplinkPorts } from '../rackModel';
+import { sortedAlerts, uplinkPorts, withoutUnusedLags } from '../rackModel';
 import type { Alert, InventoryRow, Port, SwitchConfig, SwitchSummary } from '../types';
 import { useRackData } from '../useRackData';
 import { registeredSummary, replaySummary } from './rackSummaries';
@@ -289,7 +289,7 @@ export function OverviewView(props: OverviewProps) {
             <button disabled={busy} aria-label={t('operations.rename')} onClick={() => setGroupEdit({ name })}>✎</button>
           </div>}
           {!isClosed && rows.map(sw => <RackRow key={sw.id} summary={sw}
-            ports={(ports.get(sw.id) || []).map(row => row.port)} devices={bySwitch.get(sw.id) || []} alerts={byAlert.get(sw.id) || []}
+            ports={withoutUnusedLags((ports.get(sw.id) || []).map(row => row.port), byAlert.get(sw.id) || [])} devices={bySwitch.get(sw.id) || []} alerts={byAlert.get(sw.id) || []}
             definitions={rack.definitions} vlans={preset?.vlans}
             wall={wall} stale={!!rack.error} uplinks={uplinks} samples={samples} actions={props}
             onPort={port => setSelected({ switchId: sw.id, ifIndex: port.if_index })} onEdit={setEdit} onHelp={onTrapHelp} refresh={refresh} />)}
