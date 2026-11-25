@@ -15,8 +15,8 @@ export const operationsJa = {
   trapStop: 'Windowsの「SNMP Trap」サービスを止める（管理者のPowerShell）',
   trapPort: '別のポートで起動し、スイッチ側の送信先ポートも1162に変更する',
   trapFirewall: 'Windowsファイアウォールで受信を許可する（管理者。ポートを変更した場合はその番号に置き換える）',
-  trapSwitch: '4. スイッチ側の送信先を設定する（CLI書式は未検証）',
-  trapSwitchText: '監視PCのIPとコミュニティを指定します。設定後は最終Trap時刻が更新されることを確認してください。',
+  trapSwitch: '4. スイッチ側の送信先を設定する（M4250のCLI）',
+  trapSwitchText: '<PC IP> は監視PCのIP、<community> は監視に使っているコミュニティをそのまま入れます（snmp-server community で新しく作ると、SNMPで読める相手が増えます）。このPCが162以外で待ち受けているときは udp-port が付きます。write memory で保存し、本体情報の「最終Trap受信」が更新されることを確認します。送信先ポートは show snmp-server でも確認できます。',
 };
 export const operationsEn: typeof operationsJa = {
   pcTime: 'PC time', group: 'Group', rename: 'Rename group', order: 'Group display order',
@@ -35,6 +35,6 @@ export const operationsEn: typeof operationsJa = {
   trapStop: 'Stop the Windows SNMP Trap service (administrator PowerShell)',
   trapPort: 'Start the app on another port and set the switch destination port to 1162 as well',
   trapFirewall: 'Allow reception through Windows Firewall (administrator; substitute your port if changed)',
-  trapSwitch: '4. Configure the switch destination (CLI syntax unverified)',
-  trapSwitchText: 'Set the monitoring PC IP and community. After configuration, confirm that the last trap time updates.',
+  trapSwitch: '4. Configure the switch destination (M4250 CLI)',
+  trapSwitchText: 'Replace <PC IP> with the monitoring PC address and <community> with the community already used for monitoring (creating one with snmp-server community lets more parties read the switch over SNMP). When this PC does not listen on 162, udp-port is added. Save with write memory and check that "Last trap received" in the device info updates. show snmp-server also shows the trap port.',
 };

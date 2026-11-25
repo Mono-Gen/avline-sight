@@ -10,9 +10,10 @@ import { jstTime, pcTimestamp } from '../pcTime';
 import { withoutUnusedLags } from '../rackModel';
 import { issueAlerts } from '../monitorHealth';
 import { api, json } from '../api';
-import { Chart, FrontPanel, Table } from '../components/Common';
+import { Chart, FrontPanel } from '../components/Common';
 import { PollingStatus } from '../components/PollingStatus';
 import { PortHardware } from '../components/PortHardware';
+import { PingButton } from '../components/PingButton';
 import { confirmCounterReset } from '../components/GroupActions';
 import { asArray, decimal, formatBps, resolveSwitchId } from '../format';
 import type { Alert, Device, Event, MetricResult, ModelDefinitions, Port, SwitchSummary } from '../types';
@@ -59,6 +60,8 @@ type SwitchPortsProps = ViewProps & {
   // Health thresholds from the project settings (same rule as the rack row).
   thresholds?: Record<string, number>;
   onClosePort?: () => void;
+  // Opens this switch's edit form (name, address, community, group; delete is inside it).
+  onEdit?: () => void;
 };
 
 // Device shown by its label, LLDP name or (known) vendor; the MAC only when nothing better is known.
@@ -100,6 +103,7 @@ function Trend({ values }: { values: number[] }) {
   </svg>;
 }
 const TREND_SAMPLES = 60;
+const HISTORY_ROWS = 5;
 
 export function SwitchPorts(p: SwitchPortsProps) {
   const [idx, setIdx] = useState(0);
@@ -185,9 +189,10 @@ export function SwitchPorts(p: SwitchPortsProps) {
     });
     const [series, history] = await Promise.all([
       api<MetricResult>(`/api/metrics/port?${params}`, { signal }),
-      api<Event[]>(`/api/events?switch_id=${p.selected}`, { signal }),
+      // Only the latest few for this port; the full history is in Logs.
+      api<Event[]>(`/api/events?switch_id=${p.selected}&if_index=${idx}&limit=${HISTORY_ROWS}`, { signal }),
     ]);
-    return { series, history: asArray(history).filter(event => event.if_index === idx) };
+    return { series, history: asArray(history).filter(event => event.if_index === idx).slice(0, HISTORY_ROWS) };
   }, METRICS_REFRESH_MS, [p.selected, idx, range], !p.replay && p.selected > 0 && idx > 0);
   useEffect(() => {
     if (!until) return;
@@ -198,6 +203,7 @@ export function SwitchPorts(p: SwitchPortsProps) {
   return <>
     {/* Switches are chosen in the left index; only actions here. */}
     <div className="flex gap-2">
+      {p.onEdit && <button data-action="edit-switch" disabled={p.busy || p.locked || !!p.replay} onClick={p.onEdit}>{t('rack.edit')}</button>}
       {p.expert &&<button disabled={!selected || selected !== p.selected || p.locked || !p.openTerminal}
         onClick={() => p.openTerminal?.(selected)}>{t('ui.m279')}</button>}
       <button
@@ -226,7 +232,7 @@ export function SwitchPorts(p: SwitchPortsProps) {
             <span key={item.key}>{t(`rack.${item.key}`)} <span className={item.bad ? 'health-abnormal' : undefined}>{item.bad ? '⚠ ' : ''}{item.value}</span></span>)}
         </span>}
       </section>}
-      {summary && <DeviceInfo device={{ ...s, ip: summary.ip }} peers={asArray(p.overview?.switches)} />}
+      {summary && <DeviceInfo device={{ ...s, ip: summary.ip, last_trap_ts: summary.last_trap_ts }} peers={asArray(p.overview?.switches)} />}
       <section className="panel focus-card"><h3>{t('focus.ports')}</h3>
       <FrontPanel
         showNote={p.expert}
@@ -317,17 +323,7 @@ export function SwitchPorts(p: SwitchPortsProps) {
             {[deviceName(d) !== d.mac ? d.mac : '', deviceName(d) !== d.vendor ? d.vendor : '', d.ip].some(Boolean) &&
               <p className="break-words text-sm opacity-80">{[deviceName(d) !== d.mac ? d.mac : '', deviceName(d) !== d.vendor ? d.vendor : '', d.ip].filter(Boolean).join(' · ')}</p>}
               {d.ip && <div className="flex flex-wrap items-center gap-2 text-sm">
-                <button type="button" className="px-1.5 py-0.5"
-                  disabled={p.busy || p.locked}
-                  onClick={() => p.run(async () => {
-                    const r = await api<{
-                      ok: boolean;
-                      rtt_ms: number;
-                      output: string;
-                    }>('/api/diagnostics/ping', json('POST', { ip: d.ip }));
-                    alert(`${r.ok ? t('ui.m289') : t('ui.m290')} ${r.rtt_ms}ms ${r.output}`);
-                  })}
-                >Ping</button>
+                <PingButton key={d.ip} ip={d.ip} disabled={p.locked || !!p.replay} />
                 <a className="px-1.5 py-0.5 underline" target="_blank" rel="noreferrer" href={`http://${d.ip}`}>HTTP</a>
                 <a className="px-1.5 py-0.5 underline" target="_blank" rel="noreferrer" href={`https://${d.ip}`}>HTTPS</a>
               </div>}
@@ -347,9 +343,18 @@ export function SwitchPorts(p: SwitchPortsProps) {
           </div>
           <Chart points={metrics.data?.series.points || []} keys={activeTab.keys} format={activeTab.format} height={200} />
         </section>}
-        {!p.replay && <section className="detail-section"><h4>{t('ui.m301')}</h4>
+        {!p.replay && <section className="detail-section"><h4>{t('focus.history', { count: HISTORY_ROWS })}</h4>
           <PollingStatus {...metrics} />
-          <Table rows={metrics.data?.history || []} hide={p.expert ? [] : ['detail', 'hint']} expert={p.expert} />
+          {/* One line per event: time, level, what happened. Everything else is in Logs. */}
+          {metrics.data && (metrics.data.history.length ? <ul className="port-history">
+            {metrics.data.history.map(event => <li key={event.id} className={`port-history-${event.severity.toLowerCase()}`}>
+              <time dateTime={event.ts}>{pcTimestamp(event.ts, true)}</time>
+              <span className="port-history-level">{event.severity === 'CRITICAL' ? t('ui.m005') : event.severity === 'WARNING' ? t('ui.m006') : t('ui.m007')}</span>
+              <span className="port-history-text" title={eventTitle(event)}>{p.expert ? eventTitle(event) : eventHeadline(event)}</span>
+            </li>)}
+          </ul> : <p className="muted">{t('focus.noHistory')}</p>)}
+          {p.openLogs && <button type="button" data-action="all-logs"
+            onClick={() => p.openLogs?.({ switchId: s.id, ifIndex: port.if_index, switchName: s.name, portName: port.name })}>{t('focus.allLogs')}</button>}
         </section>}
         <details className="detail-settings"><summary>{t('focus.portSettings')}</summary>
           <div className="flex flex-wrap items-center gap-2">

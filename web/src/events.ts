@@ -11,6 +11,8 @@ export interface EventFilters {
   category: string;
   severity: string;
   switch_id: string;
+  // Empty for every port. Set only together with switch_id (a port number alone means nothing).
+  if_index?: string;
   q: string;
   from: string;
   to: string;
@@ -40,6 +42,7 @@ export function matchesEvent(event: Event, filter: EventFilters): boolean {
     (!filter.severity || event.severity === filter.severity) &&
     (!filter.issuesOnly || isIssueEvent(event)) &&
     (!filter.switch_id || String(event.switch_id) === filter.switch_id) &&
+    (!filter.if_index || String(event.if_index) === filter.if_index) &&
     (!filter.q || JSON.stringify(event).toLowerCase().includes(filter.q.toLowerCase())) &&
     (!filter.from || Date.parse(event.ts) >= parseJstDateTime(filter.from).getTime()) &&
     (!filter.to || Date.parse(event.ts) <= parseJstDateTime(filter.to).getTime());

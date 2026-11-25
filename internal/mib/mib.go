@@ -172,7 +172,9 @@ const (
 // 接続機器識別
 const (
 	LldpLocChassisID        = "1.0.8802.1.1.2.1.3.2.0"
+	LldpRemChassisIDSubtype = "1.0.8802.1.1.2.1.4.1.1.4"   // 4=macAddress, 7=local(ホスト名など)
 	LldpRemChassisID        = "1.0.8802.1.1.2.1.4.1.1.5"   // INDEX=timeMark,localPort,remIndex
+	LldpRemPortIDSubtype    = "1.0.8802.1.1.2.1.4.1.1.6"   // 3=macAddress, 5=interfaceName, 7=local
 	Dot1qVlanStaticEgress   = "1.3.6.1.2.1.17.7.1.4.3.1.2" // PortList, INDEX=vlan
 	Dot1qVlanStaticUntagged = "1.3.6.1.2.1.17.7.1.4.3.1.4"
 	LldpRemPortID           = "1.0.8802.1.1.2.1.4.1.1.7"

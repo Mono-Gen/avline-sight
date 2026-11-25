@@ -7,10 +7,17 @@ const commands = {
   stop: 'Stop-Service SNMPTRAP; Set-Service SNMPTRAP -StartupType Disabled',
   bind: '.\\avline-sight.exe --trap 0.0.0.0:1162',
   firewall: 'New-NetFirewallRule -DisplayName "AVLine-Sight Trap" -Direction Inbound -Protocol UDP -LocalPort 162 -Action Allow',
-  switch: 'snmp-server host <PC IP> traps version snmpv2 <community>',
 };
 
-function CopyCommand({ command }: { command: string }) {
+// M4250 CLI (CLI Command Reference: "snmp-server host ... traps version {1 | 2} community [udp-port port]").
+// The community is the one already used for monitoring; udp-port only when this PC does not listen on 162.
+export function switchTrapCommands(listen?: string) {
+  const port = Number((listen || '').split(':').pop());
+  const udp = port && port !== 162 ? ` udp-port ${port}` : '';
+  return ['enable', 'configure', 'snmp-server enable traps', `snmp-server host <PC IP> traps version 2 <community>${udp}`, 'exit', 'write memory'].join('\n');
+}
+
+export function CopyCommand({ command }: { command: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   return <div className="rounded border border-slate-500 p-2">
     <pre className="select-text whitespace-pre-wrap break-words">{command}</pre>
@@ -22,7 +29,7 @@ function CopyCommand({ command }: { command: string }) {
   </div>;
 }
 
-export function TrapHelp({ close, error }: { close: () => void; error?: string }) {
+export function TrapHelp({ close, error, listen }: { close: () => void; error?: string; listen?: string }) {
   return <Dialog title={t('operations.trapHelpTitle')} close={close}>
     {error && <p role="alert" className="text-amber-700 dark:text-amber-300">⚠ {error}</p>}
     <p>{t('operations.trapIntro')}</p>
@@ -33,6 +40,6 @@ export function TrapHelp({ close, error }: { close: () => void; error?: string }
     <p>{t('operations.trapPort')}</p><CopyCommand command={commands.bind} />
     <p>{t('operations.trapFirewall')}</p><CopyCommand command={commands.firewall} />
     <h3 className="font-bold">{t('operations.trapSwitch')}</h3>
-    <p>{t('operations.trapSwitchText')}</p><CopyCommand command={commands.switch} />
+    <p>{t('operations.trapSwitchText')}</p><CopyCommand command={switchTrapCommands(listen)} />
   </Dialog>;
 }

@@ -29,7 +29,8 @@ export function PortDetail({ switchId, switchName, port, devices, alerts, close,
     <div className="flex items-center justify-between gap-2"><h2>{t('rack.portDetail')} · {switchName} / {port.name}</h2><button onClick={close}>{t('rack.close')}</button></div>
     {list.map(device => <section key={device.mac} className="border-b border-slate-600 py-3">
       <h3 className="font-bold">{device.label || device.lldp_name || device.mac}</h3>
-      <p>MAC: {device.mac || '—'}</p><p>IP: {device.ip || '—'} {device.ip_mismatch && <span title={t('operations.mismatch')}>▲</span>}</p>
+      {/* A device known only by LLDP may be keyed by its host name; that is not a MAC. */}
+      <p>MAC: {/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i.test(device.mac) ? device.mac : '—'}</p><p>IP: {device.ip || '—'} {device.ip_mismatch && <span title={t('operations.mismatch')}>▲</span>}</p>
       <p>{t('rack.plannedIP')}: {device.planned_ip || '—'}</p>
       <p>{t('rack.pingStatus')}: {device.ping ? pingLabel(device.ping.status, device.ping.rtt_ms)
         : device.ping_ok == null ? t('rack.notPinged') : pingLabel(device.ping_ok ? 'ok' : 'timeout', device.ping_rtt_ms || 0)} {device.ping?.at || device.ping_ts ? pcTimestamp(device.ping?.at || device.ping_ts || '') : ''}</p>

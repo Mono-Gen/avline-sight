@@ -4,7 +4,7 @@ import { api, json } from '../api';
 import { t } from '../i18n';
 import type { Profile, Status } from '../types';
 
-export function AppSidebar({ children, index, profiles, status, busy, locked, replay, expert, setExpert, openSettings, run, refresh }: {
+export function AppSidebar({ children, index, profiles, status, busy, locked, replay, expert, setExpert, openSettings, settingsOpen = false, run, refresh }: {
   children: ReactNode;
   // Switch index inserted right below the first page button (port monitor), plan section 21.
   index?: ReactNode;
@@ -16,6 +16,7 @@ export function AppSidebar({ children, index, profiles, status, busy, locked, re
   expert: boolean;
   setExpert: (value: boolean) => void;
   openSettings: () => void;
+  settingsOpen?: boolean;
   run: (action: () => Promise<void>) => void;
   refresh: () => Promise<void>;
 }) {
@@ -34,7 +35,7 @@ export function AppSidebar({ children, index, profiles, status, busy, locked, re
         await api('/api/mode/lock', json('POST', { locked: !status?.locked, pin }));
         await refresh();
       })}>{t(locked ? 'rack.locked' : 'rack.lock')}</button>
-      <button disabled={busy || !status} onClick={openSettings}>{t('rack.settings')}</button>
+      <button disabled={busy || !status} aria-current={settingsOpen ? 'page' : undefined} onClick={openSettings}>{t('rack.settings')}</button>
       <label className="app-nav-expert">{t('expert.setting')}
         <input type="checkbox" role="switch" checked={expert} onChange={event => setExpert(event.target.checked)} />
       </label>

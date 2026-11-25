@@ -27,6 +27,9 @@ func TestEventQuickFiltersApplyBeforeLimit(t *testing.T) {
 		{"&issues_only=1&severity=INFO", "", ""},
 		{"&unacked_only=1", "CONNECT", model.SevWarning},
 		{"&unacked_only=1&switch_id=2", "", ""},
+		// ポートで絞り込む（ポート詳細の「ログで全部見る」）: if_index=1 は LINK_DOWN だけ、存在しないポートは0件
+		{"&switch_id=1&if_index=1", "CONNECT", model.SevWarning},
+		{"&switch_id=1&if_index=9", "", ""},
 		{"&category=MARKER", "MARKER", model.SevInfo},
 	} {
 		w := do(h, "GET", "/api/events?limit=1"+tc.query, "")

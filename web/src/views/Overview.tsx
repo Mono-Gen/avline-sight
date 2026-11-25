@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertBand } from '../components/AlertBand';
 import { DiscoveryWizard, LabPanel, SwitchForm } from '../components/Dialogs';
-import { GroupActions } from '../components/GroupActions';
+import { GroupActions, PingOutcomeView } from '../components/GroupActions';
+import type { PingOutcome } from '../components/GroupActions';
 import { GroupEditDialog } from '../components/GroupEditDialog';
 import type { GroupEdit } from '../components/GroupEditDialog';
 import { PortDetail } from '../components/PortDetail';
 import { PortLegend, RackRow } from '../components/RackRow';
+import { api } from '../api';
 import { asArray } from '../format';
 import { t } from '../i18n';
 import { sortedAlerts, uplinkPorts, withoutUnusedLags } from '../rackModel';
@@ -86,6 +88,14 @@ export function OverviewView(props: OverviewProps) {
   useEffect(() => { setSelected(portTarget); }, [portTarget, props.group, props.part, props.switchId, props.focus]);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [notice, setNotice] = useState('');
+  // "Ping all" result per group ("*" for all switches), kept next to that group's actions until closed.
+  const [pings, setPings] = useState<Record<string, PingOutcome>>({});
+  const pingFor = (key: string) => (outcome: PingOutcome | undefined) => setPings(previous => {
+    const next = { ...previous };
+    if (outcome) next[key] = outcome; else delete next[key];
+    return next;
+  });
+  const pingResult = (key: string) => pings[key] && <PingOutcomeView outcome={pings[key]} close={() => pingFor(key)(undefined)} openDevices={props.openDevices} />;
   const [wallSwitch, setWallSwitch] = useState<number>();
   const rack = useRackData(props.status?.profile.id, replay, props.replayRef);
   const configs = rack.data?.configs;
@@ -218,6 +228,10 @@ export function OverviewView(props: OverviewProps) {
   const band = (live || props.replayAlerts !== undefined) && <AlertBand alerts={alerts} wall={wall} expert={props.expert} busy={busy} locked={locked} ack={live ? operations?.ack : undefined}
     ackMany={live && groupFiltered ? operations?.ackMany : undefined} undoCount={live ? operations?.undoCount : undefined}
     undo={live ? operations?.undoAck : undefined} pending={live && !operations?.ready && !operations?.alerts.length} />;
+  // Edit form for one switch; deleting the switch shown alone returns to all switches.
+  const switchForm = !wall && !locked && edit !== undefined && <SwitchForm value={edit || undefined} groups={allGroupNames} busy={busy} run={props.run}
+    close={() => { setEdit(undefined); void refresh().catch(() => undefined); }}
+    onDeleted={edit ? () => { if (focusSummary?.id === edit.id) props.onFocus?.(0); } : undefined} />;
   if (focusSummary) return <div className="rack-overview">
     {kpis}
     {band}
@@ -238,7 +252,12 @@ export function OverviewView(props: OverviewProps) {
     <SwitchPorts key={focusSummary.id} {...props} {...emptySwitchFilter} focusSummary={focusSummary} selected={focusSummary.id}
       thresholds={props.settings?.thresholds}
       select={id => props.onFocus?.(id)} initialPort={target?.switchId === focusSummary.id ? target : undefined}
-      alerts={byAlert.get(focusSummary.id) || []} onClosePort={props.onClosePortDetail} />
+      alerts={byAlert.get(focusSummary.id) || []} onClosePort={props.onClosePortDetail}
+      onEdit={locked || replay ? undefined : () => props.run(async () => {
+        const config = asArray(await api<SwitchConfig[]>('/api/switches')).find(item => item.id === focusSummary.id);
+        if (config) setEdit(config);
+      })} />
+    {switchForm}
   </div>;
   return <div className="rack-overview">
     {!wall && kpis}
@@ -257,12 +276,13 @@ export function OverviewView(props: OverviewProps) {
     {!locked && <div className="operation-area" role="group" aria-label={t('rack.actions')}>
       {/* Bulk actions appear only when their target matches what is shown (never act on all or a whole group while filtered to a switch or part). */}
       {props.group === undefined && !preset?.tags?.length && !preset?.vlans?.length && props.switchId === undefined && <>
-        <strong>{t('rack.all')}</strong><GroupActions {...actionProps} group="*" all />
+        <strong>{t('rack.all')}</strong><GroupActions {...actionProps} group="*" all onPing={pingFor('*')} />
       </>}
-      {props.group !== undefined && props.switchId === undefined && layout === 'list' && <GroupActions {...actionProps} group={props.group} />}
+      {props.group !== undefined && props.switchId === undefined && layout === 'list' && <GroupActions {...actionProps} group={props.group} onPing={pingFor(props.group)} />}
       <button disabled={busy} onClick={() => setEdit(null)}>{t('rack.add')}</button>
       <button disabled={busy} onClick={() => setDiscover(true)}>{t('rack.discover')}</button>
     </div>}
+    {!locked && !wall && (props.group === undefined ? pingResult('*') : layout === 'list' && pingResult(props.group))}
     {!wall && notice && <div role="status" className="panel flex items-center justify-between gap-2">{notice}<button onClick={() => setNotice('')}>{t('rack.close')}</button></div>}
     {rack.error && <p role="alert" className="rack-data-error">⚠ {rack.error}</p>}
     {layout === 'list' ? <PortMatrix {...props} visibleSwitchIds={visibleIds} /> : <><PortLegend /><div className="rack-groups">
@@ -285,14 +305,15 @@ export function OverviewView(props: OverviewProps) {
             <button className="group-collapse" aria-label={t(isClosed ? 'rack.expand' : 'rack.collapse')} aria-expanded={!isClosed} onClick={collapse}>{isClosed ? '+' : '−'}</button>
           </div>
           {!locked && !isClosed && <div className="operation-area" role="group" aria-label={t('rack.actions')}>
-            {props.switchId === undefined && <GroupActions {...actionProps} group={name} />}
+            {props.switchId === undefined && <GroupActions {...actionProps} group={name} onPing={pingFor(name)} />}
             <button disabled={busy} aria-label={t('operations.rename')} onClick={() => setGroupEdit({ name })}>✎</button>
           </div>}
+          {!locked && !isClosed && props.switchId === undefined && pingResult(name)}
           {!isClosed && rows.map(sw => <RackRow key={sw.id} summary={sw}
             ports={withoutUnusedLags((ports.get(sw.id) || []).map(row => row.port), byAlert.get(sw.id) || [])} devices={bySwitch.get(sw.id) || []} alerts={byAlert.get(sw.id) || []}
             definitions={rack.definitions} vlans={preset?.vlans}
             wall={wall} stale={!!rack.error} uplinks={uplinks} samples={samples} actions={props}
-            onPort={port => setSelected({ switchId: sw.id, ifIndex: port.if_index })} onEdit={setEdit} onHelp={onTrapHelp} refresh={refresh} />)}
+            onPort={port => setSelected({ switchId: sw.id, ifIndex: port.if_index })} onEdit={setEdit} />)}
         </section>;
       })}
     </div></>}
@@ -302,8 +323,7 @@ export function OverviewView(props: OverviewProps) {
       alerts={matchingPortAlerts(byAlert.get(selected.switchId) || [], selected.switchId, selectedPort.if_index)}
       close={() => { setSelected(undefined); props.onClosePortDetail?.(); }} replay={replay !== null} />}
     {!wall && !locked && props.status?.lab && <LabPanel run={props.run} busy={busy} switches={asArray(props.overview.switches)} />}
-    {!wall && !locked && edit !== undefined && <SwitchForm value={edit || undefined} groups={allGroupNames} busy={busy} run={props.run}
-      close={() => { setEdit(undefined); void refresh().catch(() => undefined); }} />}
+    {switchForm}
     {!wall && !locked && discover && <DiscoveryWizard busy={busy} run={props.run}
       close={() => { setDiscover(false); void refresh().catch(() => undefined); }} />}
     {!wall && !locked && groupEdit && <GroupEditDialog edit={groupEdit} groups={allGroupNames} busy={busy} run={props.run} refresh={refresh} profileId={profileId}

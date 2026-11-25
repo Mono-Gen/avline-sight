@@ -1,4 +1,4 @@
-import { api, json } from '../api';
+import { api } from '../api';
 import { asArray, decimal, formatBps, formatTime } from '../format';
 import { frontPanelRows } from '../frontPanelLayout';
 import { eventHeadline, eventTitle, t } from '../i18n';
@@ -67,11 +67,11 @@ export function switchHealth(sw: SwitchSummary, thresholds?: Record<string, numb
   ] as const;
 }
 
-export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlans = [], wall, stale, uplinks, samples, actions, onPort, onEdit, onHelp, refresh }: {
+export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlans = [], wall, stale, uplinks, samples, actions, onPort, onEdit }: {
   summary: SwitchSummary; ports: Port[]; devices: InventoryRow[]; alerts: Alert[]; definitions: ModelDefinitions;
   vlans?: readonly number[];
   wall: boolean; stale: boolean; uplinks: Set<string>; samples: Record<string, { rx: number; tx: number }[]>;
-  actions: ViewProps; onPort: (port: Port) => void; onEdit: (config: SwitchConfig | null) => void; onHelp: () => void; refresh: () => Promise<void>;
+  actions: ViewProps; onPort: (port: Port) => void; onEdit: (config: SwitchConfig | null) => void;
 }) {
   const rows = frontPanelRows(ports, definitions[sw.model]);
   const portAlerts = summarizeAlerts(alerts).items.filter(isPortAlert);
@@ -82,11 +82,12 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlan
   const health = switchHealth(sw, actions.settings?.thresholds);
   return <article id={`rack-switch-${sw.id}`} tabIndex={-1} className={`rack-row${!sw.reachable || stale ? ' rack-offline' : ''}`} title={[`${sw.model} ${sw.fw}`.trim(), t('rack.lastTrap', { at: sw.last_trap_ts ? formatTime(sw.last_trap_ts) : '—' }), sw.last_error].filter(Boolean).join(' · ')}>
     <div className="rack-identity">
-      <strong title={sw.name}>{sw.reachable ? '●' : '⚠'} {sw.name}</strong><span>{sw.ip}</span>
-      {!wall && <div className="rack-switch-actions">
-        {!sw.last_trap_ts && <button className="trap-help-button" title={t('rack.noTrap')} aria-label={t('rack.noTrap')} onClick={onHelp}>ⓘ</button>}
-        <ActionPopup label={`${sw.name} ${t('rack.actions')}`}>
-          <button onClick={() => actions.select(sw.id)}>{t('rack.ports')}</button>
+      {/* The name opens the switch alone in the port monitor (it replaces the former "Ports" menu item). */}
+      <strong title={sw.name}>{sw.reachable ? '●' : '⚠'} {wall ? sw.name : <button type="button" className="rack-switch-name" data-action="open-switch"
+        onClick={() => actions.select(sw.id)}>{sw.name}</button>}</strong><span>{sw.ip}</span>
+      {/* In replay (always locked) the menu would be empty: nothing to show. */}
+      {!wall && !(actions.replay && actions.locked) && <div className="rack-switch-actions">
+        <ActionPopup label={`${sw.name} ${t('rack.actions')}`} text={`${t('rack.actions')} ▾`}>
           {!actions.replay && <button disabled={actions.busy} onClick={() => actions.run(async () => {
             const access = await api<{ web_url: string }>(`/api/switches/${sw.id}/access-info`);
             const url = new URL(access.web_url);
@@ -101,11 +102,6 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlan
               const config = asArray(configs).find(item => item.id === sw.id);
               if (config) onEdit(config);
             })}>{t('rack.edit')}</button>
-            <button className="button-danger" disabled={actions.busy} onClick={() => {
-              if (window.confirm(t('rack.removeConfirm', { name: sw.name }))) actions.run(async () => {
-                await api(`/api/switches/${sw.id}`, json('DELETE')); await refresh();
-              });
-            }}>{t('rack.remove')}</button>
           </>}
         </ActionPopup>
       </div>}

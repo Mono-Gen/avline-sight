@@ -678,6 +678,7 @@ func (s *Server) eventFilter(r *http.Request) store.EventFilter {
 	q := r.URL.Query()
 	f := store.EventFilter{Category: q.Get("category"), Severity: q.Get("severity"), Q: q.Get("q")}
 	f.SwitchID, _ = strconv.ParseInt(q.Get("switch_id"), 10, 64)
+	f.IfIndex, _ = strconv.Atoi(q.Get("if_index"))
 	f.Limit, _ = strconv.Atoi(q.Get("limit"))
 	if v := q.Get("from"); v != "" {
 		f.From, _ = time.Parse(time.RFC3339, v)

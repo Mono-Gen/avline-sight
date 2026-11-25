@@ -868,6 +868,7 @@ type EventFilter struct {
 	Category, Severity, Q string
 	ID, ProfileID         int64
 	SwitchID              int64
+	IfIndex               int // 0 = すべてのポート（ポート詳細の「ログで全部見る」で使う）
 	From, To              time.Time
 	Limit                 int
 	RestoreProfileID      int64
@@ -908,6 +909,9 @@ func (s *Store) Events(f EventFilter) ([]model.Event, error) {
 	}
 	if f.SwitchID != 0 {
 		conds, args = append(conds, "switch_id=?"), append(args, f.SwitchID)
+	}
+	if f.IfIndex > 0 {
+		conds, args = append(conds, "if_index=?"), append(args, f.IfIndex)
 	}
 	if f.Q != "" {
 		conds, args = append(conds, "(title LIKE ? OR detail_json LIKE ? OR switch_name LIKE ?)"), append(args, "%"+f.Q+"%", "%"+f.Q+"%", "%"+f.Q+"%")

@@ -4,6 +4,7 @@ import { api, download, json } from '../api';
 import { Badge } from '../components/Badge';
 import { DeviceCsvImportDialog } from '../components/DeviceCsvImportDialog';
 import { confirmBulkPing } from '../components/GroupActions';
+import { PingButton } from '../components/PingButton';
 import { PollingStatus } from '../components/PollingStatus';
 import { pruneSwitchFilter, SwitchFilters } from '../components/SwitchFilters';
 import { bulkPingTimeoutMs, deviceUrl, importSummary, MAX_BULK_PING, pingLabel, pingTargets, visibleDeviceCsv } from '../deviceCsv';
@@ -24,8 +25,10 @@ function lastSeen(value: string | undefined): string {
   return value && value !== '0001-01-01T00:00:00Z' ? formatTime(value) : t('ui.m217');
 }
 
-export function DeviceInventoryTable({ rows, alerts = [], onNavigate }: {
+export function DeviceInventoryTable({ rows, alerts = [], onNavigate, pingDisabled = true, onPinged }: {
   rows: InventoryRow[]; alerts?: Alert[]; onNavigate?: ViewProps['openPortMonitor'];
+  // Per-row Ping; disabled in replay, while locked, or when no callback refreshes the recorded result.
+  pingDisabled?: boolean; onPinged?: () => void;
 }) {
   const columns = [t('rack.connectionState'), t('pages.deviceName'), t('pages.switchPort'), t('pages.deviceIP'),
     'Ping', t('ui.m074'), t('pages.vlanPoe'), 'MAC'];
@@ -63,6 +66,7 @@ export function DeviceInventoryTable({ rows, alerts = [], onNavigate }: {
                 {row.ping ? pingLabel(row.ping.status, row.ping.rtt_ms) :
                   row.ping_ok == null ? emptyCell : pingLabel(row.ping_ok ? 'ok' : 'timeout', row.ping_rtt_ms ?? 0)}
                 {(row.ping_ts || row.ping?.at) && <small className="device-secondary block" title={t('operations.pingAt')}>{pcTimestamp(row.ping_ts || row.ping?.at || '')}</small>}
+                {row.ip && !pingDisabled && <PingButton key={row.ip} ip={row.ip} showResult={false} onDone={onPinged} />}
               </td>
               <td>{row.vendor || emptyCell}</td>
               <td className="whitespace-nowrap">{row.vlan || emptyCell} / {row.poe_w != null ? `${decimal(row.poe_w)} W` : emptyCell}</td>
@@ -219,7 +223,8 @@ ${summary}` : summary)) runPing({ manual }, -1);
       )}
       {enabled ? <PollingStatus {...inventory} /> : <p role="status">{t('ui.m246')}</p>}
       {inventory.data?.key === key && rows.length === 0 && <p>{t('ui.m247')}</p>}
-      <DeviceInventoryTable rows={rows} alerts={isReplay ? [] : p.operations?.alerts} onNavigate={p.openPortMonitor} />
+      <DeviceInventoryTable rows={rows} alerts={isReplay ? [] : p.operations?.alerts} onNavigate={p.openPortMonitor}
+        pingDisabled={isReplay || p.locked} onPinged={() => void inventory.refresh()} />
       {importOpen && !importDisabledReason && (
         <DeviceCsvImportDialog
           key={profileId}

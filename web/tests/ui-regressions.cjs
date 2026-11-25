@@ -6,7 +6,10 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const { asArray, decimal, formatBps, formatUptime, resolveSwitchId, labSwitchIndex, alertCount } = require('../src/format.ts');
 const { FrontPanel } = require('../src/components/FrontPanel.tsx');
 const { Table } = require('../src/components/Table.tsx');
-const { SettingsDialog } = require('../src/components/SettingsDialog.tsx');
+const { SettingsPage } = require('../src/views/SettingsPage.tsx');
+const settingsPageProps = { run: () => {}, busy: false, locked: false, replay: false, switches: [], groups: [], theme: 'dark', setTheme: () => {},
+  notifications: false, setNotifications: () => {}, setDialog: () => {}, setReplay: () => {},
+  onSaved: async () => {}, refreshStatus: async () => {}, refreshGroups: async () => {} };
 const { PortHardware } = require('../src/components/PortHardware.tsx');
 const { ErrorBoundary } = require('../src/components/ErrorBoundary.tsx');
 const { OverviewView } = require('../src/views/Overview.tsx');
@@ -169,10 +172,10 @@ test('監視表は日本語見出しと文字付き重要度を表示する', ()
 });
 
 test('設定編集はJSONではなく数値・チェック・パートのフォームを使う', () => {
-  const html = render(SettingsDialog, { value: {
+  const html = render(SettingsPage, { ...settingsPageProps, value: {
     thresholds: { cpu_pct: 80 }, setup_ping_interval_sec: 60, rehearsal_ping_interval_sec: 60,
     views: [{ id: 'audio', name: '音響', vlans: [10], tags: ['audio'], categories: [] }],
-  }, close() {}, run() {}, busy: false });
+  } });
   assert.match(html, /type="number"/);
   assert.match(html, /min="30" max="3600"/);
   assert.doesNotMatch(html, /重大アラート音/);

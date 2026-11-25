@@ -254,3 +254,86 @@ test('一括Ping: 応答待ちは全宛先が無応答でも打ち切られな�
 });
 
 
+
+test('logs opened from a port keep only that switch and port', () => {
+  const rows = [
+    event(1, { switch_id: 1, if_index: 3 }),
+    event(2, { switch_id: 1, if_index: 4 }),
+    event(3, { switch_id: 2, if_index: 3 }),
+  ];
+  const port = logRows([], rows, { ...blankFilter, switch_id: '1', if_index: '3' });
+  assert.deepEqual(port.map(row => row.id), [1]);
+  // An empty port filter means every port of that switch.
+  assert.deepEqual(logRows([], rows, { ...blankFilter, switch_id: '1', if_index: '' }).map(row => row.id), [2, 1]);
+});
+
+test('port detail asks for the latest few events of that port and links to Logs', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '../src/views/SwitchPorts.tsx'), 'utf8');
+  assert.match(source, /\/api\/events\?switch_id=\$\{p\.selected\}&if_index=\$\{idx\}&limit=\$\{HISTORY_ROWS\}/);
+  assert.match(source, /const HISTORY_ROWS = 5;/);
+  assert.match(source, /data-action="all-logs"/);
+  const logs = fs.readFileSync(path.join(__dirname, '../src/views/Logs.tsx'), 'utf8');
+  // A port target shows every severity, not only issues.
+  assert.match(logs, /issuesOnly: !target/);
+});
+
+test('trap listen address: host:port only, and 127.x is flagged as unreachable from switches', () => {
+  const { validTrapAddress, loopbackOnly } = require('../src/components/TrapListenSetting.tsx');
+  for (const ok of ['0.0.0.0:162', '192.0.2.10:1162', '127.0.0.1:11621']) assert.equal(validTrapAddress(ok), true, ok);
+  for (const bad of ['', '0.0.0.0', ':162', '0.0.0.0:0', '0.0.0.0:70000', '256.0.0.1:162', 'pc:162']) assert.equal(validTrapAddress(bad), false, bad);
+  assert.equal(loopbackOnly('127.0.0.1:11621'), true);
+  assert.equal(loopbackOnly('0.0.0.0:162'), false);
+});
+
+test('bulk Ping result names the devices that did not answer and stays until closed', () => {
+  const { noReplyRows, PingOutcomeView } = require('../src/components/GroupActions.tsx');
+  const devices = [
+    { ip: '192.0.2.1', label: 'Mixer', mac: 'AA' }, { ip: '', planned_ip: '192.0.2.2', label: '', lldp_name: 'Stage box', mac: 'BB' },
+    { ip: '192.0.2.3', label: 'Amp', mac: 'CC' },
+  ];
+  const rows = noReplyRows([
+    { ip: '192.0.2.1', status: 'ok', rtt_ms: 1 }, { ip: '192.0.2.2', status: 'timeout', rtt_ms: 0 }, { ip: '192.0.2.9', status: 'unreachable', rtt_ms: 0 },
+  ], devices);
+  assert.deepEqual(rows.map(row => [row.ip, row.names]), [['192.0.2.2', ['Stage box']], ['192.0.2.9', []]]);
+  const html = render(PingOutcomeView, { outcome: { ok: 1, total: 3, noReply: rows, at: new Date(0).toISOString() }, close: () => {}, openDevices: () => {} });
+  assert.match(html, /応答 1 \/ 3件/);
+  assert.match(html, /Stage box.*192\.0\.2\.2/);
+  assert.match(html, /data-action="open-devices"/);
+  assert.match(render(PingOutcomeView, { outcome: { running: 4 }, close: () => {} }), /Ping中… 4件/);
+});
+
+test('per-row Ping in Devices only where the row has an address and Ping is allowed', () => {
+  const row = { mac: 'AA', ip: '192.0.2.1', label: 'Mixer', seen: true };
+  const noIp = { mac: 'BB', ip: '', label: 'Old', seen: false };
+  assert.equal((render(DeviceInventoryTable, { rows: [row, noIp], pingDisabled: false, onPinged: () => {} }).match(/data-action="ping-one"/g) || []).length, 1);
+  assert.doesNotMatch(render(DeviceInventoryTable, { rows: [row] }), /data-action="ping-one"/);
+});
+
+test('switch trap commands use the M4250 host syntax and add udp-port only off 162', () => {
+  const { switchTrapCommands } = require('../src/components/TrapHelp.tsx');
+  const standard = switchTrapCommands('0.0.0.0:162');
+  assert.match(standard, /^enable\nconfigure\nsnmp-server enable traps\nsnmp-server host <PC IP> traps version 2 <community>\nexit\nwrite memory$/);
+  assert.match(switchTrapCommands('0.0.0.0:1162'), /traps version 2 <community> udp-port 1162\n/);
+  assert.doesNotMatch(standard, /snmp-server community|snmpv2/);
+});
+
+test('settings page: a section saves only its own part, and every section says where it applies', () => {
+  const { SettingsPage, settingsBody } = require('../src/views/SettingsPage.tsx');
+  const base = { thresholds: { cpu_pct: 80, mem_free_pct: 15 }, setup_ping_interval_sec: 60, rehearsal_ping_interval_sec: 90, expert_display_default: true,
+    views: [{ id: 'audio', name: 'Audio', vlans: [10], tags: [], categories: [] }] };
+  const saved = settingsBody(base, { thresholds: { cpu_pct: 70 } });
+  assert.deepEqual(saved.thresholds, { cpu_pct: 70 });
+  assert.equal(saved.rehearsal_ping_interval_sec, 90);
+  assert.equal(saved.expert_display_default, true);
+  assert.deepEqual(saved.views, base.views);
+  const html = render(SettingsPage, { value: base, run: () => {}, busy: false, locked: false, replay: false, switches: [{ id: 1, name: 'Core', ip: '192.0.2.1', last_trap_ts: null }],
+    groups: [], theme: 'dark', setTheme: () => {}, notifications: false, setNotifications: () => {}, setDialog: () => {}, setReplay: () => {},
+    onSaved: async () => {}, refreshStatus: async () => {}, refreshGroups: async () => {}, trap: { addr: '0.0.0.0:162', ok: true, error: '' } });
+  for (const scope of ['このPCのアプリ全体', 'プロジェクト共通', 'このブラウザーだけ']) assert.match(html, new RegExp(scope));
+  // Nothing changed yet: the save buttons are off; a switch without traps opens the setup commands.
+  assert.doesNotMatch(html, /data-action="save-section"(?![^>]*disabled)/);
+  assert.match(html, /<details[^>]*open=""[^>]*>[^]*snmp-server host/);
+  assert.match(html, /% 以下で検知/);
+});

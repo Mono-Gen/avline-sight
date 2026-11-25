@@ -11,7 +11,10 @@ const { PhaseControls, changePhase } = require('../src/components/PhaseControls.
 const { GroupActions, resetGroup } = require('../src/components/GroupActions.tsx');
 const { PortLamp, RackRow } = require('../src/components/RackRow.tsx');
 const { DeviceInventoryTable } = require('../src/views/Devices.tsx');
-const { SettingsDialog } = require('../src/components/SettingsDialog.tsx');
+const { SettingsPage } = require('../src/views/SettingsPage.tsx');
+const settingsPageProps = { run: () => {}, busy: false, locked: false, replay: false, switches: [], groups: [], theme: 'dark', setTheme: () => {},
+  notifications: false, setNotifications: () => {}, setDialog: () => {}, setReplay: () => {},
+  onSaved: async () => {}, refreshStatus: async () => {}, refreshGroups: async () => {} };
 const { confirmAck } = require('../src/useOperations.ts');
 const { deviceUrl, pingTargets } = require('../src/deviceCsv.ts');
 const { pcTimestamp } = require('../src/pcTime.ts');
@@ -197,7 +200,7 @@ test('PC時刻は秒とタイムゾーンを表示し、今日のアラートは
   assert.equal(pcTimestamp(time, true, time), '2020-09-15 14:03:08 JST');
   assert.equal(pcTimestamp(time, false, time), '14:03:08 JST');
   assert.equal(pcTimestamp(time, false, Date.parse('2020-09-15T15:00:00Z')), '2020-09-15 14:03:08 JST');
-  const settings = render(SettingsDialog, { value: { thresholds: {}, views: [] }, webAddr: '127.0.0.1:8080', close: noop, run: noop, busy: false });
+  const settings = render(SettingsPage, { ...settingsPageProps, value: { thresholds: {}, views: [] }, webAddr: '127.0.0.1:8080' });
   assert.match(settings, /他のPCからは接続できません/);
 });
 

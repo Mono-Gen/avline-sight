@@ -80,6 +80,7 @@ export const ja = {
   },
   // 本体情報（事実だけ。FWの更新を勧めない）
   device: {
+    lastTrap: '最終Trap受信', noTrap: '未受信',
     title: '本体情報', model: '機種', serial: 'シリアル番号', firmware: 'ファームウェア', boot: 'ブートバージョン', baseMac: 'ベースMAC',
     ip: 'IPアドレス', sysName: 'システム名', uptime: '稼働時間', uptimeValue: '{d}日 {h}時間 {m}分',
     otherFirmware: '同じ機種でファームウェアが異なるスイッチ: {list}', otherFirmwareShort: 'ファームウェアが他と異なる', peerFirmware: '{name}（{fw}）', listSeparator: '、',
@@ -97,6 +98,7 @@ export const ja = {
     down: '未接続', fullDuplex: '全二重', halfDuplex: '半二重', nowValues: 'いまの値', bandwidth: '帯域', poeNone: '給電なし', chart: 'グラフ', chartBandwidth: '帯域',
     chartErrors: 'エラー・破棄', chartHardware: 'PoE・SFP', portSettings: 'ポート設定（メモ・除外・期待速度・役割・注目・カウンタリセット）',
     expertOnly: '設定値（エキスパート表示）',
+    history: 'ポート履歴（直近{count}件）', noHistory: '記録なし', allLogs: 'ログで全部見る',
   },
   alertState: { whatToDo: '考えられる原因・確認箇所（参考）', active: '継続中', ackedActive: '継続中・確認済み', recovered: '復旧・未確認', raisedAt: '{time} 発生', clearedAt: '{time} 復旧' },
   portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
@@ -134,6 +136,7 @@ export const ja = {
     more: '詳しい絞り込み', period: '期間', periodAll: 'すべて', periodHour: '直近1時間', periodToday: '今日',
     periodShow: '本番中', periodCustom: '指定', export: '書出', repeated: '×{count}', openPort: 'ポート詳細へ', andMore: '{name} 他{count}台',
     repeatedTitle: '同じ種類のsyslogが{count}件連続',
+    portTarget: '{name} {port} のログ', clearPortTarget: 'ポートの絞り込みを外す',
   },
   deviceCsv: {
     header: 'MAC,名称,メモ,予定IP,IP,メーカー,LLDP名,スイッチ,ポート,VLAN,PoE(W),リンク速度,最終確認,検出元,Ping',
@@ -145,6 +148,34 @@ export const ja = {
     related: '（関連{count}件）', undo: '元に戻す', acknowledged: '{count}件を確認済み',
     current: 'スイッチ別の現在状態', filter: '{name} の未確認アラート', clearFilter: '絞り込みを解除',
     more: '他 {count}件', global: 'その他・全体',
+  },
+  settingsPage: {
+    toc: '設定の目次', monitor: '監視の基準', trap: 'Trap・接続', parts: '担当パート', display: '表示', data: 'データの書出・読込', groups: 'グループ',
+    scopeApp: 'このPCのアプリ全体', scopeProject: 'プロジェクト共通', scopeBrowser: 'このブラウザーだけ',
+    save: 'この節を保存', reset: '元に戻す', unsaved: '未保存の変更あり', was: '変更前 {value}',
+    atLeastPct: '% 以上で検知', atMostPct: '% 以下で検知', atLeastC: '℃ 以上で検知', belowDbm: 'dBm 未満で検知',
+    dropDb: 'dB 以上の低下で検知', errors: '件以上（1回の取得あたり）で検知', seconds: '秒',
+    partsHelp: 'ログ・詳細の絞り込みに使う「パート」。VLANかスイッチのグループで決めます。',
+    theme: 'テーマ', dark: 'ダーク', light: 'ライト', notifications: 'デスクトップ通知', langJa: '日本語',
+    expertStart: '初めて開いた人もエキスパート表示で始める', expertDefault: 'エキスパート表示の初期値',
+    browserHelp: '「このブラウザーだけ」の項目は変えるとすぐ反映し、他のPCには影響しません。',
+    configFile: '設定ファイル', configFileHelp: 'スイッチ登録・グループ・しきい値などを別のPCへ移します。',
+    logs: 'ログ・本番レポート', logsHelp: 'イベントの書出と、本番中の出来事のまとめ。',
+    devices: '接続機器の一覧', devicesHelp: 'グループを選んでCSVに書き出します。名前・予定IPの一括登録は接続機器の画面から。',
+    replay: 'オフライン再生', replayHelp: '書き出した記録を読み込み、そのときの状態を再生します。',
+    groupsHelp: 'ポートモニターでのグループの並び順。名前の変更はポートモニターの各グループの ✎ から。',
+    switch: 'スイッチ', switchSetup: 'スイッチ側の設定方法（M4250）', port162: '162番が使えないとき（WindowsのSNMP Trapサービス・ファイアウォール）',
+    web: 'Web画面の待受', webShared: '他のPCからは「このPCのIP:{port}」で開けます。変更は起動オプション --listen で。',
+  },
+  pingOutcome: {
+    running: 'Ping中… {count}件', summary: 'Ping: 応答 {ok} / {total}件', openDevices: '接続機器で見る', pinging: 'Ping中…',
+  },
+  trapSetting: {
+    title: 'SNMP Trapの受信（このPC）', address: '待受アドレス', apply: '適用', help: 'スイッチ側の設定方法',
+    listening: '待受中: {address}', stopped: '待受停止: {address}',
+    invalid: '「IPアドレス:ポート」の形で入力（例: 0.0.0.0:162）',
+    loopback: '127.x はこのPC内からのTrapしか受け取れません。スイッチからのTrapは届きません。',
+    hint: '0.0.0.0 はこのPCのすべてのアドレスで待ち受けます。ポート162が使えないときは1162などにし、スイッチ側の送信先ポートも合わせます。全スイッチ共通の設定です。',
   },
   cleanup: {
     details: '詳細', diagram: '図', list: '一覧', layout: '表示方法',

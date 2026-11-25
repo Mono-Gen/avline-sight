@@ -602,3 +602,70 @@ td {
   .focus-ports-table .col-extra { display: table-cell; }
   .focus-ports-table td.focus-device { max-width: none; }
 }
+
+/* ポート履歴: 1件1行（時刻・重要度・内容）。全件はログ画面で見る */
+.port-history { list-style: none; margin: 0 0 var(--space-2); padding: 0; }
+.port-history li { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: var(--space-2); align-items: baseline; padding: 2px 0 2px 6px; border-left: 3px solid transparent; font-size: .85rem; }
+.port-history time { color: #9aa3b2; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.port-history-level { white-space: nowrap; font-size: .75rem; color: #9aa3b2; }
+.port-history-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.port-history-critical { border-left-color: #ff4d5e !important; }
+.port-history-critical .port-history-level { color: #ff4d5e; }
+.port-history-warning { border-left-color: #fb923c !important; }
+.port-history-warning .port-history-level { color: #fb923c; }
+/* ログ画面: ポートから開いたときの絞り込み表示 */
+.log-target { display: inline-flex; align-items: center; gap: var(--space-2); padding: 2px 4px 2px 10px; border: 1px solid #3b82f6; border-radius: 999px; font-size: .85rem; }
+.log-target button { padding: 0 6px; line-height: 1.4; }
+
+/* まとめてPingの結果: 押したグループのすぐ下に、閉じるまで残す */
+.ping-outcome { margin: var(--space-1) 0; padding: 6px 10px; border: 1px solid #3b4250; border-radius: 6px; font-size: .9rem; }
+.ping-outcome-failed { border-color: #fb923c; }
+.ping-outcome-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.ping-outcome ul { margin: 4px 0 0; padding-left: 1.2em; }
+/* 個別Ping: ボタンの横に結果 */
+.ping-button { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* 設定ページ: 左に目次、右に節。節ごとに「どこに効く設定か」の札を付ける */
+.settings-page { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: var(--space-4, 16px); align-items: start; }
+.settings-toc { position: sticky; top: 8px; display: grid; gap: 2px; }
+.settings-toc button { text-align: left; background: transparent; border: 0; border-left: 3px solid transparent; border-radius: 0; padding: 5px 10px; color: #9aa3b2; }
+.settings-toc button[aria-current="true"] { color: inherit; border-left-color: #7dd3fc; background: rgba(125, 211, 252, .08); }
+.settings-dot { color: #fb923c; margin-left: 4px; }
+.settings-sections { min-width: 0; display: grid; gap: var(--space-3, 12px); }
+.settings-card { scroll-margin-top: 8px; }
+.settings-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.settings-card-head h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+.settings-scope { font-size: .72rem; padding: 0 8px; border: 1px solid; border-radius: 10px; white-space: nowrap; font-weight: 400; }
+.settings-scope-app { color: #38bdf8; }
+.settings-scope-project { color: #2dd4bf; }
+.settings-scope-browser { color: #9aa3b2; }
+.settings-row { display: grid; grid-template-columns: minmax(160px, 240px) minmax(0, 1fr); gap: 4px 14px; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(127, 127, 127, .18); }
+.settings-label { color: #9aa3b2; }
+.settings-number { width: 7em; text-align: right; }
+.settings-unit { margin-left: 6px; color: #9aa3b2; }
+.settings-changed input { border-color: #fb923c; }
+.settings-was { margin-left: 8px; color: #fb923c; font-size: .8rem; }
+.settings-hint { color: #9aa3b2; font-size: .82rem; margin: 4px 0; }
+.settings-warn { color: #fb923c; }
+.settings-savebar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+.settings-inline .settings-savebar { display: inline-flex; margin: 0 0 0 10px; }
+.settings-inline { display: flex; flex-wrap: wrap; align-items: center; }
+.settings-unsaved { color: #fb923c; font-size: .85rem; }
+.settings-spacer { flex: 1; }
+.settings-parts, .settings-traps { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.settings-parts th, .settings-traps th { text-align: left; color: #9aa3b2; font-size: .78rem; font-weight: 600; padding: 4px 6px; }
+.settings-parts td, .settings-traps td { padding: 3px 6px; border-top: 1px solid rgba(127, 127, 127, .18); }
+.settings-parts input { width: 100%; min-width: 6em; }
+.settings-details { margin: 8px 0; }
+.settings-details summary { cursor: pointer; }
+.settings-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.settings-tile { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; align-content: start; border: 1px solid rgba(127, 127, 127, .35); border-radius: 6px; padding: 8px 10px; }
+.settings-tile h3 { flex-basis: 100%; margin: 0; font-size: .9rem; font-weight: 700; }
+.settings-tile p { flex-basis: 100%; margin: 0; color: #9aa3b2; font-size: .8rem; }
+@media (max-width: 760px) {
+  .settings-page { grid-template-columns: 1fr; }
+  .settings-toc { position: static; display: flex; flex-wrap: wrap; }
+  .settings-row { grid-template-columns: 1fr; }
+}
+
+.settings-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }

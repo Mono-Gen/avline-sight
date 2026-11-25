@@ -30,7 +30,7 @@ func (w *worker) collectClock() {
 
 func clockOffset(values map[string]gosnmp.SnmpPDU, midpoint time.Time) (float64, bool) {
 	// 手動設定でも時刻差は計測できるため、時刻ソースの none(0) も受け入れる。
-	_, sourceOK := clockInteger(values[mib.AgentSystemTimeSource], 0, 2)
+	source, sourceOK := clockInteger(values[mib.AgentSystemTimeSource], 0, 2)
 	hours, hoursOK := clockInteger(values[mib.AgentTimeZoneHoursOffset], -12, 14)
 	minutes, minutesOK := clockInteger(values[mib.AgentTimeZoneMinutesOffset], 0, 59)
 	summer, summerOK := clockInteger(values[mib.AgentSystemSummerTimeState], 0, 1)
@@ -60,6 +60,11 @@ func clockOffset(values map[string]gosnmp.SnmpPDU, midpoint time.Time) (float64,
 	date := strings.Join(strings.Fields(sx.Str(values[mib.AgentSystemDate])), " ")
 	clock := strings.TrimSpace(sx.Str(values[mib.AgentSystemTime]))
 	zone := time.FixedZone("switch", zoneMinutes*60)
+	// 時刻を手入力(none)し、タイムゾーンも夏時間も未設定(UTC+0)のスイッチは、現地の時刻をそのまま打ち込んでいることが多い。
+	// その場合はUTCと読まず、PCの表示時刻と同じ地域時刻として比べる（実機M4250: JSTの時刻を手入力・UTC+0で9時間差と誤判定した）。
+	if source == 0 && zoneMinutes == 0 && summer == 0 {
+		zone = midpoint.Location()
+	}
 	for _, layout := range []string{"01/02/2006", "Jan 2 2006", "2006-01-02"} {
 		local, err := time.ParseInLocation(layout+" 15:04:05", date+" "+clock, zone)
 		if err == nil {

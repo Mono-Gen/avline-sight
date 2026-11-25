@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { pcTimestamp } from '../pcTime';
 
 // Boot version is the last comma-separated field of sysDescr on NETGEAR M4250
 // ("M4250-26G4F-PoE+ ..., 13.0.7.6, 1.0.0.13"). Shown only when it looks like a version, never guessed otherwise.
@@ -21,7 +22,7 @@ type Peer = { id: number; name: string; model?: string; fw?: string };
 // Facts about the switch body only. A firmware that differs from other switches of the same model is listed as a fact,
 // never as "update recommended": a site may run a version on purpose.
 export function DeviceInfo({ device, peers }: {
-  device: { id: number; name: string; ip?: string; sys_name?: string; model?: string; fw?: string; serial?: string; base_mac?: string; uptime_sec?: number; sys_descr?: string };
+  device: { id: number; name: string; ip?: string; sys_name?: string; model?: string; fw?: string; serial?: string; base_mac?: string; uptime_sec?: number; sys_descr?: string; last_trap_ts?: string | null };
   peers: readonly Peer[];
 }) {
   const others = peers.filter(peer => peer.id !== device.id && !!device.model && peer.model === device.model && !!peer.fw && peer.fw !== device.fw);
@@ -34,6 +35,8 @@ export function DeviceInfo({ device, peers }: {
     [t('device.ip'), device.ip || ''],
     [t('device.sysName'), device.sys_name || ''],
     [t('device.uptime'), uptimeText(device.uptime_sec)],
+    // A fact only; how to set up trap delivery is in Settings.
+    [t('device.lastTrap'), device.last_trap_ts ? pcTimestamp(device.last_trap_ts, true) : t('device.noTrap')],
   ];
   return <details className="device-info">
     {/* The firmware difference is visible while folded too; worded as a fact, not as advice. */}

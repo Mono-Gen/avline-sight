@@ -7,6 +7,13 @@ export interface PortMonitorTarget {
   ifIndex?: number;
   portName?: string;
 }
+// Logs opened from a port: that switch and port only, all severities.
+export interface LogTarget {
+  switchId: number;
+  ifIndex: number;
+  switchName: string;
+  portName: string;
+}
 export interface SwitchFilter {
   group?: string;
   part: string;
@@ -23,6 +30,10 @@ export interface ViewProps extends SwitchFilter {
   selected: number;
   select: (id: number) => void;
   openPortMonitor?: (target: PortMonitorTarget) => void;
+  openLogs?: (target: LogTarget) => void;
+  openDevices?: () => void;
+  logTarget?: LogTarget;
+  clearLogTarget?: () => void;
   state?: SwitchState;
   replay: SwitchState[] | null;
   replayRef?: ReplayRef;

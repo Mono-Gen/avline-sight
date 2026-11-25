@@ -2,6 +2,7 @@ package poller
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"sort"
 	"strconv"
@@ -755,7 +756,8 @@ func (w *worker) collectSlow() error {
 	}
 	// LLDP
 	w.st.Neighbors = w.st.Neighbors[:0]
-	lrows, err := w.c.WalkColumns([]string{mib.LldpRemChassisID, mib.LldpRemPortID, mib.LldpRemSysName, mib.LldpRemSysDesc})
+	// subtype列は同じ表の整数1つずつなので、追加してもリクエスト数はほぼ増えない。
+	lrows, err := w.c.WalkColumns([]string{mib.LldpRemChassisIDSubtype, mib.LldpRemChassisID, mib.LldpRemPortIDSubtype, mib.LldpRemPortID, mib.LldpRemSysName, mib.LldpRemSysDesc})
 	w.markCap("lldp", err, len(lrows))
 	mgmt := map[string]string{} // "localPort.remIndex" → IP
 	if mrows, err := w.c.WalkColumns([]string{mib.LldpRemManAddrIfID}); err == nil {
@@ -772,19 +774,16 @@ func (w *worker) collectSlow() error {
 			continue
 		}
 		local := int(r.Index[1])
-		ch := sx.Bytes(r.Cols[mib.LldpRemChassisID])
-		chs := sx.BytesToMAC(ch)
-		if chs == "" {
-			chs = sx.Str(r.Cols[mib.LldpRemChassisID])
-		}
+		chs, _ := lldpID(r.Cols[mib.LldpRemChassisID], sx.Int(r.Cols[mib.LldpRemChassisIDSubtype]), lldpChassisMAC, true)
+		portID, portIsMAC := lldpID(r.Cols[mib.LldpRemPortID], sx.Int(r.Cols[mib.LldpRemPortIDSubtype]), lldpPortMAC, false)
 		n := model.Neighbor{LocalIfIndex: local, ChassisID: chs, SysName: sx.Str(r.Cols[mib.LldpRemSysName]),
-			SysDesc: sx.Str(r.Cols[mib.LldpRemSysDesc]), PortID: sx.Str(r.Cols[mib.LldpRemPortID]),
+			SysDesc: sx.Str(r.Cols[mib.LldpRemSysDesc]), PortID: portID,
 			MgmtIP: mgmt[fmt.Sprintf("%d.%d", r.Index[1], r.Index[2])]}
 		n.IsNetgear = strings.Contains(strings.ToUpper(n.SysDesc), "NETGEAR") || strings.Contains(n.SysDesc, "M4250") || strings.Contains(n.SysDesc, "AV Line") || oui.Lookup(chs) == "Netgear"
 		if p := pm[local]; p != nil {
 			n.LocalPort = p.Name
-			if chs != "" {
-				d := add(local, chs)
+			if key := lldpDeviceKey(chs, portID, portIsMAC); key != "" {
+				d := add(local, key)
 				d.LLDPName, d.LLDPDesc, d.LLDPPort, d.Source = n.SysName, n.SysDesc, n.PortID, "lldp"
 				if n.MgmtIP != "" {
 					d.IP = n.MgmtIP
@@ -1040,3 +1039,50 @@ func syslogSeverity(text string) string {
 }
 
 var _ = gosnmp.Integer
+
+// LLDPのID subtype（IEEE 802.1AB）。MACアドレスのときだけバイト列をMAC表記にする。
+const (
+	lldpChassisMAC = 4
+	lldpPortMAC    = 3
+)
+
+// lldpID はLLDPのchassis ID / port IDを表示用の文字列にする。
+// subtypeがMACならMAC表記。subtypeが読めない（0）ときは6バイトをMACとみなすが、
+// assumeMACがfalseなら表示できない文字を含む場合に限る（6文字のポート名をMACと誤らないため）。
+// 例: PCのLLDPはchassis IDにホスト名（local）、port IDにMACのバイト列を送ることがある。
+func lldpID(pdu gosnmp.SnmpPDU, subtype, macSubtype int64, assumeMAC bool) (string, bool) {
+	b := sx.Bytes(pdu)
+	mac := subtype == macSubtype || (subtype == 0 && len(b) == 6 && (assumeMAC || !printable(b)))
+	if mac {
+		if text := sx.BytesToMAC(b); text != "" {
+			return text, true
+		}
+	}
+	return sx.Str(pdu), false
+}
+
+func printable(b []byte) bool {
+	for _, c := range b {
+		if c < 0x20 || c > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+// lldpDeviceKey は接続機器一覧での識別子。MACで識別できればFDB/ARPの同じ機器と1件にまとまる。
+// chassis IDがMACでなく（ホスト名など）、port IDがMACならそちらを使う。
+func lldpDeviceKey(chassis, portID string, portIsMAC bool) string {
+	if isMACText(chassis) {
+		return chassis
+	}
+	if portIsMAC {
+		return portID
+	}
+	return chassis
+}
+
+func isMACText(s string) bool {
+	_, err := net.ParseMAC(s)
+	return err == nil && len(s) == 17
+}

@@ -85,3 +85,24 @@ func TestClockCollectionLabFaultAndFailedGET(t *testing.T) {
 		t.Fatal("failed initial GET produced a clock sample")
 	}
 }
+
+// 手入力・タイムゾーン未設定のスイッチは、表示時刻をPCの地域時刻として比べる。SNTPやタイムゾーン設定済みなら従来どおり。
+func TestClockOffsetManualClockWithoutTimezoneUsesPCLocalTime(t *testing.T) {
+	integer := func(n int) gosnmp.SnmpPDU { return gosnmp.SnmpPDU{Type: gosnmp.Integer, Value: n} }
+	str := func(s string) gosnmp.SnmpPDU { return gosnmp.SnmpPDU{Type: gosnmp.OctetString, Value: []byte(s)} }
+	jst := time.FixedZone("JST", 9*3600)
+	values := map[string]gosnmp.SnmpPDU{
+		mib.AgentSystemTime: str("18:50:49"), mib.AgentSystemDate: str(" Nov 25 2026"),
+		mib.AgentSystemTimeSource: integer(0), mib.AgentSystemSummerTimeState: integer(0),
+		mib.AgentTimeZoneHoursOffset: integer(0), mib.AgentTimeZoneMinutesOffset: integer(0),
+	}
+	midpoint := time.Date(2026, 11, 25, 18, 50, 29, 0, jst)
+	if offset, ok := clockOffset(values, midpoint); !ok || offset != 20 {
+		t.Fatalf("manual clock without timezone: offset %v, valid %v; want 20 seconds", offset, ok)
+	}
+	// SNTPで合わせている(1)ならスイッチの時刻はUTCそのもの: 9時間進んでいると判定する。
+	values[mib.AgentSystemTimeSource] = integer(1)
+	if offset, ok := clockOffset(values, midpoint); !ok || offset != 9*3600+20 {
+		t.Fatalf("SNTP clock: offset %v, valid %v; want 9h20s", offset, ok)
+	}
+}

@@ -5,7 +5,7 @@ import { AppSidebar } from './components/AppSidebar';
 import { pruneSwitchFilter, SwitchFilters } from './components/SwitchFilters';
 import { ConfigCredentialsDialog } from './components/ConfigCredentialsDialog';
 import { ConfigImportDialog } from './components/ConfigImportDialog';
-import { ExportDialog, ScrubBar, SettingsDialog } from './components/Dialogs';
+import { ExportDialog, ScrubBar } from './components/Dialogs';
 import { submitPhase } from './components/PhaseControls';
 import { ShowChecklist } from './components/ShowChecklist';
 import type { ChecklistTarget } from './components/ShowChecklist';
@@ -18,7 +18,7 @@ import { Devices } from './views/Devices';
 import { ConfigChanges } from './views/ConfigChanges';
 import { DhcpView, HealthAudit, Logs, MulticastView } from './views/Monitoring';
 import { SwitchIndex } from './components/SwitchIndex';
-import { SettingsTools } from './components/SettingsTools';
+import { SettingsPage } from './views/SettingsPage';
 import { MonitorStopped, OverallStatus } from './components/MonitorStatus';
 import { monitoringStopped } from './monitorHealth';
 import { usePcTime } from './pcTime';
@@ -30,13 +30,14 @@ import { useLiveFeed } from './useLiveFeed';
 import { t, useLang } from './i18n';
 import { useOperations } from './useOperations';
 import { hasCriticalActive, replayIssueCount, summarizeAlerts } from './wallAlerts';
-import type { PortMonitorTarget, SwitchFilter } from './views/props';
+import type { LogTarget, PortMonitorTarget, SwitchFilter } from './views/props';
 import { emptySwitchFilter } from './views/props';
 import { groupSwitches, hasGroupFilter } from './views/props';
 const normalPages = ['monitor', 'devices', 'logs'] as const;
 const expertPages = ['details', 'topology'] as const;
 // The former port detail page is merged into the port monitor single-switch view (plan section 21).
-type Page = typeof normalPages[number] | typeof expertPages[number];
+// Settings is a page of its own, opened from the button under the project in the sidebar.
+type Page = typeof normalPages[number] | typeof expertPages[number] | 'settings';
 const replayPages: readonly Page[] = ['monitor', 'devices', 'details'];
 const emptyReplay: SwitchState[] = [];
 const empty: Overview = {
@@ -67,6 +68,9 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = language; }, [language]);
   const [page, setPage] = useState<Page>('monitor');
   const [monitorTarget, setMonitorTarget] = useState<PortMonitorTarget>();
+  // Logs opened from a port. The key remounts Logs so the port filter starts fresh each time.
+  const [logTarget, setLogTarget] = useState<LogTarget>();
+  const [logKey, setLogKey] = useState(0);
   // Switch shown alone in the port monitor (0 = all switches).
   const [focus, setFocus] = useState(0);
   const [indexOpen, setIndexOpen] = useState(() => get('switch-index-open', 'true') !== 'false');
@@ -254,7 +258,8 @@ export default function App() {
       setDialog('');
     }
   }, [dialog, canOpenShowChecklist]);
-  useEffect(() => { setMonitorFilter(emptySwitchFilter); setTeamFilter(emptySwitchFilter); setFocus(0); }, [profileId, replayId]);
+  // A port filter from another project or replay would point at a different switch.
+  useEffect(() => { setMonitorFilter(emptySwitchFilter); setTeamFilter(emptySwitchFilter); setFocus(0); setLogTarget(undefined); setLogKey(key => key + 1); }, [profileId, replayId]);
   // Clear filter choices that no longer exist (renamed group, deleted switch or part) so the monitor never stays empty.
   const filterSwitches = replay ? asArray(replay.states) : asArray(overview?.switches);
   const filterGroups = replay ? undefined : asArray(operations.groups).map(group => group.name);
@@ -282,7 +287,7 @@ export default function App() {
   }, [issueCount, overallLabel, replaySummaryUnavailable]);
   const summary = <OverallStatus count={issueCount} critical={critical} ready={ready} stopped={stopped || replaySummaryUnavailable} replay={!!replay}
     label={overallLabel} active={legacyReplay ? undefined : alertSummary.active} unacked={legacyReplay ? undefined : alertSummary.unacked} />;
-  const pageTitle = page === 'details' ? t('cleanup.details') : t(`rack.nav.${page}`);
+  const pageTitle = page === 'details' ? t('cleanup.details') : page === 'settings' ? t('rack.settings') : t(`rack.nav.${page}`);
   const props = {
     ...viewScope,
     operations,
@@ -302,6 +307,16 @@ export default function App() {
       setMonitorTarget(target);
       setPage('monitor');
     },
+    // "See all in Logs" from a port: drop the team filter so that switch is never hidden.
+    openLogs: (target: LogTarget) => {
+      setTeamFilter(emptySwitchFilter);
+      setLogTarget(target);
+      setLogKey(key => key + 1);
+      setPage('logs');
+    },
+    logTarget,
+    openDevices: () => { setDeviceTarget(''); setPage('devices'); },
+    clearLogTarget: () => setLogTarget(undefined),
     state,
     replayRef: replay?.ts ? { id: replay.id, ts: replay.ts } : undefined,
     replayAlerts: replay?.alerts,
@@ -315,13 +330,19 @@ export default function App() {
     setWatch
   };
   const openChecklistTarget = (target: ChecklistTarget) => {
-    setDialog(target.destination === 'trap' || target.destination === 'settings' ? target.destination : '');
-    if (target.mac) {
+    // Settings is a page now; only the trap help is still a dialog.
+    setDialog(target.destination === 'trap' ? 'trap' : '');
+    if (target.destination === 'settings') {
+      setMonitorTarget(undefined);
+      setPage('settings');
+    } else if (target.mac) {
       setDeviceTarget(target.mac);
       setPage('devices');
     } else if (target.switch_id) {
       props.openPortMonitor({ switchId: target.switch_id, ifIndex: target.if_index });
     } else if (target.destination === 'logs') {
+      setLogTarget(undefined);
+      setLogKey(key => key + 1);
       setPage('logs');
     }
   };
@@ -365,7 +386,7 @@ export default function App() {
     </div>}
     <div className={wall ? 'wall-content' : 'app-workspace flex flex-1 flex-col md:flex-row'}>
       {!wall && <AppSidebar {...{ profiles, status, busy, locked, expert, run, refresh }} replay={!!replay}
-        setExpert={changeExpert} openSettings={() => setDialog('settings')}
+        setExpert={changeExpert} openSettings={() => { setMonitorTarget(undefined); setPage('settings'); }} settingsOpen={page === 'settings'}
         index={<SwitchIndex key="switch-index" switches={filterSwitches} groups={asArray(operations.groups).map(group => group.name)}
           alerts={replay ? asArray(replay.alerts) : operations.alerts} alertsKnown={!legacyReplay} focus={focus} open={indexOpen} showList={page === 'monitor'}
           onFocus={select} onToggle={() => setIndexOpen(open => { put('switch-index-open', String(!open)); return !open; })} />}>
@@ -373,7 +394,7 @@ export default function App() {
           key={v}
           disabled={!!replay && !replayPages.includes(v)}
           aria-current={page === v ? 'page' : undefined}
-          onClick={() => { setMonitorTarget(undefined); setDeviceTarget(''); setPage(v); }}
+          onClick={() => { setMonitorTarget(undefined); setDeviceTarget(''); setLogTarget(undefined); setLogKey(key => key + 1); setPage(v); }}
         >
           {v === 'details' ? t('cleanup.details') : t(`rack.nav.${v}`)}
         </button>)}
@@ -412,14 +433,20 @@ export default function App() {
             </div>
           </>}
 
-          {!wall && page === 'logs' && <>{teamFilterRow}<Logs {...props} {...activeTeamFilter} /></>}
+          {!wall && page === 'settings' && (settings ? <SettingsPage key={profileId} value={settings} profileId={profileId} run={run} busy={busy}
+            locked={locked} replay={!!replay} webAddr={status?.web_addr} trap={status?.trap} switches={asArray(overview?.switches)}
+            groups={asArray(operations.groups)} theme={theme} setTheme={setTheme} notifications={notifications} setNotifications={setNotifications}
+            setDialog={setDialog} setReplay={next => { setPage('monitor'); setReplay(next); }} refreshStatus={refresh} refreshGroups={operations.refresh}
+            // Reload without clearing, so unsaved changes in the other sections stay.
+            onSaved={async () => setSettings(await api<Settings>('/api/settings'))} /> : <p>{t('rack.loading')}</p>)}
+          {!wall && page === 'logs' && <>{teamFilterRow}<Logs key={logKey} {...props} {...activeTeamFilter} /></>}
         </ErrorBoundary>
       </main>
     </div>
     {!wall && expert && terminal > 0 && !locked && <TerminalDrawer id={terminal} close={() => setTerminal(0)} />}
 
     {!wall && !locked && dialog === 'export' && <ExportDialog close={() => setDialog('')} busy={busy} run={run} />}
-    {!wall && dialog === 'config-import' && <ConfigImportDialog locked={locked} close={() => setDialog('settings')}
+    {!wall && dialog === 'config-import' && <ConfigImportDialog locked={locked} close={() => setDialog('')}
       onApplied={async () => {
         setSelected(0);
         setFocus(0);
@@ -439,21 +466,6 @@ export default function App() {
           setDialog('');
         })} />}
 
-    {!wall && dialog === 'trap' && <TrapHelp close={() => setDialog('')} error={status?.trap.error} />}
-    {!wall && dialog === 'settings' && settings && <SettingsDialog
-      key={profileId}
-      profileId={profileId}
-      locked={locked}
-      tools={<SettingsTools {...{ theme, setTheme, notifications, setNotifications, busy, locked, groups: operations.groups, profileId, run, setDialog }}
-        replay={!!replay} refresh={operations.refresh} setReplay={next => { setPage('monitor'); setReplay(next); }} />}
-      value={settings}
-      webAddr={status?.web_addr}
-      close={() => {
-        setDialog('');
-        setSettingsVersion(value => value + 1);
-      }}
-      busy={busy}
-      run={run}
-    />}
+    {!wall && dialog === 'trap' && <TrapHelp close={() => setDialog('')} error={status?.trap.error} listen={status?.trap.addr} />}
   </div>;
 }

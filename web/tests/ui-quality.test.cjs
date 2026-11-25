@@ -34,7 +34,7 @@ const { eventDetails, eventHint, eventTitle, isRecommendationEvent, setLang, t }
 const { monitoringStopped, issueAlerts, newIssueAlerts } = require('../src/monitorHealth.ts');
 const { OverallStatus, MonitorStopped } = require('../src/components/MonitorStatus.tsx');
 const { WallSwitchTile } = require('../src/components/WallSwitchTile.tsx');
-const { SettingsTools } = require('../src/components/SettingsTools.tsx');
+const { BrowserDisplaySettings, DataTransfers, GroupOrder } = require('../src/components/SettingsTools.tsx');
 const { AppHeader } = require('../src/components/AppHeader.tsx');
 const { AppSidebar } = require('../src/components/AppSidebar.tsx');
 const { SwitchFilters } = require('../src/components/SwitchFilters.tsx');
@@ -182,7 +182,12 @@ test('switch action popup dismisses outside, on Escape and when an item is chose
     assert.equal(listeners.size, 0);
   }
   const rack = fs.readFileSync(path.join(__dirname, '../src/components/RackRow.tsx'), 'utf8');
-  assert.match(rack, /<ActionPopup[^]*actions\.select\(sw\.id\)[^]*<\/ActionPopup>/);
+  // The switch name opens the switch alone; the labelled menu keeps WebUI, terminal and edit, and deleting lives in the edit form.
+  assert.match(rack, /data-action="open-switch"\s+onClick=\{\(\) => actions\.select\(sw\.id\)\}/);
+  assert.match(rack, /<ActionPopup [^>]*text=\{`\$\{t\('rack\.actions'\)\} ▾`\}>/);
+  assert.doesNotMatch(rack, /<ActionPopup[^]*(actions\.select|rack\.remove|'DELETE')[^]*<\/ActionPopup>/);
+  const form = fs.readFileSync(path.join(__dirname, '../src/components/SwitchForm.tsx'), 'utf8');
+  assert.match(form, /window\.confirm\(t\('rack\.removeConfirm'[^]*json\('DELETE'\)/);
 });
 
 test('front panel shows full short names and uses icons when a status word would crowd the tile', context => {
@@ -712,7 +717,7 @@ test('Project and project-file text is consistent in both languages', () => {
       setLang(language);
       assert.deepEqual(['rack.profile', 'configFile.import', 'configFile.export'].map(key => t(key)), labels);
       assert.match(t('configFile.applyNote'), language === 'ja' ? /新しいプロジェクト/ : /new project/);
-      const tools = render(SettingsTools, { profileId: 1, groups: [] });
+      const tools = render(DataTransfers, { profileId: 1, groups: [], replay: false });
       assert.ok(tools.includes(labels[1]));
       assert.ok(tools.includes(labels[2]));
       assert.match(tools, /href="\/api\/profiles\/1\/export" download="avline-sight.config.json"/);
@@ -1060,6 +1065,9 @@ test('Expert display defaults off, persists locally, and leaves expert pages whe
     const cancel = loadSettings();
     await new Promise(setImmediate);
     cancel();
+    // Settings is a page now: it marks itself current in the sidebar, then go back to the port monitor for the checks below.
+    assert.equal(sidebar(draw()).settingsOpen, true);
+    menu(draw())[0].props.onClick();
     return draw();
   };
   const normal = [t('rack.nav.monitor'), t('rack.nav.devices'), t('rack.nav.logs')];
@@ -1545,7 +1553,8 @@ test('Switch index shows fault marks on every page and the list only on the port
 test('ヘッダーから音声・転送・言語を撤去し、設定には既定OFFの通知・CSV・表示順を置く', () => {
   const html = render(AppHeader, { online: true, wall: false, phase: 'show', profiles: [], part: '', status: { locked: false, profile: { id: 1 } }, run: noop });
   assert.doesNotMatch(html, /音あり|消音|表示言語|>書出<|type="file"/);
-  const tools = render(SettingsTools, { theme: 'dark', notifications: false, groups: [{ name: 'Audio' }], run: noop });
+  const tools = [render(BrowserDisplaySettings, { theme: 'dark', notifications: false, run: noop }),
+    render(DataTransfers, { groups: [{ name: 'Audio' }], replay: false, run: noop }), render(GroupOrder, { groups: [], run: noop })].join('');
   assert.match(tools, /表示言語|Language/);
   assert.match(tools, /type="checkbox"/);
   assert.doesNotMatch(tools, /checked=""/);
@@ -1780,8 +1789,7 @@ test('Switch health and the clock warning show the measured offset in both langu
   }
 });
 
-test('The post-show report failure is visible inside the settings dialog and clears on retry', async () => {
-  const { SettingsDialog } = require('../src/components/SettingsDialog.tsx');
+test('The post-show report failure is visible next to its button and clears on retry', async () => {
   const failure = 'Report download failed';
   let error = '';
   let fail = true;
@@ -1799,8 +1807,8 @@ test('The post-show report failure is visible inside the settings dialog and cle
   const click = () => elements(draw(), node => node.type === 'button')[0].props.onClick();
   click();
   await action;
-  const html = render(SettingsDialog, { value: { thresholds: {} }, close: noop, run: noop, tools: draw() });
-  assert.match(html, /role="dialog"[^]*role="alert"[^>]*>[^<]*Report download failed/);
+  const html = renderToStaticMarkup(draw());
+  assert.match(html, /role="alert"[^>]*>[^<]*Report download failed/);
   assert.equal(downloaded, false);
   fail = false;
   click();
@@ -1901,7 +1909,7 @@ test('stale switch filters are cleared and empty part presets do not count as a 
 
 test('logs and expert detail tabs get the team filter, the wall display never does', () => {
   const app = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8');
-  assert.match(app, /page === 'logs' && <>\{teamFilterRow\}<Logs \{\.\.\.props\} \{\.\.\.activeTeamFilter\} \/>/);
+  assert.match(app, /page === 'logs' && <>\{teamFilterRow\}<Logs key=\{logKey\} \{\.\.\.props\} \{\.\.\.activeTeamFilter\} \/>/);
   for (const view of ['MulticastView', 'DhcpView', 'HealthAudit', 'ConfigChanges', 'Recommendations']) {
     assert.match(app, new RegExp(`<${view} [^>]*\{\.\.\.activeTeamFilter\}`));
   }
@@ -2059,4 +2067,31 @@ test('Link change shows time today, date otherwise, and how long ago; unknown st
   const css = fs.readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
   assert.match(css, /\.focus-ports-table \.col-extra \{ display: none; \}/);
   assert.match(css, /@container \(min-width: 1100px\) \{\s*\.focus-ports-table \.col-extra \{ display: table-cell; \}/);
+});
+
+test('Ping all reports running, then the result with the devices that did not answer, through onPing only', async () => {
+  const outcomes = [];
+  const notices = [];
+  let action;
+  const { GroupActions } = sourceWith('../src/components/GroupActions.tsx', {
+    '../api': { json: (method, body) => ({ method, body }), api: async () => ({ ok: 1, total: 2, results: [
+      { ip: '192.0.2.1', status: 'ok', rtt_ms: 1 }, { ip: '192.0.2.2', status: 'timeout', rtt_ms: 0 },
+    ] }) },
+  }, { window: { confirm: () => true } });
+  const props = { group: 'Audio', locked: false, wall: false, busy: false, replay: false, phase: 'setup',
+    devices: [{ ip: '192.0.2.1', group_tag: 'Audio', label: 'Mixer' }, { ip: '192.0.2.2', group_tag: 'Audio', label: 'Stage box' }],
+    run: callback => { action = callback(); }, refresh: async () => {}, notice: value => notices.push(value), onPing: value => outcomes.push(value) };
+  elements(GroupActions(props), node => node.props?.['data-action'] === 'ping')[0].props.onClick();
+  await action;
+  assert.equal(outcomes[0].running, 2);
+  assert.equal(outcomes[1].ok, 1);
+  assert.equal(JSON.stringify(outcomes[1].noReply.map(row => [row.ip, row.names])), JSON.stringify([['192.0.2.2', ['Stage box']]]));
+  assert.deepEqual(notices, []);
+});
+
+test('the pre-show checklist opens Settings as a page, not a removed dialog', () => {
+  const app = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8');
+  assert.match(app, /setDialog\(target\.destination === 'trap' \? 'trap' : ''\)/);
+  assert.match(app, /target\.destination === 'settings'\) \{\s*setMonitorTarget\(undefined\);\s*setPage\('settings'\)/);
+  assert.doesNotMatch(app, /setDialog\('settings'\)|dialog === 'settings'/);
 });

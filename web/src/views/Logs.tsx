@@ -83,21 +83,24 @@ function jstInput(date: Date) {
 }
 
 export function Logs(props: ViewProps) {
+  const target = props.logTarget;
   const [localFilter, setFilter] = useState<EventFilters>({
     category: '',
     severity: '',
-    switch_id: '',
+    switch_id: target ? String(target.switchId) : '',
+    if_index: target ? String(target.ifIndex) : '',
     q: '',
     from: '',
     to: '',
-    // Default view: warnings and above.
-    issuesOnly: true,
+    // Default view: warnings and above. Opened from a port: everything about that port.
+    issuesOnly: !target,
   });
   const [period, setPeriod] = useState<Period>('all');
   const groupFiltered = hasGroupFilter(props);
   const groupMembers = groupSwitches(props);
   const visibleIds = new Set(groupMembers.map(item => item.id));
-  const filter = groupFiltered && !visibleIds.has(Number(localFilter.switch_id)) ? { ...localFilter, switch_id: '' } : localFilter;
+  // Leaving the switch also leaves its port: a port number alone would match every switch.
+  const filter = groupFiltered && !visibleIds.has(Number(localFilter.switch_id)) ? { ...localFilter, switch_id: '', if_index: '' } : localFilter;
   const ackable = acknowledgeableEventIds(asArray(props.operations?.alerts));
   const queryKey = JSON.stringify([filter, filter.unackedOnly ? [...ackable].sort((a, b) => a - b) : []]);
   // Show start is looked up first and on its own (see showStart below).
@@ -144,9 +147,13 @@ export function Logs(props: ViewProps) {
     const id = String(event.switch_id);
     if (!groupFiltered && event.switch_id > 0 && event.switch_name && !switches.has(id)) switches.set(id, event.switch_name);
   }
-  const [selectedSwitchName, setSelectedSwitchName] = useState('');
+  const [selectedSwitchName, setSelectedSwitchName] = useState(target?.switchName || '');
   if (filter.switch_id && !switches.has(filter.switch_id)) switches.set(filter.switch_id, selectedSwitchName);
   const changeFilter = (key: keyof EventFilters, value: string | boolean) => setFilter(previous => ({ ...previous, [key]: value }));
+  const clearPort = () => {
+    setFilter(previous => ({ ...previous, if_index: '' }));
+    props.clearLogTarget?.();
+  };
   const ackIds = rows.filter(event => canAcknowledgeEvent(event, ackable)).map(event => event.id);
   const disabled = props.busy || props.locked || !!props.replay;
   const refresh = () => Promise.all([result.refresh(), props.operations?.refresh()]);
@@ -213,6 +220,10 @@ export function Logs(props: ViewProps) {
           </div>
         </details>
       </div>
+      {target && filter.if_index && <div className="log-target">
+        <span>{t('logs.portTarget', { name: target.switchName, port: target.portName })}</span>
+        <button type="button" data-action="clear-port" aria-label={t('logs.clearPortTarget')} title={t('logs.clearPortTarget')} onClick={clearPort}>✕</button>
+      </div>}
       <details className="log-more">
         <summary>{t('logs.more')}</summary>
         <div className="flex flex-wrap items-center gap-2">
@@ -227,6 +238,7 @@ export function Logs(props: ViewProps) {
           <label>{t('ui.m018')} <select value={filter.switch_id} onChange={event => {
             setSelectedSwitchName(switches.get(event.target.value) || '');
             changeFilter('switch_id', event.target.value);
+            if (filter.if_index) clearPort();
           }}>
             <option value="">{t('rack.all')}</option>
             {[...switches].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => <option key={id} value={id}>{name}</option>)}

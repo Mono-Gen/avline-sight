@@ -5,13 +5,15 @@ import { asArray } from '../format';
 import type { SwitchConfig } from '../types';
 import { Dialog } from './Common';
 type Run = (f: () => Promise<void>) => void;
-export function SwitchForm({ value, close, run, busy, groups = [], onSaved }: {
+export function SwitchForm({ value, close, run, busy, groups = [], onSaved, onDeleted }: {
   value?: SwitchConfig;
   close: () => void;
   run: Run;
   busy: boolean;
   groups?: string[];
   onSaved?: () => Promise<void>;
+  // Given only where deleting belongs (the switch's own edit form), always behind a confirmation.
+  onDeleted?: () => void;
 }) {
   const listId = useId();
   const [form, setForm] = useState<Partial<SwitchConfig>>(value ? {
@@ -64,5 +66,14 @@ export function SwitchForm({ value, close, run, busy, groups = [], onSaved }: {
         await onSaved?.();
       })}
     >{t('ui.m187')}</button>
+    {value && onDeleted && <div className="switch-form-danger">
+      <button className="button-danger" data-action="delete-switch" disabled={busy} onClick={() => {
+        if (window.confirm(t('rack.removeConfirm', { name: value.name }))) run(async () => {
+          await api(`/api/switches/${value.id}`, json('DELETE'));
+          close();
+          onDeleted();
+        });
+      }}>{t('rack.remove')}</button>
+    </div>}
   </Dialog>;
 }
