@@ -3,6 +3,8 @@
 AVLine-Sight は、NETGEAR AV Line（M4250シリーズ）で組んだ AV over IP ネットワーク（Dante / AES67 / NDI / SDVoE / ST 2110 / Q-SYS / sACN / AVB）の監視ソフトです。
 WebUIを同梱した持ち運び可能なWindows用の単一実行ファイルです。監視データは既定で実行ファイルと同じ階層の `./data/` に保存します。
 
+> **非公式ツールです。** AVLine-Sight は個人の独立したプロジェクトで、NETGEARとは関係がなく、NETGEARの承認やサポートを受けたものではありません。NETGEAR・AV Line・M4250 はNETGEAR, Inc.の名称または商標で、本ツールが対応するスイッチを示すためにだけ使っています。その他の製品名（Dante・Q-SYS など）はそれぞれの権利者に帰属します。
+
 英語版は [README.md](README.md) を参照してください。
 
 ## 監視画面

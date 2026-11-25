@@ -3,6 +3,8 @@
 AVLine-Sight monitors AV over IP networks built with NETGEAR AV Line (M4250 series) switches, including Dante, AES67, NDI, SDVoE, ST 2110, Q-SYS, sACN and AVB.
 It ships as one portable Windows executable with the web UI built in. By default, it stores monitoring data under `./data/` next to the executable.
 
+> **Unofficial.** AVLine-Sight is an independent project and is not affiliated with, endorsed by, or supported by NETGEAR. NETGEAR, AV Line and M4250 are names or trademarks of NETGEAR, Inc., used here only to identify the switches this tool works with. Other product names (Dante, Q-SYS and so on) belong to their respective owners.
+
 日本語版は [README_JP.md](README_JP.md) を参照してください。
 
 ## Monitoring screens
