@@ -6,6 +6,7 @@ import { StateMark } from '../components/SwitchIndex';
 import { DeviceInfo } from '../components/DeviceInfo';
 import { VlanFacts } from '../components/VlanFacts';
 import { switchHealth } from '../components/RackRow';
+import { jstTime, pcTimestamp } from '../pcTime';
 import { withoutUnusedLags } from '../rackModel';
 import { issueAlerts } from '../monitorHealth';
 import { api, json } from '../api';
@@ -72,6 +73,19 @@ export function deviceDetails(d: Pick<Device, 'label' | 'lldp_name' | 'vendor' |
 // Only a duplex the switch actually reports; raw values such as "unknown(0)" are not shown.
 function duplexLabel(duplex: string | undefined) {
   return /full/i.test(duplex || '') ? t('focus.fullDuplex') : /half/i.test(duplex || '') ? t('focus.halfDuplex') : '';
+}
+// When the link last changed, in PC time (derived from the switch's ifLastChange, so a wrong switch clock does not matter).
+// Time only for today, date and time otherwise, plus a short "how long ago". Unknown (never collected) gives null.
+export function linkChangeText(value: string | undefined, now = Date.now()) {
+  const date = new Date(value || '');
+  if (!value || !Number.isFinite(date.getTime()) || date.getUTCFullYear() < 2) return null;
+  const time = jstTime(date, false);
+  const stamp = pcTimestamp(value, false, now);
+  const when = stamp === jstTime(date) ? time : stamp.replace(jstTime(date), time);
+  const minutes = Math.max(0, Math.floor((now - date.getTime()) / 60000));
+  const ago = minutes < 60 ? t('focus.minutesAgo', { n: minutes }) : minutes < 48 * 60 ? t('focus.hoursAgo', { n: Math.floor(minutes / 60) })
+    : t('focus.daysAgo', { n: Math.floor(minutes / 1440) });
+  return { when: t('focus.since', { time: when }), ago };
 }
 export function speedLabel(mbps: number) {
   return mbps >= 1000 ? `${mbps % 1000 === 0 ? mbps / 1000 : decimal(mbps / 1000)}G` : mbps > 0 ? `${mbps}M` : '—';
@@ -231,7 +245,10 @@ export function SwitchPorts(p: SwitchPortsProps) {
         {linkedPorts.length ? <table className="focus-ports-table">
           <thead><tr><th>{t('focus.colPort')}</th><th>{t('focus.colDevice')}</th><th>{t('focus.colState')}</th>
             <th>{t('focus.colSpeed')}</th><th>{t('focus.colVlan')}</th><th>{t('focus.colPoe')}</th><th>{t('focus.colErrors')}</th>
-            <th className="num">{t('focus.colRate')}</th><th title={t('focus.trendHelp')}>{t('focus.colTrend')}</th></tr></thead>
+            <th className="num">{t('focus.colRate')}</th>
+            {/* Shown only when the table has room (right-hand detail closed), see .col-extra in style.css. */}
+            <th className="num col-extra">{t('focus.colMulticast')}</th><th className="col-extra">{t('focus.colChanged')}</th>
+            <th title={t('focus.trendHelp')}>{t('focus.colTrend')}</th></tr></thead>
           <tbody>{linkedPorts.map(x => {
             const counts = summarizeAlerts(portAlerts(x));
             const first = asArray(x.devices)[0];
@@ -252,6 +269,11 @@ export function SwitchPorts(p: SwitchPortsProps) {
               <td className="num"><span className={x.err_delta > 0 ? 'metric-bad' : undefined}>{x.err_delta}</span> / <span className={x.discard_delta > 0 ? 'metric-bad' : undefined}>{x.discard_delta}</span></td>
               {/* RX above TX, so the column stays narrow next to the detail. */}
               <td className="num focus-rate"><span>{formatBps(x.rx_bps)}</span><small>{formatBps(x.tx_bps)}</small></td>
+              <td className="num focus-rate col-extra"><span>{decimal(x.rx_mc_pps)} pps</span><small>{decimal(x.tx_mc_pps)} pps</small></td>
+              <td className="focus-rate col-extra">{(() => {
+                const changed = linkChangeText(x.last_change);
+                return changed ? <><span>{changed.when}</span><small>{changed.ago}</small></> : '—';
+              })()}</td>
               <td><Trend values={trend[x.if_index] || []} /></td>
             </tr>;
           })}</tbody>

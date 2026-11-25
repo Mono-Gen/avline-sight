@@ -121,8 +121,22 @@ func (w *worker) collectSystem() error {
 		w.flapChange = nil
 	}
 	w.lastUptime = ticks
+	w.uptimeAt = time.Now() // ifLastChange（同じsysUpTime基準）を監視PCの時刻へ直すために、取得した時刻を覚える
 	st.UptimeSec = up
 	return nil
+}
+
+// linkChangeTime は ifLastChange（sysUpTime基準の 1/100 秒）を監視PCの時刻に直す。
+// uptimeTicks は uptimeAt の時点で取得した sysUpTime。まだ取っていない、または変化が未来になる（再起動直後で古い値）ときは false。
+func linkChangeTime(now, uptimeAt time.Time, uptimeTicks int64, changeTicks uint64) (time.Time, bool) {
+	if uptimeAt.IsZero() || uptimeTicks <= 0 {
+		return time.Time{}, false
+	}
+	nowTicks := uptimeTicks + now.Sub(uptimeAt).Milliseconds()/10
+	if int64(changeTicks) > nowTicks {
+		return time.Time{}, false
+	}
+	return now.Add(-time.Duration(nowTicks-int64(changeTicks)) * 10 * time.Millisecond).UTC(), true
 }
 
 // collectFast はポート状態・流量・PoE実電力（Fast Tier）。
@@ -175,6 +189,13 @@ func (w *worker) collectFast() error {
 			w.onLinkChange(p, oper, spd)
 		}
 		p.Oper, p.SpeedMbps = oper, spd
+		// 最後にリンクが変化した時刻を、スイッチ自身の ifLastChange から監視PCの時刻で求める（スイッチの時計がずれていても正しい）。
+		// アプリ起動前の変化も分かる。sysUpTime をまだ取っていない、または値が合わない（再起動直後など）ときは前の値のまま。
+		if t, ok := lastChanges[ix]; ok {
+			if at, ok := linkChangeTime(now, w.uptimeAt, w.lastUptime, t); ok {
+				p.LastChange = at
+			}
+		}
 		if oper == "up" && spd > 0 {
 			defer func(ix, sp int) { w.lastUpSpeed[ix] = sp }(ix, spd)
 		}

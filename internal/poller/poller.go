@@ -158,6 +158,7 @@ type worker struct {
 	failures    int
 	lastUpSpeed map[int]int // ポート毎の直近リンクアップ速度
 	slowCount   int
+	uptimeAt    time.Time // lastUptime を取得した時刻
 }
 
 // reprobeEverySlow はSlow周期何回ごとに非対応グループを再確認するか（既定45秒×10≒7.5分）。

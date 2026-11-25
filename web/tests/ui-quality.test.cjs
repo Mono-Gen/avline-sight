@@ -2043,3 +2043,20 @@ test('VLAN card lists settings as facts and the port-description text as written
   // Facts only: no judgement words in what is shown (the help tooltip explains where the written text comes from).
   assert.doesNotMatch(html.replace(/ title="[^"]*"/g, ''), /推奨|異常|要確認|プロファイル/);
 });
+
+test('Link change shows time today, date otherwise, and how long ago; unknown stays a dash', () => {
+  setLang('ja');
+  const { linkChangeText } = require('../src/views/SwitchPorts.tsx');
+  const now = Date.parse('2026-11-25T08:00:00Z'); // 17:00 JST
+  // Expected from the definition: 14:28:00 JST today is 2 h 32 min before 17:00 JST.
+  assert.deepEqual(linkChangeText('2026-11-25T05:28:00Z', now), { when: '14:28:00 から', ago: '2時間前' });
+  assert.deepEqual(linkChangeText('2026-11-25T07:50:00Z', now), { when: '16:50:00 から', ago: '10分前' });
+  const older = linkChangeText('2026-11-20T00:00:00Z', now);
+  assert.match(older.when, /^2026-11-20 09:00:00 から$/);
+  assert.equal(older.ago, '5日前');
+  assert.equal(linkChangeText('0001-01-01T00:00:00Z', now), null);
+  assert.equal(linkChangeText('', now), null);
+  const css = fs.readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
+  assert.match(css, /\.focus-ports-table \.col-extra \{ display: none; \}/);
+  assert.match(css, /@container \(min-width: 1100px\) \{\s*\.focus-ports-table \.col-extra \{ display: table-cell; \}/);
+});
