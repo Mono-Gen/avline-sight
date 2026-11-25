@@ -30,7 +30,7 @@ import (
 )
 
 // version はビルド時に -ldflags "-X main.version=..." で上書きする。
-var version = "0.3.0"
+var version = "0.4.0"
 
 func main() {
 	// ダブルクリック起動（黒い画面なし）では false。PowerShell等から起動したときはその画面へ出力する

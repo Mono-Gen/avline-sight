@@ -1,7 +1,7 @@
 # 実行ファイルに埋め込むWindowsリソース（アイコン・バージョン情報）を作る。
 # windres（MinGW付属）が要る。生成物 cmd/avline-sight/rsrc_windows_amd64.syso は
 # リポジトリに含めるので、windres の無い環境でもアイコン付きでビルドできる。
-# 使い方: pwsh scripts/make_resources.ps1 -Version 0.3.0
+# 使い方: pwsh scripts/make_resources.ps1 -Version 0.4.0
 param([Parameter(Mandatory = $true)][string]$Version)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
