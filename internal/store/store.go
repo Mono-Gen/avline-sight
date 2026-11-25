@@ -886,7 +886,7 @@ func (s *Store) Events(f EventFilter) ([]model.Event, error) {
 		args = append(args, f.ProfileID, f.ProfileID)
 	}
 	if f.RestoreProfileID != 0 {
-		conds = append(conds, `acked=0 AND category<>'TRAP' AND severity IN ('CRITICAL','WARNING') AND (switch_id IN (SELECT id FROM switches WHERE profile_id=?) OR (switch_id=0 AND json_extract(detail_json,'$._profile_id')=?))`)
+		conds = append(conds, `acked=0 AND category NOT IN ('TRAP','SYSLOG') AND severity IN ('CRITICAL','WARNING') AND (switch_id IN (SELECT id FROM switches WHERE profile_id=?) OR (switch_id=0 AND json_extract(detail_json,'$._profile_id')=?))`)
 		args = append(args, f.RestoreProfileID, f.RestoreProfileID)
 	}
 	if f.Category != "" {

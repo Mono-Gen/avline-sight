@@ -344,6 +344,31 @@ func TestRestoreSkipsPastRecommendations(t *testing.T) {
 	}
 }
 
+// スイッチ内部ログ（SYSLOG）は警告・重大でもアラートにしない（engine.go の発報と同じ扱い）。
+// 再起動時の復元で未確認アラートとして復活させず、確認の取り消しもできない。
+func TestRestoreAndUnackSkipSwitchLogs(t *testing.T) {
+	e, st := newTestEngine(t)
+	logEv := model.Event{TS: time.Now(), Category: "SYSLOG", Severity: model.SevWarning, Code: "SWITCH_LOG",
+		Title: "<188>Oct 30 07:26:04 x: %% WARN Buffer pool is running out", SwitchID: 1, Dedupe: "log:1:x",
+		Detail: map[string]any{"_profile_id": e.ProfileID()}}
+	if inserted, err := st.InsertEvent(&logEv); err != nil || !inserted {
+		t.Fatalf("insert syslog: %v (%v)", err, inserted)
+	}
+	issue := model.Event{TS: time.Now(), Category: "ANOMALY", Severity: model.SevWarning, Code: "PHY_ERRORS",
+		SwitchID: 1, IfIndex: 1, Detail: map[string]any{"_profile_id": e.ProfileID()}}
+	if inserted, err := st.InsertEvent(&issue); err != nil || !inserted {
+		t.Fatalf("insert issue: %v (%v)", err, inserted)
+	}
+	e.restoreAlerts()
+	alerts := e.Alerts()
+	if len(alerts) != 1 || alerts[0].Code != "PHY_ERRORS" {
+		t.Fatalf("restored alerts must exclude switch logs: %+v", alerts)
+	}
+	if err := e.Unack(logEv.ID); err != ErrUndoUnavailable {
+		t.Fatalf("unack of a switch log: %v, want ErrUndoUnavailable", err)
+	}
+}
+
 func TestPortRecommendationsSkipMissingAndUnreachableData(t *testing.T) {
 	states := []*model.SwitchState{nil,
 		{ID: 1, Reachable: true, Ports: []*model.Port{nil}},

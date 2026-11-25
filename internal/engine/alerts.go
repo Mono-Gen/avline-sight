@@ -370,7 +370,7 @@ func (e *Engine) Unack(id int64) error {
 		e.mu.Unlock()
 		return err
 	}
-	if len(events) == 0 || events[0].Category == "TRAP" || (events[0].Severity != model.SevCritical && events[0].Severity != model.SevWarning) {
+	if len(events) == 0 || events[0].Category == "TRAP" || events[0].Category == "SYSLOG" || (events[0].Severity != model.SevCritical && events[0].Severity != model.SevWarning) {
 		e.mu.Unlock()
 		return ErrUndoUnavailable
 	}
