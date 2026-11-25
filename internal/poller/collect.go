@@ -981,10 +981,38 @@ func (w *worker) collectLogs() {
 		}
 		text := sx.Str(r.Cols[mib.LogInMemoryMsgText])
 		// 監視PC起動前のログも取り込む。アプリ再起動時の重複はDedupeキーでDB側が排除する
-		w.emit(model.Event{Category: "SYSLOG", Severity: model.SevInfo, Code: "SWITCH_LOG", Title: text,
+		w.emit(model.Event{Category: "SYSLOG", Severity: syslogSeverity(text), Code: "SWITCH_LOG", Title: text,
 			Detail: map[string]any{"msg_index": ix}, Dedupe: fmt.Sprintf("log:%d:%s", ix, text)})
 	}
 	w.lastLogIdx = maxIdx
+}
+
+// syslogSeverity はスイッチ内部ログ先頭の PRI（例: "<188>"）から重要度を決める。
+// syslog の重要度は PRI を 8 で割った余り（RFC 5424 6.2.1）。
+// 0〜2（emerg/alert/crit）を CRITICAL、3〜4（err/warning）を WARNING、5〜7 と PRI 無し・不正は INFO とする。
+// err(3) を CRITICAL にしないのは、スイッチの err は運用上の一過性メッセージも多く、
+// 最重の表示が埋もれるのを避けるため。SYSLOG はアラートにならず（engine.go）、ログ画面の色と絞り込みだけに効く。
+func syslogSeverity(text string) string {
+	if !strings.HasPrefix(text, "<") {
+		return model.SevInfo
+	}
+	end := strings.IndexByte(text, '>')
+	// PRI は 1〜3 桁で、最大 191（facility 23 × 8 + 7）
+	if end < 2 || end > 4 {
+		return model.SevInfo
+	}
+	pri, err := strconv.Atoi(text[1:end])
+	if err != nil || pri < 0 || pri > 191 {
+		return model.SevInfo
+	}
+	switch sev := pri % 8; {
+	case sev <= 2:
+		return model.SevCritical
+	case sev <= 4:
+		return model.SevWarning
+	default:
+		return model.SevInfo
+	}
 }
 
 var _ = gosnmp.Integer
