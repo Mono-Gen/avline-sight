@@ -54,6 +54,18 @@ function Sparkline({ samples, label }: { samples: { rx: number; tx: number }[]; 
   </svg>;
 }
 
+// Switch health items with the same thresholds everywhere (rack row and single-switch view).
+export function switchHealth(sw: SwitchSummary, thresholds?: Record<string, number>) {
+  const above = (value: number, threshold: number) => threshold > 0 && value >= threshold;
+  return [
+    { key: 'cpu', icon: '▣', value: `${decimal(sw.cpu_5s)}%`, bad: above(sw.cpu_5s, thresholds?.cpu_pct ?? 80) },
+    { key: 'temp', icon: '♨', value: `${decimal(sw.temp_max_c)}°C`, bad: above(sw.temp_max_c, thresholds?.temp_c ?? 65) || ['warning', 'critical', 'shutdown'].includes(sw.temp_state) },
+    { key: 'psu', icon: '⏻', value: t(sw.psu_ok ? 'pages.normal' : 'pages.abnormal'), bad: !sw.psu_ok },
+    { key: 'fan', icon: '✣', value: t(sw.fans_ok ? 'pages.normal' : 'pages.abnormal'), bad: !sw.fans_ok },
+    { key: 'poe', icon: 'ϟ', value: `${decimal(sw.poe_used_w)} / ${decimal(sw.poe_budget_w)} W`, bad: sw.poe_budget_w > 0 && above(sw.poe_used_w / sw.poe_budget_w * 100, thresholds?.poe_pct ?? 80) },
+  ] as const;
+}
+
 export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlans = [], wall, stale, uplinks, samples, actions, onPort, onEdit, onHelp, refresh }: {
   summary: SwitchSummary; ports: Port[]; devices: InventoryRow[]; alerts: Alert[]; definitions: ModelDefinitions;
   vlans?: readonly number[];
@@ -66,15 +78,7 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlan
   for (const alert of portAlerts) {
     if (!callouts.has(alert.if_index) || alert.active && !callouts.get(alert.if_index)?.active) callouts.set(alert.if_index, alert);
   }
-  const above = (value: number, threshold: number) => threshold > 0 && value >= threshold;
-  const thresholds = actions.settings?.thresholds;
-  const health = [
-    { key: 'cpu', icon: '▣', value: `${decimal(sw.cpu_5s)}%`, bad: above(sw.cpu_5s, thresholds?.cpu_pct ?? 80) },
-    { key: 'temp', icon: '♨', value: `${decimal(sw.temp_max_c)}°C`, bad: above(sw.temp_max_c, thresholds?.temp_c ?? 65) || ['warning', 'critical', 'shutdown'].includes(sw.temp_state) },
-    { key: 'psu', icon: '⏻', value: t(sw.psu_ok ? 'pages.normal' : 'pages.abnormal'), bad: !sw.psu_ok },
-    { key: 'fan', icon: '✣', value: t(sw.fans_ok ? 'pages.normal' : 'pages.abnormal'), bad: !sw.fans_ok },
-    { key: 'poe', icon: 'ϟ', value: `${decimal(sw.poe_used_w)} / ${decimal(sw.poe_budget_w)} W`, bad: sw.poe_budget_w > 0 && above(sw.poe_used_w / sw.poe_budget_w * 100, thresholds?.poe_pct ?? 80) },
-  ] as const;
+  const health = switchHealth(sw, actions.settings?.thresholds);
   return <article id={`rack-switch-${sw.id}`} tabIndex={-1} className={`rack-row${!sw.reachable || stale ? ' rack-offline' : ''}`} title={[`${sw.model} ${sw.fw}`.trim(), t('rack.lastTrap', { at: sw.last_trap_ts ? formatTime(sw.last_trap_ts) : '—' }), sw.last_error].filter(Boolean).join(' · ')}>
     <div className="rack-identity">
       <strong title={sw.name}>{sw.reachable ? '●' : '⚠'} {sw.name}</strong><span>{sw.ip}</span>

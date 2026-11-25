@@ -451,3 +451,64 @@ td {
 .alert-entry > div > div > strong:first-child { font-size: 1.1em; }
 .alert-entry.alert-critical .alert-title { color: #ffb3bb; }
 .alert-entry.alert-warning .alert-title { color: #fde68a; }
+
+/* ===== ポートモニター: スイッチ索引・数字パネル・1台表示（計画§21） ===== */
+/* 状態の形: 発生中=赤の丸に!、復旧・未確認=黄の三角、正常=青緑の角、不明=灰、すべて=枠のみ */
+.state-mark { display: inline-grid; place-items: center; width: .95rem; height: .95rem; flex: 0 0 auto; font-size: .65rem; font-weight: 900; line-height: 1; }
+.state-mark-critical { background: #ff4d5e; color: #1a0003; border-radius: 50%; }
+.state-mark-warning { background: #facc15; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.state-mark-healthy { background: #2dd4bf; border-radius: 3px; }
+.state-mark-unknown { background: #9aa3b2; border-radius: 3px; opacity: .7; }
+.state-mark-all { border: 2px solid #9aa3b2; border-radius: 3px; }
+.switch-index { flex: 0 0 auto; width: 100%; min-width: 0; font-size: var(--text-sm); }
+.switch-index-head { display: flex; align-items: center; gap: var(--space-1); color: #9aa3b2; padding-inline-start: var(--space-1); }
+.app-nav .switch-index-fold { min-width: 1.6rem; padding: 0 var(--space-1); text-align: center; }
+.switch-index-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switch-index-marks { margin-inline-start: auto; display: flex; gap: var(--space-1); }
+.switch-index-mark { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 999px; background: #0d0f12; color: #eef1f6; font-weight: 700; }
+.switch-index-list, .switch-index-list ul { list-style: none; margin: 0; padding: 0; }
+.switch-index-list { margin: var(--space-1) 0 0 var(--space-2); padding-inline-start: var(--space-2); border-inline-start: 2px solid #1e60d5; display: grid; gap: 2px; }
+.switch-index-group { display: block; margin-block-start: var(--space-2); color: #9aa3b2; font-size: .78rem; font-weight: 600; }
+.app-nav .switch-index-list button { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 1.9rem; padding: 2px var(--space-2); border-color: transparent; background: transparent; }
+.app-nav .switch-index-list button:hover { background: #1f242d; }
+.app-nav .switch-index-list button[aria-current="true"] { background: #1f242d; border-color: #7dd3fc; font-weight: 700; }
+.switch-index-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switch-index-count { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
+/* 上部の数字パネル: 常に全体の値。0より大きい異常は状態色の枠と数字 */
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--space-2); }
+.kpi { background: #15181e; border: 1px solid #323946; border-radius: 6px; padding: var(--space-2) var(--space-3); min-width: 0; }
+.kpi-label { color: #9aa3b2; font-size: .78rem; }
+.kpi-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpi-value-small { font-size: 1.05rem; padding-block: .2rem; }
+.kpi-scope { color: #9aa3b2; font-size: .7rem; }
+.kpi-critical { border-color: #ff4d5e; } .kpi-critical .kpi-value { color: #ff4d5e; }
+.kpi-warning { border-color: #facc15; } .kpi-warning .kpi-value { color: #facc15; }
+/* 1台表示 */
+.focus-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: 1.05rem; }
+.focus-crumb button.focus-crumb-link { border-color: transparent; background: transparent; color: #7dd3fc; padding: 0 var(--space-1); text-decoration: underline; }
+.focus-crumb-sep { color: #9aa3b2; }
+.focus-crumb-tools { margin-inline-start: auto; display: flex; gap: var(--space-2); }
+.focus-layout { display: flex; gap: var(--space-3); align-items: flex-start; }
+.focus-main { flex: 1; min-width: 0; display: grid; gap: var(--space-3); }
+/* Grid children must be allowed to shrink, or the front panel pushes the detail off-screen. */
+.focus-main > * { min-width: 0; }
+/* Narrower port tiles in the single-switch view so a 48-port switch and the detail fit side by side. */
+.focus-card .hardware-port, .focus-card .w-20 { width: 3.25rem; }
+.focus-card .hardware-port { padding-inline: 2px; }
+.focus-detail { flex: 0 0 25rem; max-width: 40%; position: sticky; top: var(--space-3); max-height: calc(100vh - 2rem); overflow: auto; }
+.focus-detail-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+.focus-health { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.focus-health-name { display: flex; align-items: center; gap: var(--space-2); font-size: 1.25rem; font-weight: 700; }
+.focus-health-meta { color: #9aa3b2; font-size: var(--text-sm); }
+.focus-health-items { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--text-sm); }
+.focus-health-items .health-abnormal { font-weight: 700; }
+.focus-card h3 { margin: 0 0 var(--space-2); color: #9aa3b2; font-size: var(--text-sm); font-weight: 600; }
+.focus-ports-table td small { display: block; color: #9aa3b2; font-size: .75rem; }
+.focus-ports-table tr.focus-row-active td:first-child { box-shadow: inset 3px 0 #ff4d5e; }
+.focus-ports-table tr.focus-row-recovered td:first-child { box-shadow: inset 3px 0 #facc15; }
+.focus-ports-table tr.focus-row-selected { background: #1f242d; }
+.focus-ports-table button.focus-port-link { padding: 0 var(--space-2); }
+@media (max-width: 1100px) {
+  .focus-layout { flex-direction: column; }
+  .focus-detail { flex-basis: auto; max-width: none; width: 100%; position: static; max-height: none; }
+}

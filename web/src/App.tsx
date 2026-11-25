@@ -17,7 +17,7 @@ import type { Event, Overview, Profile, ReplaySession, ReplaySnapshot, Settings,
 import { Devices } from './views/Devices';
 import { ConfigChanges } from './views/ConfigChanges';
 import { DhcpView, HealthAudit, Logs, MulticastView } from './views/Monitoring';
-import { SwitchPorts } from './views/SwitchPorts';
+import { SwitchIndex } from './components/SwitchIndex';
 import { SettingsTools } from './components/SettingsTools';
 import { MonitorStopped, OverallStatus } from './components/MonitorStatus';
 import { monitoringStopped } from './monitorHealth';
@@ -35,8 +35,9 @@ import { emptySwitchFilter } from './views/props';
 import { groupSwitches, hasGroupFilter } from './views/props';
 const normalPages = ['monitor', 'devices', 'logs'] as const;
 const expertPages = ['details', 'topology'] as const;
-type Page = typeof normalPages[number] | typeof expertPages[number] | 'switch';
-const replayPages: readonly Page[] = ['monitor', 'switch', 'devices', 'details'];
+// The former port detail page is merged into the port monitor single-switch view (plan section 21).
+type Page = typeof normalPages[number] | typeof expertPages[number];
+const replayPages: readonly Page[] = ['monitor', 'devices', 'details'];
 const emptyReplay: SwitchState[] = [];
 const empty: Overview = {
   switches: [],
@@ -66,6 +67,9 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = language; }, [language]);
   const [page, setPage] = useState<Page>('monitor');
   const [monitorTarget, setMonitorTarget] = useState<PortMonitorTarget>();
+  // Switch shown alone in the port monitor (0 = all switches).
+  const [focus, setFocus] = useState(0);
+  const [indexOpen, setIndexOpen] = useState(() => get('switch-index-open', 'true') !== 'false');
   const [detailTab, setDetailTab] = useState<'multicast' | 'dhcp' | 'health' | 'config' | 'recommendations'>('multicast');
   const [theme, setTheme] = useState(() => get('theme', 'dark'));
   const [notifications, setNotifications] = useState(() => get('desktop-notifications', 'false') === 'true');
@@ -233,9 +237,14 @@ export default function App() {
       ? { ...old, ts: result.ts, requestedTs: ts, states: asArray(result.switches), alerts: result.alerts, portRecommendations: result.port_recommendations }
       : old);
   });
+  // Choosing a switch opens its single-switch view in the port monitor; 0 returns to all switches.
   const select = (id: number) => {
-    setSelected(id);
-    setPage('switch');
+    if (id) setSelected(id);
+    // "All" means every switch: drop a group or part filter left over from an earlier choice.
+    else setMonitorFilter(emptySwitchFilter);
+    setFocus(id);
+    setMonitorTarget(undefined);
+    setPage('monitor');
   };
   const operations = useOperations({ online, replay: !!replay, profileId, setStatus, run });
   const phase = operations.phase || status?.phase;
@@ -245,7 +254,7 @@ export default function App() {
       setDialog('');
     }
   }, [dialog, canOpenShowChecklist]);
-  useEffect(() => { setMonitorFilter(emptySwitchFilter); setTeamFilter(emptySwitchFilter); }, [profileId, replayId]);
+  useEffect(() => { setMonitorFilter(emptySwitchFilter); setTeamFilter(emptySwitchFilter); setFocus(0); }, [profileId, replayId]);
   // Clear filter choices that no longer exist (renamed group, deleted switch or part) so the monitor never stays empty.
   const filterSwitches = replay ? asArray(replay.states) : asArray(overview?.switches);
   const filterGroups = replay ? undefined : asArray(operations.groups).map(group => group.name);
@@ -273,7 +282,7 @@ export default function App() {
   }, [issueCount, overallLabel, replaySummaryUnavailable]);
   const summary = <OverallStatus count={issueCount} critical={critical} ready={ready} stopped={stopped || replaySummaryUnavailable} replay={!!replay}
     label={overallLabel} active={legacyReplay ? undefined : alertSummary.active} unacked={legacyReplay ? undefined : alertSummary.unacked} />;
-  const pageTitle = page === 'details' ? t('cleanup.details') : page === 'switch' ? t('cleanup.switchPorts') : t(`rack.nav.${page}`);
+  const pageTitle = page === 'details' ? t('cleanup.details') : t(`rack.nav.${page}`);
   const props = {
     ...viewScope,
     operations,
@@ -283,8 +292,13 @@ export default function App() {
     status,
     selected,
     select,
+    // "Open port": switch to that switch alone and open the port in the right-hand detail.
     openPortMonitor: (target: PortMonitorTarget) => {
       if (hasGroupFilter(monitorScope) && !groupSwitches(monitorScope).some(sw => sw.id === target.switchId)) setMonitorFilter(emptySwitchFilter);
+      if (target.switchId) {
+        setSelected(target.switchId);
+        setFocus(target.switchId);
+      }
       setMonitorTarget(target);
       setPage('monitor');
     },
@@ -350,11 +364,14 @@ export default function App() {
     </div>}
     <div className={wall ? 'wall-content' : 'app-workspace flex flex-1 flex-col md:flex-row'}>
       {!wall && <AppSidebar {...{ profiles, status, busy, locked, expert, run, refresh }} replay={!!replay}
-        setExpert={changeExpert} openSettings={() => setDialog('settings')}>
+        setExpert={changeExpert} openSettings={() => setDialog('settings')}
+        index={<SwitchIndex key="switch-index" switches={filterSwitches} groups={asArray(operations.groups).map(group => group.name)}
+          alerts={replay ? asArray(replay.alerts) : operations.alerts} alertsKnown={!legacyReplay} focus={focus} open={indexOpen} showList={page === 'monitor'}
+          onFocus={select} onToggle={() => setIndexOpen(open => { put('switch-index-open', String(!open)); return !open; })} />}>
         {pages.map(v => <button
           key={v}
           disabled={!!replay && !replayPages.includes(v)}
-          aria-current={page === v || page === 'switch' && v === 'monitor' ? 'page' : undefined}
+          aria-current={page === v ? 'page' : undefined}
           onClick={() => { setMonitorTarget(undefined); setDeviceTarget(''); setPage(v); }}
         >
           {v === 'details' ? t('cleanup.details') : t(`rack.nav.${v}`)}
@@ -365,6 +382,7 @@ export default function App() {
         <ErrorBoundary key={wall ? 'wall' : page} name={wall ? t('rack.wall') : pageTitle}>
           {(wall || page === 'monitor') && <PortMonitor key={status?.profile.id || 0} {...props}
             {...(wall ? emptySwitchFilter : monitorFilter)} target={wall ? undefined : monitorTarget}
+            focus={wall ? 0 : focus} onFocus={select}
             onFilterChange={filter => {
               setMonitorTarget(undefined);
               setMonitorFilter(filter);
@@ -373,9 +391,6 @@ export default function App() {
 
           {!wall && expert && page === 'topology' && <Topology key={status?.profile.id || 0} {...props}
             openDevices={() => setPage('devices')} />}
-
-          {!wall && page === 'switch' && <SwitchPorts {...props} />}
-
 
           {!wall && page === 'devices' && <Devices key={JSON.stringify([profileId, replayId, deviceTarget])} {...props} initialQuery={deviceTarget} />}
 
@@ -406,6 +421,7 @@ export default function App() {
     {!wall && dialog === 'config-import' && <ConfigImportDialog locked={locked} close={() => setDialog('settings')}
       onApplied={async () => {
         setSelected(0);
+        setFocus(0);
         setMonitorTarget(undefined);
         setMonitorFilter(emptySwitchFilter);
         setPage('monitor');

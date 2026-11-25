@@ -69,6 +69,17 @@ export const ja = {
     summary: 'Ping完了: 応答 {ok} / 無応答 {ng}（{sec}秒）', noReply: '無応答の機器（{count}台）',
   },
   metrics: { rxtx: '受信 {rx} / 送信 {tx}', errors: 'エラー {value}', discards: '破棄 {value}', multicast: 'マルチキャスト' },
+  // ポートモニターのスイッチ索引・数字パネル・1台表示（計画§21）
+  focus: {
+    index: 'スイッチ索引', all: 'すべて', allSwitches: 'すべてのスイッチ', foldIndex: 'スイッチ索引を畳む', openIndex: 'スイッチ索引を開く',
+    marks: '発生中 {active}件 / 復旧・未確認 {recovered}件', switchCount: '{count}件',
+    breadcrumb: '表示中のスイッチ', backToAll: 'すべてのスイッチに戻る',
+    kpi: 'ポートモニターの全体状況', kpiScope: '全体', kpiSwitches: 'スイッチ', kpiActive: '異常（発生中）', kpiRecovered: '復旧・未確認',
+    kpiLinked: 'リンク中のポート', kpiUplink: 'アップリンク合計',
+    health: 'スイッチ本体', ports: 'ポート（押すと右に詳細）', linkedPorts: '接続中のポート', noLinkedPorts: '接続中のポートなし',
+    colPort: 'ポート', colDevice: '接続機器', colState: '状態', colRate: '受信 / 送信', linked: '接続中',
+    closeDetail: 'ポート詳細を閉じる',
+  },
   alertState: { whatToDo: '考えられる原因・確認箇所（参考）', active: '継続中', ackedActive: '継続中・確認済み', recovered: '復旧・未確認', raisedAt: '{time} 発生', clearedAt: '{time} 復旧' },
   portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
   expert: {

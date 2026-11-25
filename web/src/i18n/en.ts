@@ -70,6 +70,16 @@ export const en: Dictionary = {
     summary: 'Ping complete: {ok} responded / {ng} no response ({sec}s)', noReply: 'Devices with no response ({count})',
   },
   metrics: { rxtx: 'RX {rx} / TX {tx}', errors: 'Errors {value}', discards: 'Discards {value}', multicast: 'Multicast' },
+  focus: {
+    index: 'Switch index', all: 'All', allSwitches: 'All switches', foldIndex: 'Fold the switch index', openIndex: 'Open the switch index',
+    marks: 'Ongoing {active} / Recovered, unacknowledged {recovered}', switchCount: '{count}',
+    breadcrumb: 'Switch shown', backToAll: 'Back to all switches',
+    kpi: 'Port monitor overview', kpiScope: 'All', kpiSwitches: 'Switches', kpiActive: 'Ongoing faults', kpiRecovered: 'Recovered, unacknowledged',
+    kpiLinked: 'Linked ports', kpiUplink: 'Uplink total',
+    health: 'Switch', ports: 'Ports (select for details)', linkedPorts: 'Linked ports', noLinkedPorts: 'No linked ports',
+    colPort: 'Port', colDevice: 'Device', colState: 'State', colRate: 'RX / TX', linked: 'Linked',
+    closeDetail: 'Close port details',
+  },
   alertState: { whatToDo: 'Possible causes and where to look (reference)', active: 'Ongoing', ackedActive: 'Ongoing · acknowledged', recovered: 'Recovered · unacknowledged', raisedAt: 'Raised {time}', clearedAt: 'Cleared {time}' },
   portSummary: { eee: 'EEE', pause: 'PAUSE', udld: 'UDLD', stp: 'STP', trust: 'Trust' },
   expert: {

@@ -1,16 +1,19 @@
 import { eventHeadline, eventTitle, t } from '../i18n';
-import { matchingPortAlerts } from '../wallAlerts';
+import { alertTone, matchingPortAlerts, summarizeAlerts } from '../wallAlerts';
 import { useEffect, useState } from 'react';
+import { StateMark } from '../components/SwitchIndex';
+import { switchHealth } from '../components/RackRow';
+import { issueAlerts } from '../monitorHealth';
 import { api, json } from '../api';
 import { Chart, FrontPanel, Table } from '../components/Common';
 import { PollingStatus } from '../components/PollingStatus';
 import { PortHardware } from '../components/PortHardware';
 import { confirmCounterReset } from '../components/GroupActions';
 import { asArray, decimal, formatBps, resolveSwitchId } from '../format';
-import type { Alert, Event, MetricResult, ModelDefinitions, Port } from '../types';
+import type { Alert, Event, MetricResult, ModelDefinitions, Port, SwitchSummary } from '../types';
 import { METRICS_REFRESH_MS, usePolling } from '../usePolling';
 import { useSwitchState } from '../useSwitchState';
-import type { ViewProps } from './props';
+import type { PortMonitorTarget, ViewProps } from './props';
 import { groupSwitches } from './props';
 const roles = [
   '',
@@ -39,8 +42,22 @@ function portAlertLines(alerts: Alert[], expert = false) {
   return [...lines.values()].sort((a, b) => Number(b.active) - Number(a.active));
 }
 
-export function SwitchPorts(p: ViewProps) {
+// Single-switch view of the port monitor (plan section 21): the former port detail page rearranged into switch health, port panel, linked-port table and a right-hand detail.
+type SwitchPortsProps = ViewProps & {
+  // Summary for the one-line switch health (passed from the port monitor).
+  focusSummary?: SwitchSummary;
+  // Port requested by "open port" and similar; opened in the detail once the state arrives.
+  initialPort?: PortMonitorTarget;
+  // Alerts of this switch with display names filled in; falls back to operations alerts.
+  alerts?: Alert[];
+  // Health thresholds from the project settings (same rule as the rack row).
+  thresholds?: Record<string, number>;
+  onClosePort?: () => void;
+};
+
+export function SwitchPorts(p: SwitchPortsProps) {
   const [idx, setIdx] = useState(0);
+  const [appliedTarget, setAppliedTarget] = useState<PortMonitorTarget>();
   const [range, setRange] = useState(15);
   const [memo, setMemo] = useState('');
   const [excluded, setExcluded] = useState(false);
@@ -68,6 +85,24 @@ export function SwitchPorts(p: ViewProps) {
     setSpeed(x.expected_speed_mbps || 0);
     setRole(x.av_role || '');
   };
+  const closePort = () => {
+    setIdx(0);
+    p.onClosePort?.();
+  };
+  // Select the requested port once, when the state arrives, without overriding later choices.
+  useEffect(() => {
+    const target = p.initialPort;
+    if (!target || appliedTarget === target || !s || s.id !== target.switchId) return;
+    const found = asArray(s.ports).find(x => target.ifIndex ? x.if_index === target.ifIndex : x.name === target.portName);
+    if (!found) return;
+    setAppliedTarget(target);
+    choose(found);
+  }, [p.initialPort, s]); // eslint-disable-line react-hooks/exhaustive-deps
+  // In replay the caller passes the replay's own alerts; live alerts are never mixed into a replay.
+  const switchAlerts = p.alerts ?? (p.replay ? [] : asArray(p.operations?.alerts).filter(alert => alert.switch_id === s?.id));
+  // Only real issues (not INFO, not phase-suppressed), matching the lamps, the index and the number panels.
+  const portAlerts = (port: Port) => s ? issueAlerts(matchingPortAlerts(switchAlerts, s.id, port.if_index)) : [];
+  const linkedPorts = asArray(s?.ports).filter(x => x.oper === 'up' || summarizeAlerts(portAlerts(x)).count > 0);
   const metrics = usePolling(async signal => {
     const end = new Date();
     const from = new Date(end.getTime() - range * 60000);
@@ -88,21 +123,11 @@ export function SwitchPorts(p: ViewProps) {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [until]);
+  const summary = p.focusSummary;
   return <>
+    {/* Switches are chosen in the left index; only actions here. */}
     <div className="flex gap-2">
-      <select
-        value={selected}
-        onChange={e => {
-          p.select(Number(e.target.value));
-          setIdx(0);
-        }}
-      >
-        <option value="0">{t('ui.m254')}</option>
-        {switches.map(x => <option key={x.id} value={x.id}>
-          {x.name}
-        </option>)}
-      </select>
-      {p.expert && <button disabled={!selected || selected !== p.selected || p.locked || !p.openTerminal}
+      {p.expert &&<button disabled={!selected || selected !== p.selected || p.locked || !p.openTerminal}
         onClick={() => p.openTerminal?.(selected)}>{t('ui.m279')}</button>}
       <button
         disabled={!selected || selected !== p.selected || !!p.replay}
@@ -118,11 +143,22 @@ export function SwitchPorts(p: ViewProps) {
       </button>
     </div>
     {!p.replay && <PollingStatus {...statePolling} />}
-    {s && selected === p.selected && <>
+    {s && selected === p.selected && <div className="focus-layout">
+      <div className="focus-main">
       {s.needs_credentials && <p role="status">⚠ {t('configFile.credentialsRequired')}</p>}
+      {/* Switch health on one line; only abnormal values are coloured. */}
+      {summary && <section className="panel focus-health" aria-label={t('focus.health')}>
+        <span className="focus-health-name"><StateMark tone={alertTone(summarizeAlerts(switchAlerts), summary.reachable)} />{summary.name}</span>
+        <span className="focus-health-meta">{[summary.model, summary.ip, summary.fw && `FW ${summary.fw}`].filter(Boolean).join(' · ')}</span>
+        {summary.reachable && <span className="focus-health-items">
+          {switchHealth(summary, p.thresholds).filter(item => item.key !== 'poe' || summary.poe_budget_w > 0).map(item =>
+            <span key={item.key}>{t(`rack.${item.key}`)} <span className={item.bad ? 'health-abnormal' : undefined}>{item.bad ? '⚠ ' : ''}{item.value}</span></span>)}
+        </span>}
+      </section>}
+      <section className="panel focus-card"><h3>{t('focus.ports')}</h3>
       <FrontPanel
         showNote={p.expert}
-        alerts={p.replay ? [] : p.operations?.alerts}
+        alerts={switchAlerts}
         switchId={s.id}
         reachable={s.reachable}
         model={s.model}
@@ -131,9 +167,34 @@ export function SwitchPorts(p: ViewProps) {
         onSelect={choose}
         ports={asArray((s.ports || [])).filter(x => !preset?.vlans?.length || asArray(preset.vlans).includes(x.pvid))}
       />
-      {port && <section className="panel space-y-3">
+      </section>
+      {/* Linked ports: device name first, MAC and IP on the second line; fault rows get a state-coloured edge. */}
+      <section className="panel focus-card"><h3>{t('focus.linkedPorts')}</h3>
+        {linkedPorts.length ? <table className="focus-ports-table">
+          <thead><tr><th>{t('focus.colPort')}</th><th>{t('focus.colDevice')}</th><th>{t('focus.colState')}</th><th>{t('focus.colRate')}</th></tr></thead>
+          <tbody>{linkedPorts.map(x => {
+            const counts = summarizeAlerts(portAlerts(x));
+            const first = asArray(x.devices)[0];
+            const lines = portAlertLines(portAlerts(x), p.expert);
+            return <tr key={x.if_index} className={[counts.active ? 'focus-row-active' : counts.count ? 'focus-row-recovered' : '',
+              x.if_index === idx ? 'focus-row-selected' : ''].filter(Boolean).join(' ') || undefined}>
+              <td><button type="button" className="focus-port-link" aria-pressed={x.if_index === idx} onClick={() => choose(x)}>{x.name}</button></td>
+              <td>{first ? <>{first.label || first.lldp_name || first.mac}
+                {asArray(x.devices).length > 1 && ` +${asArray(x.devices).length - 1}`}
+                <small>{[first.mac, first.ip].filter(Boolean).join(' · ')}</small></> : '—'}</td>
+              <td>{lines.length ? <span className={lines[0].active ? 'rack-critical-count' : 'rack-warning-count'}>{lines[0].active ? '!' : '▲'} {lines[0].title}</span>
+                : t('focus.linked')}</td>
+              <td className="whitespace-nowrap">{formatBps(x.rx_bps)} / {formatBps(x.tx_bps)}</td>
+            </tr>;
+          })}</tbody>
+        </table> : <p>{t('focus.noLinkedPorts')}</p>}
+      </section>
+      </div>
+      {port && <aside className="panel focus-detail space-y-3" aria-label={t('rack.portDetail')}>
+        <div className="focus-detail-head"><strong>{s.name} / {port.name}</strong>
+          <button type="button" aria-label={t('focus.closeDetail')} onClick={closePort}>{t('rack.close')}</button></div>
         {/* Why this port is flagged, first and in its state colour (ongoing red, recovered/unacknowledged yellow). */}
-        {!p.replay && portAlertLines(matchingPortAlerts(asArray(p.operations?.alerts), s.id, port.if_index), p.expert)
+        {portAlertLines(portAlerts(port), p.expert)
           .map(line => <p key={line.key} className={`port-alert-line ${line.active ? 'state-active' : 'state-recovered'}`}>
             {line.active ? '!' : '▲'} {line.title}{line.count > 1 && <span className="port-alert-count"> ×{line.count}</span>}
           </p>)}
@@ -265,7 +326,7 @@ export function SwitchPorts(p: ViewProps) {
           <PollingStatus {...metrics} />
           <Table rows={metrics.data?.history || []} hide={p.expert ? [] : ['detail', 'hint']} expert={p.expert} />
         </>}
-      </section>}
-    </>}
+      </aside>}
+    </div>}
   </>;
 }

@@ -1,10 +1,13 @@
+import { Children } from 'react';
 import type { ReactNode } from 'react';
 import { api, json } from '../api';
 import { t } from '../i18n';
 import type { Profile, Status } from '../types';
 
-export function AppSidebar({ children, profiles, status, busy, locked, replay, expert, setExpert, openSettings, run, refresh }: {
+export function AppSidebar({ children, index, profiles, status, busy, locked, replay, expert, setExpert, openSettings, run, refresh }: {
   children: ReactNode;
+  // Switch index inserted right below the first page button (port monitor), plan section 21.
+  index?: ReactNode;
   profiles: Profile[];
   status?: Status;
   busy: boolean;
@@ -17,7 +20,7 @@ export function AppSidebar({ children, profiles, status, busy, locked, replay, e
   refresh: () => Promise<void>;
 }) {
   return <aside className="app-nav">
-    <nav aria-label={t('project.navigation')}>{children}</nav>
+    <nav aria-label={t('project.navigation')}>{index ? Children.toArray(children).flatMap((child, i) => i === 0 ? [child, index] : [child]) : children}</nav>
     <div className="app-nav-tools">
       <label>{t('rack.profile')}
         <select value={status?.profile.id || ''} disabled={busy || locked} onChange={event => {

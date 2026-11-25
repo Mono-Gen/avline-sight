@@ -1439,18 +1439,75 @@ test('Port monitor clears navigation targets on a screen filter change and when 
   assert.equal(monitor(afterGroupChange).target, undefined);
 
   monitor(afterGroupChange).openPortMonitor(target);
+  // Plan section 21: opening a port shows that switch alone and hands the port to the single-switch view.
   let close;
+  let requested;
   const { OverviewView } = sourceWith('../src/views/Overview.tsx', {
-    '../components/PortDetail': { PortDetail: props => { close = props.close; return null; } },
+    './SwitchPorts': { SwitchPorts: props => { close = props.onClosePort; requested = props.initialPort; return null; } },
     '../useRackData': { useRackData: () => ({ data: { ports: [
       { switch_id: 1, port: { name: '1/0/2', if_index: 2, oper: 'up' } },
     ] }, definitions: {}, refresh: noop }) },
   });
   const props = monitor(drawApp());
   assert.equal(props.target, target);
-  render(OverviewView, { ...props, overview: { switches: [{ id: 1, name: 'Switch', group_tag: '', reachable: true }] } });
+  assert.equal(props.focus, 1);
+  const html = render(OverviewView, { ...props, overview: { switches: [{ id: 1, name: 'Switch', group_tag: '', reachable: true }] } });
+  assert.equal(requested, target);
+  assert.match(html, /aria-label="ポートモニターの全体状況"/);
+  assert.match(html, /focus-crumb[^]*>すべて<[^]*>未所属<[^]*aria-current="page">Switch</);
   close();
   assert.equal(monitor(drawApp()).target, undefined);
+  // Choosing "all" in the index returns to the rack of every switch, without a group filter left over.
+  monitor(drawApp()).onFilterChange({ group: 'FOH', part: '' });
+  monitor(drawApp()).onFocus(2);
+  monitor(drawApp()).onFocus(0);
+  assert.equal(monitor(drawApp()).focus, 0);
+  assert.equal(monitor(drawApp()).group, undefined);
+});
+
+test('Number panels show whole-project counts and stay unknown when a replay has no alert list', () => {
+  setLang('ja');
+  const { MonitorKpis } = require('../src/components/MonitorKpis.tsx');
+  const switches = [{ reachable: true, ports_up: 10 }, { reachable: false, ports_up: 0 }];
+  const alerts = [fault(1, { active: true }), fault(2, { active: false }), fault(3, { active: true, suppressed: true })];
+  const html = render(MonitorKpis, { switches, alerts, uplink: { rx: 2e9, tx: 1e9 } });
+  // Expected from the inputs: 1 of 2 switches reachable, 1 ongoing, 1 recovered (the suppressed one is not an issue), 10 linked ports.
+  assert.match(html, /kpi kpi-critical" data-kpi="switches"[^]*>1 \/ 2</);
+  assert.match(html, /kpi kpi-critical" data-kpi="active"[^]*>1</);
+  assert.match(html, /kpi kpi-warning" data-kpi="recovered"[^]*>1</);
+  assert.match(html, /data-kpi="linked"[^]*>10</);
+  assert.match(html, /data-kpi="uplink"[^]*受信 [^<]* \/ 送信 /);
+  const legacy = render(MonitorKpis, { switches, alerts: [], alertsKnown: false });
+  assert.match(legacy, /class="kpi" data-kpi="active"[^]*>—</);
+  assert.match(legacy, /class="kpi" data-kpi="recovered"[^]*>—</);
+});
+
+test('Switch index shows fault marks on every page and the list only on the port monitor', () => {
+  setLang('ja');
+  const { SwitchIndex, orderedGroups } = require('../src/components/SwitchIndex.tsx');
+  const switches = [
+    { id: 1, name: 'FOH-SW1', group_tag: 'FOH', reachable: true },
+    { id: 2, name: 'CORE-SW1', group_tag: 'core', reachable: true },
+    { id: 3, name: 'Loose', group_tag: '', reachable: false },
+    { id: 4, name: 'STG-SW1', group_tag: 'Stage', reachable: true },
+  ];
+  // Expected order from the rule: registered groups in project order, then other names sorted, ungrouped last.
+  assert.deepEqual(orderedGroups(switches, ['core', 'FOH']), ['core', 'FOH', 'Stage', '']);
+  const alerts = [
+    fault(1, { switch_id: 1, if_index: 14, active: true }),
+    fault(2, { switch_id: 4, if_index: 3, active: false }),
+  ];
+  const props = { switches, groups: ['core', 'FOH'], alerts, focus: 1, open: true, showList: true, onFocus: noop, onToggle: noop };
+  const list = render(SwitchIndex, props);
+  assert.match(list, /aria-label="発生中 1件 \/ 復旧・未確認 1件"/);
+  assert.match(list, /aria-expanded="true"[^]*>▾</);
+  assert.match(list, />すべて<[^]*core[^]*CORE-SW1[^]*FOH \(1\)[^]*aria-current="true"[^]*state-mark-critical[^]*FOH-SW1[^]*Stage \(1\)[^]*state-mark-warning[^]*STG-SW1[^]*未所属[^]*state-mark-unknown[^]*Loose/);
+  const folded = render(SwitchIndex, { ...props, open: false });
+  assert.doesNotMatch(folded, /FOH-SW1|<ul/);
+  assert.match(folded, /aria-expanded="false"[^]*>▸<[^]*state-mark-critical[^]*1[^]*state-mark-warning[^]*1/);
+  const otherPage = render(SwitchIndex, { ...props, showList: false });
+  assert.doesNotMatch(otherPage, /FOH-SW1|aria-expanded/);
+  assert.match(otherPage, /state-mark-critical/);
 });
 
 test('ヘッダーから音声・転送・言語を撤去し、設定には既定OFFの通知・CSV・表示順を置く', () => {

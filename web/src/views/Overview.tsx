@@ -20,6 +20,9 @@ import { WallSwitchTile } from '../components/WallSwitchTile';
 import { isPortAlert, matchingPortAlerts, replayIssueCount, summarizeAlerts } from '../wallAlerts';
 import { ErrorSymbol } from '../components/ErrorSymbol';
 import { SwitchFilters } from '../components/SwitchFilters';
+import { MonitorKpis } from '../components/MonitorKpis';
+import { SwitchPorts } from './SwitchPorts';
+import { emptySwitchFilter } from './props';
 
 const collapseKey = 'rack-collapsed';
 function readCollapsed() {
@@ -67,6 +70,8 @@ type OverviewProps = ViewProps & {
   replayAlerts?: Alert[];
   target?: PortMonitorTarget; onClosePortDetail?: () => void;
   onFilterChange?: (filter: SwitchFilter) => void;
+  // Switch chosen in the index (0 or unset = all switches); single-switch view of plan section 21.
+  focus?: number; onFocus?: (switchId: number) => void;
 };
 const noDevices: InventoryRow[] = [];
 
@@ -78,7 +83,7 @@ export function OverviewView(props: OverviewProps) {
   const [groupEdit, setGroupEdit] = useState<GroupEdit>();
   const portTarget = target?.ifIndex || target?.portName ? target : undefined;
   const [selected, setSelected] = useState(portTarget);
-  useEffect(() => { setSelected(portTarget); }, [portTarget, props.group, props.part, props.switchId]);
+  useEffect(() => { setSelected(portTarget); }, [portTarget, props.group, props.part, props.switchId, props.focus]);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [notice, setNotice] = useState('');
   const [wallSwitch, setWallSwitch] = useState<number>();
@@ -93,13 +98,24 @@ export function OverviewView(props: OverviewProps) {
   }, [replay, props.overview.switches, configs]);
   const uplinks = useMemo(() => uplinkPorts(rack.topology, summary), [rack.topology, summary]);
   const samples = useUplinkSamples(rack.data?.ports, uplinks);
+  // Uplink total for the number panels: sum of uplink ports in the existing snapshot, no extra polling.
+  const uplinkTotal = useMemo(() => {
+    let found = false; let rx = 0; let tx = 0;
+    for (const { switch_id, port } of asArray(rack.data?.ports)) {
+      if (!uplinks.has(`${switch_id}/${port.name}`)) continue;
+      found = true; rx += port.rx_bps || 0; tx += port.tx_bps || 0;
+    }
+    return found ? { rx, tx } : undefined;
+  }, [rack.data?.ports, uplinks]);
   const devices = rack.data?.devices || noDevices;
   const ports = indexBySwitch(asArray(rack.data?.ports));
   const bySwitch = indexBySwitch(devices);
   const knownGroups = new Map(asArray(operations?.groups).map(group => [group.name, group]));
   const preset = partPreset(props);
   const tags = asArray(preset?.tags);
-  const groupFiltered = hasGroupFilter(props);
+  // While one switch is shown, filters do not apply: the alert band and number panels stay whole-project.
+  const focusSummary = !wall && props.focus ? summary.find(item => item.id === props.focus) : undefined;
+  const groupFiltered = hasGroupFilter(props) && !focusSummary;
   const visible = summary.filter(item => matchesSwitch(props, tags, item.id, item.group_tag));
   const visibleIds = new Set(visible.map(item => item.id));
   const targetSwitch = visible.find(item => item.id === target?.switchId);
@@ -197,11 +213,37 @@ export function OverviewView(props: OverviewProps) {
       wall expert={props.expert} pending={live && !operations?.ready} busy={busy} locked={locked} ackMany={live ? operations?.ackMany : undefined}
       undoCount={live ? operations?.undoCount : undefined} undo={live ? operations?.undoAck : undefined} />}
   </div>;
+  // Legacy replays carry no alert list, so fault counts are unknown rather than zero.
+  const kpis = <MonitorKpis switches={summary} alerts={allAlerts} uplink={uplinkTotal} alertsKnown={live || props.replayAlerts !== undefined} />;
+  const band = (live || props.replayAlerts !== undefined) && <AlertBand alerts={alerts} wall={wall} expert={props.expert} busy={busy} locked={locked} ack={live ? operations?.ack : undefined}
+    ackMany={live && groupFiltered ? operations?.ackMany : undefined} undoCount={live ? operations?.undoCount : undefined}
+    undo={live ? operations?.undoAck : undefined} pending={live && !operations?.ready && !operations?.alerts.length} />;
+  if (focusSummary) return <div className="rack-overview">
+    {kpis}
+    {band}
+    {operations?.toast && <div className="rack-toast" role="status">✓ {operations.toast}</div>}
+    {/* Breadcrumb: all > group > switch; the links return to all switches. */}
+    <nav className="focus-crumb" aria-label={t('focus.breadcrumb')}>
+      <button type="button" className="focus-crumb-link" onClick={() => props.onFocus?.(0)}>{t('focus.all')}</button>
+      <span className="focus-crumb-sep" aria-hidden="true">＞</span>
+      <button type="button" className="focus-crumb-link" onClick={() => {
+        props.onFocus?.(0);
+        props.onFilterChange?.({ group: focusSummary.group_tag, part: '' });
+      }}>{focusSummary.group_tag || t('rack.ungrouped')}</button>
+      <span className="focus-crumb-sep" aria-hidden="true">＞</span>
+      <strong aria-current="page">{focusSummary.name}</strong>
+    </nav>
+    {rack.error && <p role="alert" className="rack-data-error">⚠ {rack.error}</p>}
+    {/* Keyed by switch so port choice and form fields never carry over to another switch (a save would hit the wrong port). */}
+    <SwitchPorts key={focusSummary.id} {...props} {...emptySwitchFilter} focusSummary={focusSummary} selected={focusSummary.id}
+      thresholds={props.settings?.thresholds}
+      select={id => props.onFocus?.(id)} initialPort={target?.switchId === focusSummary.id ? target : undefined}
+      alerts={byAlert.get(focusSummary.id) || []} onClosePort={props.onClosePortDetail} />
+  </div>;
   return <div className="rack-overview">
+    {!wall && kpis}
     {outsideNote}
-    {(live || props.replayAlerts !== undefined) && <AlertBand alerts={alerts} wall={wall} expert={props.expert} busy={busy} locked={locked} ack={live ? operations?.ack : undefined}
-      ackMany={live && groupFiltered ? operations?.ackMany : undefined} undoCount={live ? operations?.undoCount : undefined}
-      undo={live ? operations?.undoAck : undefined} pending={live && !operations?.ready && !operations?.alerts.length} />}
+    {band}
     {!wall && operations?.toast && <div className="rack-toast" role="status">✓ {operations.toast}</div>}
     {!wall && <div className="rack-toolbar">
       <div role="group" aria-label={t('cleanup.layout')}>
