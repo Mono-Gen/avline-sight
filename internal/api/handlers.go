@@ -278,9 +278,13 @@ func (s *Server) diagDump(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		var out []map[string]any
+		limit := 60 // ダンプ肥大化防止
+		if g == "supported_mibs" {
+			limit = 400 // 対応MIBの一覧は全部見たい（60行で切ると後半のMIBを見落とす）
+		}
 		for i, row := range rows {
-			if i >= 60 {
-				break // ダンプ肥大化防止
+			if i >= limit {
+				break
 			}
 			for _, col := range cols {
 				if p, ok := row.Cols[col]; ok {
@@ -293,6 +297,25 @@ func (s *Server) diagDump(w http.ResponseWriter, r *http.Request) {
 			status = "UNSUPPORTED"
 		}
 		dump[g] = map[string]any{"status": status, "rows": len(rows), "sample": out}
+	}
+	// 部分木をそのまま読む診断（上限付き）。MGMD-STD-MIB（RFC 5519）: IGMP/MLDのグループ・最終参加者をIP形式で持つ
+	// MGMD-STD-MIB はIGMPルーター/プロキシ動作時だけ値が入る（Snoopingだけの M4250 FW 13.0.7.6 では空だった、2026-11-25）
+	for g, root := range map[string]string{"mgmd": "1.3.6.1.2.1.185"} {
+		limit := 400
+		pdus, truncated, err := c.WalkSubtree(root, limit)
+		if err != nil && len(pdus) == 0 {
+			dump[g] = map[string]string{"status": "ERROR", "error": err.Error()}
+			continue
+		}
+		var out []map[string]any
+		for _, p := range pdus {
+			out = append(out, pduJSON(p))
+		}
+		status := "SUPPORTED"
+		if len(pdus) == 0 {
+			status = "UNSUPPORTED"
+		}
+		dump[g] = map[string]any{"status": status, "count": len(pdus), "truncated": truncated, "values": out}
 	}
 	if st := s.Engine.State(id); st != nil {
 		dump["capabilities"] = st.Caps

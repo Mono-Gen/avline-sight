@@ -235,3 +235,34 @@ func CounterDelta(prev, cur uint64, is32 bool) (uint64, bool) {
 	}
 	return 0, false
 }
+
+// WalkSubtree は root 配下を GETBULK で順に読み、最大 limit 件で打ち切る（診断用。スイッチ負荷を抑えるため上限必須）。
+// 打ち切ったかどうかを truncated で返す。
+func (c *Client) WalkSubtree(root string, limit int) (pdus []gosnmp.SnmpPDU, truncated bool, err error) {
+	prefix := strings.TrimPrefix(root, ".") + "."
+	next := root
+	for len(pdus) < limit {
+		r, err := c.g.GetBulk([]string{next}, 0, uint32(max(1, min(c.MaxRepetitions, limit-len(pdus)))))
+		if err != nil {
+			return pdus, false, err
+		}
+		if len(r.Variables) == 0 {
+			return pdus, false, nil
+		}
+		for _, v := range r.Variables {
+			name := strings.TrimPrefix(v.Name, ".")
+			if !strings.HasPrefix(name, prefix) || v.Type == gosnmp.EndOfMibView || v.Type == gosnmp.NoSuchObject || v.Type == gosnmp.NoSuchInstance {
+				return pdus, false, nil
+			}
+			if name == strings.TrimPrefix(next, ".") {
+				return pdus, false, nil // 進まない応答（ループ防止）
+			}
+			pdus = append(pdus, v)
+			next = name
+			if len(pdus) >= limit {
+				return pdus, true, nil
+			}
+		}
+	}
+	return pdus, true, nil
+}
