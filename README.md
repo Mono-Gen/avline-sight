@@ -91,7 +91,7 @@ Run the app on one monitoring PC with `--listen 0.0.0.0:8080` and use the read-o
 Requires Go 1.26.3 or later and Node.js 20 or later.
 
 ```powershell
-pwsh scripts/build.ps1 -Version 0.2.0
+pwsh scripts/build.ps1 -Version 0.3.0
 ```
 
 The script builds the web UI under `web/dist`, runs the Go tests under `internal/` and produces `bin/avline-sight.exe`.

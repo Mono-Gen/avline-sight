@@ -1,6 +1,6 @@
 # AVLine-Sight ビルドスクリプト: WebUIをビルドし、Go単一実行ファイルへ同梱する。
-# 使い方: pwsh scripts/build.ps1 [-Version 0.2.0]
-param([string]$Version = "0.2.0")
+# 使い方: pwsh scripts/build.ps1 [-Version 0.3.0]
+param([string]$Version = "0.3.0")
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Push-Location (Join-Path $root "web")

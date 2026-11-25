@@ -91,7 +91,7 @@ Get-Service SNMPTRAP -ErrorAction SilentlyContinue
 Go 1.26.3以上とNode.js 20以上が必要です。
 
 ```powershell
-pwsh scripts/build.ps1 -Version 0.2.0
+pwsh scripts/build.ps1 -Version 0.3.0
 ```
 
 WebUIを `web/dist` にビルドし、`internal/` 配下のGoテストを実行して、`bin/avline-sight.exe` を生成します。
