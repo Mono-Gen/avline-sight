@@ -63,7 +63,7 @@ On first startup with no profiles in the database, the app loads `avline-sight.c
 
 Traps help detect short link interruptions between polls. Monitoring continues if the trap receiver stops.
 
-1. Check that the header shows **Trap receiver ready**. If a switch has no last trap time, check its trap destination.
+1. The header stays quiet while traps can be received and shows **⚠ Trap receiver stopped** only when they cannot; if it appears, follow the next steps. A switch that has not sent any trap yet shows **No traps yet ⓘ** next to its name in the single-switch view (it may simply be quiet); check that switch's trap destination.
 2. Check what is using UDP 162 in PowerShell.
 
 ```powershell
