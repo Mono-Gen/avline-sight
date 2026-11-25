@@ -47,6 +47,15 @@ When switching to Show, review the **Pre-show checklist**. It checks switch reac
 
 ## Quick start
 
+Double-click `avline-sight.exe`. No console window opens: the web UI opens in your browser and an icon appears in the notification area (system tray).
+
+- Double-click the tray icon to open the web UI again.
+- Right-click it for **Open**, **Copy URL** (handy for opening the UI from another PC) and **Quit**. Quit stops monitoring and closes the database safely.
+- Only one copy can run per data folder. Starting it again shows a message instead; use the tray icon.
+- Logs go to `avline-sight.log` in the data folder (up to 10 MB; one older file `avline-sight.log.1` is kept). Startup errors appear in a message box.
+
+When started from PowerShell, messages and `--help` appear in that window:
+
 ```powershell
 .\avline-sight.exe --open
 ```
@@ -88,13 +97,13 @@ Run the app on one monitoring PC with `--listen 0.0.0.0:8080` and use the read-o
 
 ## Build
 
-Requires Go 1.26.3 or later and Node.js 20 or later.
+Requires Go 1.26.11 or later and Node.js 20 or later.
 
 ```powershell
 pwsh scripts/build.ps1 -Version 0.3.0
 ```
 
-The script builds the web UI under `web/dist`, runs the Go tests under `internal/` and produces `bin/avline-sight.exe`.
+The script builds the web UI under `web/dist`, runs the Go tests and produces `bin/avline-sight.exe` as a Windows GUI program (no console window).
 
 ## Documentation
 

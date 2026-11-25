@@ -11,9 +11,9 @@ try {
 Push-Location $root
 try {
     $env:CGO_ENABLED = "0"
-    go test ./internal/...
+    go test ./...
     if ($LASTEXITCODE -ne 0) { throw "テストが失敗しました" }
-    go build -trimpath -ldflags "-s -w -X main.version=$Version" -o bin/avline-sight.exe ./cmd/avline-sight
+    go build -trimpath -ldflags "-s -w -H windowsgui -X main.version=$Version" -o bin/avline-sight.exe ./cmd/avline-sight
     if ($LASTEXITCODE -ne 0) { throw "ビルドが失敗しました" }
     Write-Host "ビルド完了: bin/avline-sight.exe ($Version)"
 } finally { Pop-Location }

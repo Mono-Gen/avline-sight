@@ -47,6 +47,15 @@ WebUIを同梱した持ち運び可能なWindows用の単一実行ファイル�
 
 ## 使い方
 
+`avline-sight.exe` をダブルクリックします。黒い画面（コンソール）は出ず、ブラウザで画面が開き、画面右下のタスクトレイにアイコンが出ます。
+
+- トレイのアイコンをダブルクリックすると、画面をもう一度開けます。
+- 右クリックで「画面を開く」「URLをコピー」（ほかのPCから見るときに便利）「終了」を選べます。「終了」は監視を止め、データベースを安全に閉じます。
+- 同じデータフォルダで起動できるのは1つだけです。もう一度起動すると案内が出るので、トレイのアイコンを使ってください。
+- ログはデータフォルダの `avline-sight.log` に書きます（10MBまで。1つ前の `avline-sight.log.1` を残します）。起動に失敗したときは、メッセージボックスで理由を出します。
+
+PowerShellから起動したときは、メッセージや `--help` がその画面に出ます。
+
 ```powershell
 .\avline-sight.exe --open
 ```
@@ -88,13 +97,13 @@ Get-Service SNMPTRAP -ErrorAction SilentlyContinue
 
 ## ビルド
 
-Go 1.26.3以上とNode.js 20以上が必要です。
+Go 1.26.11以上とNode.js 20以上が必要です。
 
 ```powershell
 pwsh scripts/build.ps1 -Version 0.3.0
 ```
 
-WebUIを `web/dist` にビルドし、`internal/` 配下のGoテストを実行して、`bin/avline-sight.exe` を生成します。
+WebUIを `web/dist` にビルドし、Goのテストを実行して、黒い画面の出ないWindowsアプリとして `bin/avline-sight.exe` を生成します。
 
 ## 資料
 

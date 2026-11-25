@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -32,8 +33,16 @@ import (
 var version = "0.3.0"
 
 func main() {
-	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "起動に失敗しました:", err)
+	// ダブルクリック起動（黒い画面なし）では false。PowerShell等から起動したときはその画面へ出力する
+	hasConsole := attachConsole()
+	if logPath, err := run(hasConsole); err != nil {
+		text := startupErrorText(err, logPath)
+		if hasConsole {
+			fmt.Fprintln(os.Stderr, text)
+		} else {
+			// 二重起動は失敗ではなく案内なので、エラーではなく情報のアイコンで出す
+			showStartupMessage(text, !errors.Is(err, errAlreadyRunning))
+		}
 		os.Exit(1)
 	}
 }
@@ -46,7 +55,8 @@ func exeDir() string {
 	return filepath.Dir(p)
 }
 
-func run() error {
+// run は監視を動かし、終了まで戻らない。logPath はエラー表示で案内するログファイルの場所（開けなかったときは空）。
+func run(hasConsole bool) (logPath string, err error) {
 	var (
 		dataDir  = flag.String("data", filepath.Join(exeDir(), "data"), "データ保存先ディレクトリ")
 		config   = configFlag(flag.CommandLine)
@@ -69,7 +79,7 @@ func run() error {
 		}
 	})
 	if missingConfigPath {
-		return fmt.Errorf("--config: 設定ファイルのパスを指定してください")
+		return "", fmt.Errorf("--config: 設定ファイルのパスを指定してください")
 	}
 	lvl := slog.LevelInfo
 	if *debug {
@@ -77,16 +87,34 @@ func run() error {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})))
 	if *labOff < 0 || *labOff > 10000 {
-		return fmt.Errorf("--lab-port-offset は 0〜10000 で指定してください")
+		return "", fmt.Errorf("--lab-port-offset は 0〜10000 で指定してください")
 	}
 	api.LabSNMPBase += *labOff
 	api.LabCLIBase += *labOff
 	api.LabSSHBase += *labOff
 	if *lab < 0 || *lab > 20 {
-		return fmt.Errorf("--lab は 0〜20 で指定してください")
+		return "", fmt.Errorf("--lab は 0〜20 で指定してください")
 	}
 	if err := os.MkdirAll(*dataDir, 0o755); err != nil {
-		return fmt.Errorf("データディレクトリを作成できません %s: %w", *dataDir, err)
+		return "", fmt.Errorf("データディレクトリを作成できません %s: %w", *dataDir, err)
+	}
+	// 同じデータフォルダの二重起動を止める（2つが同じDBへ書くと記録が壊れうる）
+	release, err := acquireSingleInstance(*dataDir)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	// 黒い画面が無い起動ではログの行き先がファイルだけになるため、常にファイルへも書く
+	if lf, err := openRotatingFile(filepath.Join(*dataDir, "avline-sight.log"), logFileLimit); err != nil {
+		slog.Warn("ログファイルを開けません。画面への出力だけにします", "err", err)
+	} else {
+		defer lf.Close()
+		logPath = lf.path
+		var out io.Writer = lf
+		if hasConsole {
+			out = io.MultiWriter(lf, os.Stderr)
+		}
+		slog.SetDefault(slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: lvl})))
 	}
 	dbName := "avline-sight.db"
 	if *lab > 0 {
@@ -94,21 +122,21 @@ func run() error {
 	}
 	st, err := store.Open(filepath.Join(*dataDir, dbName), false)
 	if err != nil {
-		return err
+		return logPath, err
 	}
 	defer st.Close()
 	configCtx, cancelConfig := context.WithTimeout(context.Background(), 20*time.Second)
 	configWarning, err := loadStartupConfig(configCtx, st, exeDir(), *config)
 	cancelConfig()
 	if err != nil {
-		return err
+		return logPath, err
 	}
 	if configWarning != "" {
 		slog.Warn("設定ファイルを自動で読み込めません", "file", defaultConfigName, "err", configWarning)
 	}
 	pid, err := st.EnsureDefaultProfile()
 	if err != nil {
-		return fmt.Errorf("プロファイル初期化に失敗: %w", err)
+		return logPath, fmt.Errorf("プロファイル初期化に失敗: %w", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -136,10 +164,10 @@ func run() error {
 			trapTarget = net.JoinHostPort("127.0.0.1", p)
 		}
 		if err := simLab.Start(ctx, sim.Config{BaseSNMPPort: api.LabSNMPBase, BaseCLIPort: api.LabCLIBase, BaseSSHPort: api.LabSSHBase, TrapTarget: trapTarget}); err != nil {
-			return err
+			return logPath, err
 		}
 		if err := registerLab(st, pid, simLab); err != nil {
-			return err
+			return logPath, err
 		}
 		eng.Reload()
 		slog.Info("仮想M4250ラボを起動しました", "台数", *lab, "SNMP", fmt.Sprintf("127.0.0.1:%d〜", api.LabSNMPBase))
@@ -160,8 +188,10 @@ func run() error {
 
 	ln, addr, err := listenWithFallback(*listen)
 	if err != nil {
-		return err
+		return logPath, err
 	}
+	// Serve に渡す前に戻る経路（トレイを出せない等）でもポートを開いたままにしない（二重に閉じても害はない）
+	defer ln.Close()
 	srv := &api.Server{Version: version, DataDir: *dataDir, Store: st, Engine: eng, Poller: pm, Trap: tr, Hub: hub, Lab: simLab,
 		Static: web.Dist(), WebAddr: addr, Ctx: ctx, ConfigStartupError: configWarning}
 	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
@@ -172,7 +202,10 @@ func run() error {
 	// 定期Pingを含むエンジンの終了を待ってからDBを閉じる。
 	defer func() { stop(); <-engineDone }()
 	go srv.RunTicker(ctx)
+	// Serve は Shutdown を呼んだ直後に戻るため、処理中の要求が終わるのを待ってから DB・ログを閉じる
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
 		sctx, c := context.WithTimeout(context.Background(), 5*time.Second)
 		defer c()
@@ -183,14 +216,33 @@ func run() error {
 		url = "http://127.0.0.1:" + p
 	}
 	slog.Info("AVLine-Sight を起動しました", "version", version, "url", url, "data", *dataDir)
-	fmt.Println("AVLine-Sight:", url, "（Ctrl+Cで終了）")
-	if *openUI {
+	// トレイの「終了」は Ctrl+C と同じく ctx を止め、サーバー・エンジンを順に閉じる
+	closeTray, err := startTray(url, stop)
+	if err != nil {
+		if !hasConsole {
+			// 黒い画面もトレイも無いと止める手段が無くなるため、起動を取りやめる
+			stop()
+			<-shutdownDone
+			return logPath, fmt.Errorf("タスクトレイにアイコンを出せません: %w", err)
+		}
+		slog.Warn("タスクトレイにアイコンを出せません", "err", err)
+		closeTray = func() {}
+	}
+	defer closeTray()
+	if hasConsole {
+		fmt.Println("AVLine-Sight:", url, "（Ctrl+Cで終了）")
+	}
+	// ダブルクリック起動では他に見える物が無いので、画面を必ず開く
+	if *openUI || !hasConsole {
 		openBrowser(url)
 	}
 	if err := hs.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+		stop()
+		<-shutdownDone
+		return logPath, err
 	}
-	return nil
+	<-shutdownDone
+	return logPath, nil
 }
 
 func resolveTrapSource(switches []model.SwitchConfig, ip string, labPort int, lab bool) (int64, string, bool) {
