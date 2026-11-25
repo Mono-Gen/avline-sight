@@ -99,3 +99,6 @@ WebUIを `web/dist` にビルドし、`internal/` 配下のGoテストを実行�
 - OUI辞書には主要ベンダーを収録しています。QSC、Biamp、MA Lighting、Clear-Com、BirdDogは未収録です。
 - SSHのホスト鍵は固定（ピン留め）しません。接続時に表示される指紋を照合してください。
 - SNMPv3、外部通知、sFlow、SNMP SETによる操作はv2で対応予定です。
+## ライセンス
+
+MIT License です。[LICENSE](LICENSE) を参照してください。

@@ -99,3 +99,7 @@ The script builds the web UI under `web/dist`, runs the Go tests under `internal
 - The OUI dictionary covers major vendors. QSC, Biamp, MA Lighting, Clear-Com and BirdDog are still missing.
 - SSH host keys are not pinned. Check the fingerprint shown on connection.
 - SNMPv3, external notifications, sFlow and SNMP SET actions are planned for v2.
+
+## License
+
+MIT License. See [LICENSE](LICENSE).
