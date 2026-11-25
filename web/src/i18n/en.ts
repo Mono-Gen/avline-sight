@@ -70,6 +70,13 @@ export const en: Dictionary = {
     summary: 'Ping complete: {ok} responded / {ng} no response ({sec}s)', noReply: 'Devices with no response ({count})',
   },
   metrics: { rxtx: 'RX {rx} / TX {tx}', errors: 'Errors {value}', discards: 'Discards {value}', multicast: 'Multicast' },
+  vlan: {
+    title: 'VLANs', ports: '{count} ports ({linked} linked)', settings: 'Settings', written: 'Written',
+    writtenHelp: 'Text written in the port descriptions (the AV UI writes it when a profile is applied, but it can be edited by hand). It is not linked to the actual settings.',
+    snooping: 'Snooping', querier: 'Querier', fastLeave: 'Fast Leave', frameSize: 'Frame size', broadcastControl: 'Broadcast control',
+    on: 'on', off: 'off', querierSelf: 'this switch', querierOther: '{address}', querierUnknown: 'unknown (waiting)', querierNone: 'none',
+    globalOff: ' (off for the whole switch)',
+  },
   device: {
     title: 'Switch details', model: 'Model', serial: 'Serial number', firmware: 'Firmware', boot: 'Boot version', baseMac: 'Base MAC',
     ip: 'IP address', sysName: 'System name', uptime: 'Uptime', uptimeValue: '{d} d {h} h {m} min',

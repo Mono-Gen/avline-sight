@@ -2008,3 +2008,38 @@ test('Unused LAG interfaces are hidden from the port panels but a LAG that is li
   assert.deepEqual(withoutUnusedLags(ports, alerts).map(port => port.name), ['0/1', 'lag 2', 'lag 3']);
   assert.deepEqual(withoutUnusedLags(ports, []).map(port => port.name), ['0/1', 'lag 2']);
 });
+
+test('VLAN card lists settings as facts and the port-description text as written text, without judging', () => {
+  setLang('ja');
+  const { VlanFacts, writtenText } = require('../src/components/VlanFacts.tsx');
+  // Expected values from the real switch (FW 13.0.7.6) after the profiles were applied.
+  assert.equal(writtenText('VID:13,HControl-Pri,Video NDI5 with Dante,Q-Sys or AES67 audio'), 'Video NDI5 with Dante,Q-Sys or AES67 audio');
+  assert.equal(writtenText('Stage rack 2'), 'Stage rack 2');
+  assert.equal(writtenText(''), '');
+  const vlans = [
+    { vlan: 11, name: 'Dante-Pri', snooping: true, fast_leave: true, querier_oper: 'querier', last_querier: '' },
+    { vlan: 14, name: 'HControl-Sec', snooping: false, fast_leave: false, querier_oper: 'disabled', last_querier: '0.0.0.0' },
+  ];
+  const ports = [
+    { name: '0/1', type: 'rj45', oper: 'up', pvid: 11, max_frame: 9198, config_settings: { bcast_storm_ctl: 'enabled' }, alias: 'VID:11,Dante-Pri,Video' },
+    { name: '0/3', type: 'rj45', oper: 'down', pvid: 11, max_frame: 1500, config_settings: { bcast_storm_ctl: 'enabled' }, alias: 'VID:11,Dante-Pri,Lighting' },
+    { name: '0/5', type: 'rj45', oper: 'up', pvid: 11, max_frame: 9198, config_settings: { bcast_storm_ctl: 'enabled' }, alias: 'VID:11,Dante-Pri,Video' },
+    // 0/14: the storm-control setting could not be read (no config_settings value), so nothing is said about it.
+    { name: '0/14', type: 'rj45', oper: 'down', pvid: 14, max_frame: 1500, bcast_storm_ctl: false, alias: '' },
+    { name: 'lag 1', type: 'lag', oper: 'down', pvid: 1 },
+  ];
+  const html = render(VlanFacts, { vlans, ports });
+  assert.match(html, /VLAN 11<\/strong><span>Dante-Pri<\/span><span class="vlan-facts-ports">ポート 3（接続中 2）<\/span>/);
+  assert.match(html, /Snooping 有効 · クエリア このスイッチ · Fast Leave 有効 · フレームサイズ 9198 ×2 \/ 1500 ×1 · ブロードキャスト制御 有効/);
+  assert.match(html, /vlan-facts-written" title="[^"]*連動しません[^"]*"><span class="vlan-facts-label">記入<\/span><q>Video ×2 \/ Lighting ×1<\/q>/);
+  // 0.0.0.0 is not a querier; a VLAN without written text shows no "written" row; the unused LAG adds no VLAN 1.
+  assert.match(html, /VLAN 14[^]*クエリア なし/);
+  assert.doesNotMatch(html.slice(html.indexOf('VLAN 14')), /ブロードキャスト制御/);
+  // Waiting as non-querier with no real address is "unknown", not "another switch"; whole-switch snooping off is stated.
+  const waiting = render(VlanFacts, { vlans: [{ ...vlans[0], querier_oper: 'non-querier', last_querier: '0.0.0.0' }], ports: ports.slice(0, 1), globalSnoopingOff: true });
+  assert.match(waiting, /Snooping 有効（スイッチ全体は無効） · クエリア 不明（待機中）/);
+  assert.doesNotMatch(html.slice(html.indexOf('VLAN 14')), /vlan-facts-written/);
+  assert.doesNotMatch(html, /VLAN 1<\/strong>/);
+  // Facts only: no judgement words in what is shown (the help tooltip explains where the written text comes from).
+  assert.doesNotMatch(html.replace(/ title="[^"]*"/g, ''), /推奨|異常|要確認|プロファイル/);
+});

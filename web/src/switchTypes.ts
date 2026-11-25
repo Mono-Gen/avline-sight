@@ -167,6 +167,8 @@ export interface Process {
 }
 export interface IGMP {
   snooping_on: boolean;
+  // False when the switch-wide setting could not be read (then snooping_on is not a fact).
+  snooping_known?: boolean;
   vlans: (VlanIGMP)[];
   groups: (McastGroup)[];
   mrouters: (Mrouter)[];

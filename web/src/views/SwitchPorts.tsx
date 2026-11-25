@@ -4,6 +4,7 @@ import { alertTone, hasCriticalActive, matchingPortAlerts, summarizeAlerts } fro
 import { useEffect, useState } from 'react';
 import { StateMark } from '../components/SwitchIndex';
 import { DeviceInfo } from '../components/DeviceInfo';
+import { VlanFacts } from '../components/VlanFacts';
 import { switchHealth } from '../components/RackRow';
 import { withoutUnusedLags } from '../rackModel';
 import { issueAlerts } from '../monitorHealth';
@@ -256,6 +257,7 @@ export function SwitchPorts(p: SwitchPortsProps) {
           })}</tbody>
         </table> : <p>{t('focus.noLinkedPorts')}</p>}
       </section>
+      <VlanFacts vlans={asArray(s.igmp?.vlans)} ports={asArray(s.ports)} globalSnoopingOff={!!s.igmp?.snooping_known && !s.igmp?.snooping_on} />
       </div>
       {port && <aside className="panel focus-detail" aria-label={t('rack.portDetail')}>
         {/* Plan section 22: sections in reading order; settings folded; raw settings only in expert view. */}

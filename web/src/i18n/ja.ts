@@ -70,6 +70,14 @@ export const ja = {
   },
   metrics: { rxtx: '受信 {rx} / 送信 {tx}', errors: 'エラー {value}', discards: '破棄 {value}', multicast: 'マルチキャスト' },
   // ポートモニターのスイッチ索引・数字パネル・1台表示（計画§21）
+  // VLANごとの事実（SNMPで読めた設定）と、ポート説明欄に書かれた文字。判定はしない
+  vlan: {
+    title: 'VLAN', ports: 'ポート {count}（接続中 {linked}）', settings: '設定', written: '記入',
+    writtenHelp: 'ポートの説明欄に書かれた文字です（AV画面がプロファイル適用時に書きますが、手で書き換えられます）。実際の設定とは連動しません。',
+    snooping: 'Snooping', querier: 'クエリア', fastLeave: 'Fast Leave', frameSize: 'フレームサイズ', broadcastControl: 'ブロードキャスト制御',
+    on: '有効', off: '無効', querierSelf: 'このスイッチ', querierOther: '{address}', querierUnknown: '不明（待機中）', querierNone: 'なし',
+    globalOff: '（スイッチ全体は無効）',
+  },
   // 本体情報（事実だけ。FWの更新を勧めない）
   device: {
     title: '本体情報', model: '機種', serial: 'シリアル番号', firmware: 'ファームウェア', boot: 'ブートバージョン', baseMac: 'ベースMAC',

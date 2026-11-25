@@ -584,3 +584,13 @@ td {
 .device-info .detail-kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .device-info-flag { border: 1px solid #5a6372; border-radius: 999px; padding: 0 var(--space-2); font-size: .78rem; color: #c4cad4; }
 .device-info-peers { margin: var(--space-2) 0 0; color: #c4cad4; font-size: var(--text-sm); }
+/* VLAN facts: settings read over SNMP, and the written port-description text set apart (quoted, muted, no marks). */
+.vlan-facts ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.vlan-facts li { border-top: 1px solid #232934; padding-top: var(--space-2); }
+.vlan-facts li:first-child { border-top: 0; padding-top: 0; }
+.vlan-facts-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.vlan-facts-ports { margin-inline-start: auto; color: #9aa3b2; font-size: var(--text-sm); }
+.vlan-facts-row { display: flex; gap: var(--space-2); font-size: var(--text-sm); margin-top: 2px; }
+.vlan-facts-label { flex: 0 0 2.5rem; color: #9aa3b2; }
+.vlan-facts-written { color: #9aa3b2; font-style: italic; cursor: help; }
+.vlan-facts-written q { quotes: '"' '"'; }
