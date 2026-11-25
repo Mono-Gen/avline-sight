@@ -727,7 +727,7 @@ test('Project and project-file text is consistent in both languages', () => {
   }
 });
 
-test('Diagram and list share all three monitor filters and preserve system-wide alerts', () => {
+test('Diagram and list share the group and part filters, leave switch choice to the index, and preserve system-wide alerts', () => {
   const switches = [
     { id: 1, name: 'West-A', group_tag: 'west' }, { id: 2, name: 'East-A', group_tag: 'east' },
     { id: 3, name: 'West-B', group_tag: 'west' }, { id: 4, name: 'No group', group_tag: '' },
@@ -749,25 +749,29 @@ test('Diagram and list share all three monitor filters and preserve system-wide 
     operations: { alerts, ready: true } });
   const filterRow = tree => elements(tree, node => node.type === SwitchFilters)[0];
   const selects = () => elements(SwitchFilters(filterRow(draw()).props), node => node.type === 'select');
-  assert.deepEqual(Array.from(selects(), input => input.props.value), ['', '', '']);
+  assert.deepEqual(Array.from(selects(), input => input.props.value), ['', '']);
   const initialRow = render(SwitchFilters, filterRow(draw()).props);
-  assert.match(initialRow, /スイッチグループ[^]*担当パート[^]*<label>スイッチ<select/);
-  assert.equal((initialRow.match(/>すべて</g) || []).length, 3);
+  assert.match(initialRow, /スイッチグループ[^]*担当パート/);
+  // 1台の切替は左の索引にあるので、ツールバーにスイッチ選択を重ねない
+  assert.doesNotMatch(initialRow, /<label>スイッチ<select/);
+  assert.equal((initialRow.match(/>すべて</g) || []).length, 2);
   assert.match(initialRow, /value="group:">未所属/);
   selects()[0].props.onChange({ target: { value: 'group:west' } });
   selects()[1].props.onChange({ target: { value: 'stage' } });
-  selects()[2].props.onChange({ target: { value: '1' } });
+  assert.equal(filter.switchId, undefined);
   const diagram = renderToStaticMarkup(draw());
-  assert.match(diagram, /Visible fault[^]*Network fault|Network fault[^]*Visible fault/);
-  assert.doesNotMatch(diagram, /East fault|West-B fault/);
-  assert.match(diagram, /id="rack-switch-1"/);
-  assert.doesNotMatch(diagram, /id="rack-switch-[234]"/);
+  assert.match(diagram, /Visible fault/);
+  assert.match(diagram, /West-B fault/);
+  assert.match(diagram, /Network fault/);
+  assert.doesNotMatch(diagram, /East fault/);
+  assert.match(diagram, /id="rack-switch-1"[^]*id="rack-switch-3"|id="rack-switch-3"[^]*id="rack-switch-1"/);
+  assert.doesNotMatch(diagram, /id="rack-switch-[24]"/);
   const switchLayout = label => elements(draw(), node => node.type === 'button' && node.props.children === t(label))[0].props.onClick();
   switchLayout('cleanup.list');
-  assert.deepEqual(Array.from(selects(), input => input.props.value), ['group:west', 'stage', 1]);
-  assert.deepEqual([...elements(draw(), node => node.type === PortMatrix)[0].props.visibleSwitchIds], [1]);
+  assert.deepEqual(Array.from(selects(), input => input.props.value), ['group:west', 'stage']);
+  assert.deepEqual([...elements(draw(), node => node.type === PortMatrix)[0].props.visibleSwitchIds].sort(), [1, 3]);
   switchLayout('cleanup.diagram');
-  assert.deepEqual(Array.from(selects(), input => input.props.value), ['group:west', 'stage', 1]);
+  assert.deepEqual(Array.from(selects(), input => input.props.value), ['group:west', 'stage']);
 });
 
 test('Port list localizes link state and lays out search, sort, refresh and device metadata', () => {

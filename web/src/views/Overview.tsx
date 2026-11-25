@@ -269,9 +269,10 @@ export function OverviewView(props: OverviewProps) {
         <button aria-pressed={layout === 'diagram'} onClick={() => setLayout('diagram')}>{t('cleanup.diagram')}</button>
         <button aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>{t('cleanup.list')}</button>
       </div>
+      {/* Single-switch choice lives in the left index, so the toolbar keeps only group and part. */}
       <SwitchFilters filter={{ group: props.group, part: props.part ?? '', switchId: props.switchId }}
-        onChange={props.onFilterChange ?? (() => undefined)} switches={summary}
-        groups={live ? allGroupNames : undefined} parts={props.settings?.views} />
+        onChange={filter => props.onFilterChange?.({ ...filter, switchId: undefined })} switches={summary}
+        groups={live ? allGroupNames : undefined} parts={props.settings?.views} withSwitch={false} />
     </div>}
     {!locked && <div className="operation-area" role="group" aria-label={t('rack.actions')}>
       {/* Bulk actions appear only when their target matches what is shown (never act on all or a whole group while filtered to a switch or part). */}
