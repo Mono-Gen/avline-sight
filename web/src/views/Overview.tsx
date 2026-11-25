@@ -1,3 +1,4 @@
+import { ActionPopup } from '../components/ActionPopup';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertBand } from '../components/AlertBand';
 import { DiscoveryWizard, LabPanel, SwitchForm } from '../components/Dialogs';
@@ -303,12 +304,13 @@ export function OverviewView(props: OverviewProps) {
             <span className="rack-group-counts" aria-label={t('wall.counts', counts)}>
               <span className={hasCriticalActive(counts) ? 'rack-critical-count' : counts.active ? 'rack-caution-count' : counts.unacked ? 'rack-warning-count' : 'rack-count-zero'}>{t('pages.groupCounts', counts)}</span>
             </span>
+            {/* Group actions sit in one "Actions" menu in the header, the same as each switch row. */}
+            {!locked && !isClosed && <ActionPopup label={`${name || t('rack.ungrouped')} ${t('rack.actions')}`} text={`${t('rack.actions')} ▾`}>
+              {props.switchId === undefined && <GroupActions {...actionProps} group={name} onPing={pingFor(name)} />}
+              <button disabled={busy} data-action="rename-group" onClick={() => setGroupEdit({ name })}>{t('operations.rename')}</button>
+            </ActionPopup>}
             <button className="group-collapse" aria-label={t(isClosed ? 'rack.expand' : 'rack.collapse')} aria-expanded={!isClosed} onClick={collapse}>{isClosed ? '+' : '−'}</button>
           </div>
-          {!locked && !isClosed && <div className="operation-area" role="group" aria-label={t('rack.actions')}>
-            {props.switchId === undefined && <GroupActions {...actionProps} group={name} onPing={pingFor(name)} />}
-            <button disabled={busy} aria-label={t('operations.rename')} onClick={() => setGroupEdit({ name })}>✎</button>
-          </div>}
           {!locked && !isClosed && props.switchId === undefined && pingResult(name)}
           {!isClosed && rows.map(sw => <RackRow key={sw.id} summary={sw}
             ports={withoutUnusedLags((ports.get(sw.id) || []).map(row => row.port), byAlert.get(sw.id) || [])} devices={bySwitch.get(sw.id) || []} alerts={byAlert.get(sw.id) || []}

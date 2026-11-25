@@ -1,5 +1,9 @@
 export const operationsJa = {
   pcTime: 'PC時刻', group: 'グループ', rename: 'グループ名を変更', order: 'グループの表示順',
+  renameTitle: 'グループ名を変更（所属するスイッチすべてに反映）',
+  renameNote: '「{name}」に入っているスイッチすべての所属名が変わります。1台だけ別のグループへ移すときは、そのスイッチの「操作 ▾」→「編集」で所属グループを選びます。',
+  fieldName: '名前', fieldIp: 'IPアドレス', fieldCommunity: 'SNMPコミュニティ', fieldWebUrl: 'WebUIのURL',
+  memberGroup: '所属グループ', memberGroupHelp: '一覧から選ぶか、新しいグループ名を入力',
   newGroup: '新しいグループ名', invalidGroup: 'グループ名を入力してください。*, . と .. は使用できません。',
   mergeConfirm: '「{from}」を既存の「{to}」へ統合します。対象スイッチすべてのグループ名が変わります。続行しますか？',
   up: '上へ', down: '下へ', save: '保存', collapseAll: 'すべて折りたたむ', expandAll: 'すべて展開',
@@ -20,6 +24,10 @@ export const operationsJa = {
 };
 export const operationsEn: typeof operationsJa = {
   pcTime: 'PC time', group: 'Group', rename: 'Rename group', order: 'Group display order',
+  renameTitle: 'Rename group (applies to every switch in it)',
+  renameNote: 'Every switch in "{name}" gets the new group name. To move a single switch to another group, use the "Actions ▾" → "Edit" and choose its group.',
+  fieldName: 'Name', fieldIp: 'IP address', fieldCommunity: 'SNMP community', fieldWebUrl: 'WebUI URL',
+  memberGroup: 'Group', memberGroupHelp: 'Pick from the list or type a new group name',
   newGroup: 'New group name', invalidGroup: 'Enter a group name. *, . and .. are reserved.',
   mergeConfirm: 'Merge {from} into the existing group {to}? This changes the group for every affected switch.',
   up: 'Move up', down: 'Move down', save: 'Save', collapseAll: 'Collapse all', expandAll: 'Expand all',

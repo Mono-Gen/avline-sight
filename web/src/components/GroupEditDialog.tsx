@@ -41,7 +41,7 @@ export function GroupEditDialog({ edit, groups, busy, close, run, refresh, profi
       close();
     });
   };
-  return <Dialog title={t(edit === 'order' ? 'operations.order' : 'operations.rename')} close={close}>
+  return <Dialog title={t(edit === 'order' ? 'operations.order' : 'operations.renameTitle')} close={close}>
     <fieldset className="space-y-2" disabled={busy}>
       {edit === 'order' ? <ol className="space-y-1">
         {names.map((item, index) => <li className="flex items-center gap-2" key={item}>
@@ -50,8 +50,14 @@ export function GroupEditDialog({ edit, groups, busy, close, run, refresh, profi
           <button disabled={index === names.length - 1} onClick={() => move(index, 1)} title={t('operations.down')}>↓</button>
         </li>)}
         {groups.includes('') && <li>{t('rack.ungrouped')}</li>}
-      </ol> : <label>{t('operations.newGroup')} <input value={name} onChange={event => setName(event.target.value)} /></label>}
-      <button className="button-primary block" disabled={edit !== 'order' && (invalid || edit.name === name.trim())} onClick={save}>{t('operations.save')}</button>
+      </ol> : <div className="dialog-form">
+        <p className="settings-hint">{t('operations.renameNote', { name: edit.name || t('rack.ungrouped') })}</p>
+        <div className="settings-row">
+          <label className="settings-label" htmlFor="group-rename-input">{t('operations.newGroup')}</label>
+          <input id="group-rename-input" value={name} onChange={event => setName(event.target.value)} />
+        </div>
+      </div>}
+      <div className="settings-savebar"><button className="button-primary" disabled={edit !== 'order' && (invalid || edit.name === name.trim())} onClick={save}>{t('operations.save')}</button></div>
     </fieldset>
   </Dialog>;
 }

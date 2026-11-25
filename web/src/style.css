@@ -669,3 +669,11 @@ td {
 }
 
 .settings-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+
+/* Dialog forms reuse the settings-page rows: label on the left, field on the right. */
+.dialog-form .settings-row input:not([type="checkbox"]):not(.settings-number) { width: 100%; max-width: 22rem; }
+.dialog-form .settings-hint { display: block; }
+.group-menu-items .group-actions { display: contents; }
+.dialog-form .settings-row > input { justify-self: start; }
+.rack-group-header .group-menu { margin-inline-start: auto; }
+.rack-group-header .group-menu + .group-collapse { margin-inline-start: 0; }
