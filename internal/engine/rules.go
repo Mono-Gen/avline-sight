@@ -248,20 +248,38 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 		fs = append(fs, f)
 	}
 	var live []*model.SwitchState
+	// ファームウェアは同じ機種どうしで比べる（機種が違えばFWの系列が違うのが普通。本体情報の表示と同じ規則）
+	fwByModel := map[string]map[string][]string{}
 	for _, s := range states {
 		// 設定（Slow周期）まで取得済みのスイッチのみ比較対象にする（起動直後の過渡的な誤検知防止）
 		if s.Reachable && s.FW != "" && s.Config.StpVersion != "" {
 			live = append(live, s)
 			fw[s.FW] = append(fw[s.FW], s.Name)
+			if fwByModel[s.Model] == nil {
+				fwByModel[s.Model] = map[string][]string{}
+			}
+			fwByModel[s.Model][s.FW] = append(fwByModel[s.Model][s.FW], s.Name)
 		}
 	}
-	if len(fw) > 1 {
+	models := make([]string, 0, len(fwByModel))
+	for m := range fwByModel {
+		models = append(models, m)
+	}
+	sort.Strings(models)
+	for _, m := range models {
+		if len(fwByModel[m]) < 2 {
+			continue
+		}
 		var parts []string
-		for v, names := range fw {
+		for v, names := range fwByModel[m] {
 			parts = append(parts, v+": "+strings.Join(names, ","))
 		}
 		sort.Strings(parts)
-		add(model.SevWarning, "FW_MISMATCH", "ファームウェアバージョン不一致（"+strings.Join(parts, " / ")+"）", nil, "", map[string]any{"versions": strings.Join(parts, " / ")})
+		versions := strings.Join(parts, " / ")
+		if m != "" {
+			versions = m + " — " + versions
+		}
+		add(model.SevWarning, "FW_MISMATCH", "ファームウェアバージョン不一致（"+versions+"）", nil, "", map[string]any{"versions": versions, "model": m})
 	}
 	// STP
 	allDefault := len(live) > 1

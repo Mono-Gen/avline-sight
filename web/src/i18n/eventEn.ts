@@ -536,10 +536,10 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "details": "RSTP is commonly recommended for ProAV deployments."
   },
   "FW_MISMATCH": {
-    "title": "Monitored switches running different firmware versions ({versions}).",
+    "title": "Switches of the same model run different firmware versions ({versions}).",
     "hint": "",
-    "details": "Aligning firmware versions across switches is recommended.",
-    "fallbackTitle": "Monitored switches running different firmware versions."
+    "details": "Switches of the same model run different firmware versions. If this is intentional, no change is needed.",
+    "fallbackTitle": "Switches of the same model run different firmware versions."
   },
   "STP_PRIORITY_DEFAULT": {
     "title": "All monitored switches use the default STP priority 32768.",

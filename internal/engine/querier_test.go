@@ -89,3 +89,37 @@ func TestQuerierChangeThroughZero(t *testing.T) {
 		t.Fatal("a change from .1 to .2 through 0.0.0.0 was missed")
 	}
 }
+
+// ファームウェアは同じ機種どうしで比べる。機種が違えば版が違っても不一致にしない。
+func TestFirmwareMismatchComparesSameModelOnly(t *testing.T) {
+	e, _ := newTestEngine(t)
+	mk := func(id int64, name, mdl, fw string) *model.SwitchState {
+		return &model.SwitchState{ID: id, Name: name, SysName: name, Reachable: true, Model: mdl, FW: fw, LastPoll: time.Now(),
+			Config: model.SwitchConf{StpVersion: "rstp", StpPriority: 4096, IsRoot: id == 1}}
+	}
+	audit := func(states ...*model.SwitchState) []Finding {
+		e.mu.Lock()
+		e.states = map[int64]*model.SwitchState{}
+		e.order = nil
+		for _, s := range states {
+			e.states[s.ID] = s
+			e.order = append(e.order, s.ID)
+		}
+		e.mu.Unlock()
+		fs, _ := e.Audit()
+		var out []Finding
+		for _, f := range fs {
+			if f.Code == "FW_MISMATCH" {
+				out = append(out, f)
+			}
+		}
+		return out
+	}
+	if got := audit(mk(1, "Core", "M4250-26G4F-PoE+", "13.0.7.6"), mk(2, "Stage", "M4350-24X4V", "14.0.1.2")); len(got) != 0 {
+		t.Fatalf("different models compared: %+v", got)
+	}
+	got := audit(mk(1, "Core", "M4250-26G4F-PoE+", "13.0.7.6"), mk(2, "FOH", "M4250-26G4F-PoE+", "13.0.6.0"), mk(3, "Stage", "M4350-24X4V", "14.0.1.2"))
+	if len(got) != 1 || got[0].Detail["versions"] != "M4250-26G4F-PoE+ — 13.0.6.0: FOH / 13.0.7.6: Core" {
+		t.Fatalf("same-model mismatch: %+v", got)
+	}
+}
