@@ -1502,7 +1502,8 @@ test('Number panels show whole-project counts and stay unknown when a replay has
   assert.match(html, /kpi kpi-critical" data-kpi="active"[^]*>1</);
   assert.match(html, /kpi kpi-warning" data-kpi="recovered"[^]*>1</);
   assert.match(html, /data-kpi="linked"[^]*>10</);
-  assert.match(html, /data-kpi="uplink"[^]*受信 [^<]* \/ 送信 /);
+  // Receive and send on separate lines so the value never wraps mid-number.
+  assert.match(html, /data-kpi="uplink"[^]*<span>受信 [^<]*<\/span><span>送信 [^<]*<\/span>/);
   const legacy = render(MonitorKpis, { switches, alerts: [], alertsKnown: false });
   assert.match(legacy, /class="kpi" data-kpi="active"[^]*>—</);
   assert.match(legacy, /class="kpi" data-kpi="recovered"[^]*>—</);

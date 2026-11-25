@@ -309,7 +309,7 @@ td {
 .port-list-controls input[type="checkbox"] { accent-color: var(--control-active-bg); }
 .port-list-controls label { display: flex; align-items: center; gap: var(--space-1); }
 .port-list-device-meta { display: block; font-size: .8em; }
-.app-nav button { text-align: start; }
+.app-nav button { text-align: start; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
 .app-nav button[aria-current="page"] { font-weight: 700; }
 .detail-tabs, .group-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .operation-area { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); border: 1px solid #5a6372; border-radius: .4rem; padding: var(--space-2) var(--space-2); }
