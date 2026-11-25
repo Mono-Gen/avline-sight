@@ -131,7 +131,9 @@ func (e *Engine) ShowChecklist(ctx context.Context, trapReady, english bool) (Sh
 	}
 
 	l := func(ja, en string) string { return checklistText(english, ja, en) }
-	items := make([]ChecklistItem, 0, 15)
+	// item() は items 内の要素へのポインタを返すので、追加で配列が作り直されると先に作った項目への書き込みが消える。
+	// 項目数より十分大きい容量を先に確保し、項目を足すときはこの数も見直す（16項目目の追加で実際に起きた）。
+	items := make([]ChecklistItem, 0, 32)
 	item := func(id, reason, action string, optional bool) *ChecklistItem {
 		items = append(items, ChecklistItem{ID: id, State: checkPass, Reason: reason, Action: action, Optional: optional})
 		return &items[len(items)-1]
@@ -144,6 +146,8 @@ func (e *Engine) ShowChecklist(ctx context.Context, trapReady, english bool) (Sh
 	active := item("active", l("発生中のアラートはありません。", "There are no active alerts."), l("該当アラートの原因を確認してください。", "Check the cause of the affected alerts."), false)
 	initial := item("initial", l("全スイッチの初回取得が完了しました。", "Initial collection completed on all monitored switches."), l("通信を確認し、Slow周期の取得を待ってください。", "Check connectivity and wait for the slow collection cycle."), false)
 	host := item("host", l("Trap待受とスリープ抑止が有効です。", "Trap listening and sleep prevention are active."), l("Trap待受設定と監視PCの電源設定を確認してください。", "Check trap listener and PC power settings."), false)
+	// IGMP/マルチキャストの設定（プロファイルに関係なく本番前に直すべきと言えるものだけ。フラッディングは流量次第なのでアラートのまま）
+	multicast := item("multicast", l("IGMP Snooping・クエリアの設定に問題はありません。", "IGMP Snooping and querier settings show no problems."), l("該当VLANのIGMP Snooping・クエリア設定を確認してください。", "Check the IGMP Snooping and querier settings of the VLAN."), false)
 	excluded := item("excluded", l("監視除外ポートはありません。", "No ports are excluded from monitoring."), l("意図した監視除外か確認してください。", "Verify these exclusions are intentional."), true)
 	ping := item("ping", l("登録機器の直近Pingと設定済みの予定IPに問題はありません。", "Recent pings and configured planned IPs are OK."), l("機器の疎通と予定IPを確認してください。", "Check device connectivity and the planned IP."), true)
 	recent := item("recent", l("直近5分にエラー・ドロップ・リンク断続の記録はありません。", "No errors, drops or link interruptions were recorded in the last five minutes."), l("該当箇所の配線とログを確認してください。", "Check cabling and logs for the affected target."), true)
@@ -317,6 +321,60 @@ func (e *Engine) ShowChecklist(ctx context.Context, trapReady, english bool) (Sh
 		if a.Active {
 			active.add(checkReview, reason, target)
 		}
+	}
+	// 判定に使えるのは、到達できてIGMPの取得まで済んだスイッチだけ（IGMPはMedium周期でSTP等のSlowより後に取れることがあり、
+	// その間に監査すると何も検査せずに合格してしまう）。1台も判定できなければ合格にしない。
+	igmpReady := 0
+	for _, s := range states {
+		if s.NeedsCredentials || !s.Reachable && !s.LastPoll.IsZero() {
+			continue
+		}
+		if s.LastPoll.IsZero() {
+			// 初回の応答待ち（起動直後・認証情報の入力直後）。判定できないのではなく、まだ判定していない
+			multicast.add(checkPending, l("初回の応答を待っています。", "Waiting for the first polling response."), switchTarget(s))
+			continue
+		}
+		if len(s.IGMP.Vlans) == 0 {
+			multicast.add(checkPending, l("IGMPの初回取得を待っています。", "Waiting for the first IGMP collection."), switchTarget(s))
+			continue
+		}
+		igmpReady++
+	}
+	if igmpReady == 0 && multicast.State == checkPass {
+		multicast.add(checkReview, l("判定できるスイッチがありません（未登録・到達できない・認証情報待ち）。", "No switch can be checked (none registered, unreachable or waiting for credentials)."),
+			ChecklistTarget{Destination: "settings"})
+	}
+	// 横断監査の結果のうちマルチキャスト設定の5種類を、本番前に確認する項目として載せる（Audit は初回取得前は保留を返す）
+	findings, _ := e.Audit()
+	for _, f := range findings {
+		if f.Code == "AUDIT_PENDING" {
+			if igmpReady == 0 {
+				continue // 判定できるスイッチが無い理由は上で要確認として出している
+			}
+			multicast.add(checkPending, l("全スイッチの初回取得を待っています。", "Waiting for the initial collection on all switches."), ChecklistTarget{})
+			continue
+		}
+		vlan := fmt.Sprint(f.Detail["vlan"])
+		var reason string
+		switch f.Code {
+		case "QUERIER_ABSENT":
+			reason = fmt.Sprintf(l("VLAN %s: Snooping が有効ですがクエリアがいません。", "VLAN %s: Snooping is on but there is no querier."), vlan)
+		case "QUERIER_CONFLICT":
+			reason = fmt.Sprintf(l("VLAN %s: クエリアが複数います（%s）。", "VLAN %s: more than one querier (%s)."), vlan, fmt.Sprint(f.Detail["queriers"]))
+		case "SNOOP_MISMATCH":
+			reason = fmt.Sprintf(l("VLAN %s: スイッチによって Snooping の有効・無効が違います。", "VLAN %s: Snooping is on for some switches and off for others."), vlan)
+		case "IGMP_VERSION_MIX":
+			reason = fmt.Sprintf(l("VLAN %s: IGMP のバージョンが混在しています。", "VLAN %s: IGMP versions are mixed."), vlan)
+		case "SNOOP_GLOBAL_OFF":
+			reason = fmt.Sprintf(l("スイッチ全体の Snooping が無効です（VLAN %s の設定が効いていません）。", "Snooping is off for the whole switch (VLAN %s settings have no effect)."), fmt.Sprint(f.Detail["vlans"]))
+		default:
+			continue
+		}
+		target := ChecklistTarget{SwitchID: f.SwitchID, Label: f.SwitchName}
+		if f.SwitchID == 0 {
+			target = ChecklistTarget{Label: "VLAN " + vlan}
+		}
+		multicast.add(checkReview, reason, target)
 	}
 	for _, entry := range activity {
 		s := byID[entry.SwitchID]

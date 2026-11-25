@@ -314,6 +314,7 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 	type vinfo struct {
 		snoop, nosnoop []string
 		queriers       []string
+		querierSw      []*model.SwitchState
 		lastQ          map[string]bool
 		vers           map[int]bool
 	}
@@ -346,6 +347,7 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 			}
 			if v.QuerierOper == "querier" {
 				vi.queriers = append(vi.queriers, s.Name)
+				vi.querierSw = append(vi.querierSw, s)
 				if !s.Config.IsRoot && countUplinks(s) <= 1 && len(live) > 1 {
 					add(model.SevWarning, "QUERIER_ON_EDGE", fmt.Sprintf("VLAN%d エッジスイッチがクエリアに選出", v.VLAN), s, "", map[string]any{"vlan": v.VLAN})
 				}
@@ -377,7 +379,14 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 				qs = append(qs, q)
 			}
 			sort.Strings(qs)
-			add(model.SevCritical, "QUERIER_CONFLICT", fmt.Sprintf("VLAN%d 複数のクエリアIPを観測（%s）", v, strings.Join(qs, ", ")), nil, "", map[string]any{"vlan": v})
+			add(model.SevCritical, "QUERIER_CONFLICT", fmt.Sprintf("VLAN%d 複数のクエリアIPを観測（%s）", v, strings.Join(qs, ", ")), nil, "", map[string]any{"vlan": v, "queriers": strings.Join(qs, ", ")})
+		} else {
+			// アドレスが 0.0.0.0 でも、LLDPでつながった複数のスイッチがそれぞれ自分をクエリアと答えるのは選出の失敗
+			// （互いのクエリを受けていない）。つながっていない別ネットワークで同じVLAN番号を使う構成は対象外にする。
+			// つながったかたまりごとに1件ずつ、毎回同じ順で出す（順が変わると同じ問題が別のアラートとして出直すため）。
+			for _, names := range connectedQueriers(live, vi.querierSw) {
+				add(model.SevCritical, "QUERIER_CONFLICT", fmt.Sprintf("VLAN%d 複数のスイッチがクエリア（%s）", v, strings.Join(names, ", ")), nil, "", map[string]any{"vlan": v, "queriers": strings.Join(names, ", ")})
+			}
 		}
 		if len(vi.vers) > 1 {
 			add(model.SevCritical, "IGMP_VERSION_MIX", fmt.Sprintf("VLAN%d IGMPバージョン混在", v), nil, "", map[string]any{"vlan": v})
@@ -538,6 +547,54 @@ func floodedPorts(s *model.SwitchState) int {
 		flooded += max(check(vlan, ports, local), check(vlan, ports, trunkRx))
 	}
 	return flooded
+}
+
+// connectedQueriers は、クエリアと答えたスイッチを LLDP（NETGEAR隣接）でつながったかたまりごとに分け、
+// 2台以上いるかたまりの名前の一覧を、決まった順（名前順）で返す。
+func connectedQueriers(live, queriers []*model.SwitchState) [][]string {
+	if len(queriers) < 2 {
+		return nil
+	}
+	parent := map[int64]int64{}
+	var find func(int64) int64
+	find = func(id int64) int64 {
+		if p, ok := parent[id]; ok && p != id {
+			root := find(p)
+			parent[id] = root
+			return root
+		}
+		parent[id] = id
+		return id
+	}
+	byName := map[string]*model.SwitchState{}
+	for _, s := range live {
+		find(s.ID)
+		if s.SysName != "" {
+			byName[s.SysName] = s
+		}
+	}
+	for _, s := range live {
+		for _, n := range s.Neighbors {
+			if peer := byName[n.SysName]; n.IsNetgear && peer != nil && peer.ID != s.ID {
+				parent[find(s.ID)] = find(peer.ID)
+			}
+		}
+	}
+	groups := map[int64][]string{}
+	for _, q := range queriers {
+		root := find(q.ID)
+		groups[root] = append(groups[root], q.Name)
+	}
+	var out [][]string
+	for _, names := range groups {
+		if len(names) < 2 {
+			continue
+		}
+		sort.Strings(names)
+		out = append(out, names)
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.Join(out[i], ",") < strings.Join(out[j], ",") })
+	return out
 }
 
 func isUplink(s *model.SwitchState, p *model.Port) bool {

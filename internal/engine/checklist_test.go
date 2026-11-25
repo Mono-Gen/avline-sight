@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -158,7 +159,9 @@ func TestShowChecklistStates(t *testing.T) {
 				Devices: []model.Device{{MAC: checklistTestMAC, IP: "192.0.2.10", Source: "fdb"}}}
 			sw := &model.SwitchState{ID: 1, Name: "SW", LastPoll: now, Reachable: true, ClockOffsetSeconds: &offset,
 				Config: model.SwitchConf{StpVersion: "rstp"}, Ports: []*model.Port{port},
-				Health: model.Health{PoEBudgetW: 100, PoEUsedW: 40, TempMaxC: 32}}
+				Health: model.Health{PoEBudgetW: 100, PoEUsedW: 40, TempMaxC: 32},
+				// 実機は必ずVLAN 1を返す。IGMPの取得が済んだ健全なスイッチとして扱う
+				IGMP: model.IGMP{SnoopingKnown: true, SnoopingOn: true, Vlans: []model.VlanIGMP{{VLAN: 1}}}}
 			e.states[1], e.lastTraps[1], e.sleepInhibited = sw, now, true
 			e.pingResults[checklistTestMAC] = DevicePing{IP: "192.0.2.10", OK: true, TS: now}
 			saveChecklistAlias(t, e, "192.0.2.10")
@@ -192,7 +195,8 @@ func TestShowChecklistStates(t *testing.T) {
 					t.Error("recovered alert counted as active")
 				}
 			}
-			if !found || required != 8 || optional != 7 {
+			// 必須9項目（計画§16の8項目＋マルチキャスト設定）と任意7項目
+			if !found || required != 9 || optional != 7 {
 				t.Fatalf("found %v, required %d, optional %d", found, required, optional)
 			}
 		})
@@ -210,5 +214,108 @@ func insertChecklistEvent(t *testing.T, e *Engine, event model.Event) {
 	t.Helper()
 	if inserted, err := e.st.InsertEvent(&event); !inserted || err != nil {
 		t.Fatalf("insert event=%v, %v", inserted, err)
+	}
+}
+
+// マルチキャスト設定の5種類（クエリア不在・複数・Snooping不一致・IGMP版混在・全体OFF）を本番前チェックの必須項目に載せる。
+func TestChecklistMulticastItem(t *testing.T) {
+	e, _ := newTestEngine(t)
+	mk := func(id int64, name string, on bool, vlans ...model.VlanIGMP) *model.SwitchState {
+		return &model.SwitchState{ID: id, Name: name, SysName: name, Reachable: true, FW: "13.0.7.6", LastPoll: time.Now(),
+			Config: model.SwitchConf{StpVersion: "rstp", StpPriority: 4096, IsRoot: id == 1},
+			IGMP:   model.IGMP{SnoopingKnown: true, SnoopingOn: on, Vlans: vlans}}
+	}
+	item := func(states ...*model.SwitchState) ChecklistItem {
+		e.mu.Lock()
+		e.states = map[int64]*model.SwitchState{}
+		e.order = nil
+		for _, s := range states {
+			e.states[s.ID] = s
+			e.order = append(e.order, s.ID)
+		}
+		e.mu.Unlock()
+		checklist, err := e.ShowChecklist(t.Context(), true, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, it := range checklist.Items {
+			if it.ID == "multicast" {
+				return it
+			}
+		}
+		t.Fatal("multicast item missing")
+		return ChecklistItem{}
+	}
+	ok := item(mk(1, "A", true, model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.168.11.1"}))
+	if ok.State != checkPass || ok.Optional {
+		t.Fatalf("a healthy VLAN: %+v", ok)
+	}
+	bad := item(
+		mk(1, "A", true, model.VlanIGMP{VLAN: 11, Snooping: true, LastQuerier: "0.0.0.0"}, model.VlanIGMP{VLAN: 12, Snooping: true, QuerierOper: "querier", LastQuerier: "192.168.12.1"}),
+		mk(2, "B", false, model.VlanIGMP{VLAN: 12, Snooping: false, QuerierOper: "querier", LastQuerier: "192.168.12.2"}, model.VlanIGMP{VLAN: 13, Snooping: true, QuerierOper: "querier", LastQuerier: "192.168.13.1"}))
+	if bad.State != checkReview {
+		t.Fatalf("problems not reported: %+v", bad)
+	}
+	var reasons []string
+	for _, f := range bad.Findings {
+		reasons = append(reasons, f.Target.Label+": "+f.Reason)
+	}
+	all := strings.Join(reasons, "\n")
+	for _, want := range []string{
+		"VLAN 11: VLAN 11: Snooping が有効ですがクエリアがいません。",
+		"VLAN 12: VLAN 12: クエリアが複数います（192.168.12.1, 192.168.12.2）。",
+		"VLAN 12: VLAN 12: スイッチによって Snooping の有効・無効が違います。",
+		"B: スイッチ全体の Snooping が無効です（VLAN 13 の設定が効いていません）。",
+	} {
+		if !strings.Contains(all, want) {
+			t.Errorf("missing %q in:\n%s", want, all)
+		}
+	}
+	// 初回取得前は判定中
+	pending := item(mk(1, "A", true), &model.SwitchState{ID: 2, Name: "B"})
+	if pending.State != checkPending {
+		t.Fatalf("before the first collection: %+v", pending)
+	}
+	// STP等(Slow)は取れたがIGMP(Medium)がまだ → 何も検査せずに合格しない
+	slowOnly := item(mk(1, "A", true))
+	if slowOnly.State != checkPending {
+		t.Fatalf("passed before IGMP was collected: %+v", slowOnly)
+	}
+	// 判定できるスイッチが無い（全台到達不能・0台）→ 合格にも判定中にもせず要確認
+	down := mk(1, "A", true, model.VlanIGMP{VLAN: 11, Snooping: true})
+	down.Reachable = false
+	if got := item(down); got.State != checkReview {
+		t.Fatalf("all switches unreachable: %+v", got)
+	}
+	if got := item(); got.State != checkReview {
+		t.Fatalf("no switches: %+v", got)
+	}
+	// LLDPでつながった2台がどちらも自分をクエリアと答える（アドレスは 0.0.0.0）→ クエリアが複数
+	a := mk(1, "A", true, model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "0.0.0.0"})
+	b := mk(2, "B", true, model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "0.0.0.0"})
+	a.Neighbors = []model.Neighbor{{SysName: "B", IsNetgear: true}}
+	linked := item(a, b)
+	if linked.State != checkReview || !strings.Contains(linked.Findings[0].Reason, "クエリアが複数います（A, B）") {
+		t.Fatalf("two linked queriers: %+v", linked)
+	}
+	// つながっていない2台（別ネットワークで同じVLAN番号）は対象外
+	a.Neighbors = nil
+	if got := item(a, b); got.State != checkPass {
+		t.Fatalf("two unlinked switches with the same VLAN reported: %+v", got)
+	}
+	// 別々につながった2系統で、それぞれ2台がクエリア → 両方を、毎回同じ順で報告する
+	c := mk(3, "C", true, model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "0.0.0.0"})
+	d := mk(4, "D", true, model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "0.0.0.0"})
+	a.Neighbors = []model.Neighbor{{SysName: "B", IsNetgear: true}}
+	c.Neighbors = []model.Neighbor{{SysName: "D", IsNetgear: true}}
+	for range 5 {
+		two := item(a, b, c, d)
+		if len(two.Findings) != 2 || !strings.Contains(two.Findings[0].Reason, "（A, B）") || !strings.Contains(two.Findings[1].Reason, "（C, D）") {
+			t.Fatalf("two separate groups: %+v", two.Findings)
+		}
+	}
+	// 全スイッチが初回の応答前 → 要確認ではなく判定中
+	if got := item(&model.SwitchState{ID: 1, Name: "A"}, &model.SwitchState{ID: 2, Name: "B"}); got.State != checkPending {
+		t.Fatalf("before any first poll: %+v", got)
 	}
 }

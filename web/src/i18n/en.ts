@@ -47,7 +47,7 @@ export const en: Dictionary = {
     reach: 'All switches reachable', trap: 'Trap receipt confirmed', clock: 'Clock offset within 60 seconds',
     clockOffset: 'Clock offset from monitoring PC: {seconds} s', clockUnavailable: 'Clock offset needs review because no measurement is available.',
     devices: 'All registered devices visible', unacked: 'No unacknowledged alerts', active: 'No active alerts (including acknowledged alerts)',
-    initial: 'Initial collection complete for all switches', host: 'Trap listener and sleep prevention active',
+    initial: 'Initial collection complete for all switches', host: 'Trap listener and sleep prevention active', multicast: 'IGMP Snooping and querier settings',
     excluded: 'Excluded ports', ping: 'Registered device ping and planned IP', recent: 'Recent errors and link interruptions',
     optics: 'SFP receive power headroom', uplink: 'Uplink speeds', power: 'PoE and temperature headroom', config: 'Recent configuration changes',
     start: 'Start show', startWithRemaining: 'Start show after review', cancel: 'Cancel',

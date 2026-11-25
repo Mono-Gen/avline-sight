@@ -27,7 +27,7 @@ func testChecklistGate(t *testing.T, phase string) {
 		t.Fatal(w.Body)
 	}
 	var checklist engine.ShowChecklist
-	if w := do(h, "GET", "/api/checklist/pre-show", ""); w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &checklist) != nil || len(checklist.Items) != 15 {
+	if w := do(h, "GET", "/api/checklist/pre-show", ""); w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &checklist) != nil || len(checklist.Items) != 16 { // 必須9＋任意7
 		t.Fatalf("checklist response %d: %s", w.Code, w.Body)
 	}
 	if w := do(h, "PUT", "/api/phase", `{"phase":"show"}`); w.Code != 409 || s.Engine.Phase() != phase {

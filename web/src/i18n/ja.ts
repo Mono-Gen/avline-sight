@@ -46,7 +46,7 @@ export const ja = {
     reach: '全スイッチ到達', trap: 'Trap受信確認', clock: '時刻ずれ60秒以内',
     clockOffset: '監視PCとの時刻差 {seconds}秒', clockUnavailable: '時刻差は要確認です。取得できた測定値がありません。',
     devices: '登録機器がすべて見えている', unacked: '未確認アラート0件', active: '発生中アラート0件（確認済み含む）',
-    initial: '全スイッチの初回取得完了', host: 'Trap待受とスリープ抑止が有効',
+    initial: '全スイッチの初回取得完了', host: 'Trap待受とスリープ抑止が有効', multicast: 'IGMP Snooping・クエリアの設定',
     excluded: '監視除外ポートの残り', ping: '登録機器のPing・予定IP一致', recent: '直近数分のエラー・断続',
     optics: 'SFP受光の余裕', uplink: '上位回線の速度', power: 'PoE・温度の余裕', config: '直近の設定変化',
     start: '本番を開始', startWithRemaining: '確認したうえで本番を開始', cancel: 'キャンセル',
