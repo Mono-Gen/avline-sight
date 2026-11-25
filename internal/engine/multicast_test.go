@@ -121,7 +121,7 @@ func TestSnoopGlobalOff(t *testing.T) {
 		return &model.SwitchState{ID: 1, Name: "A", SysName: "A", Reachable: true, FW: "13.0.7.6", LastPoll: time.Now(),
 			Config: model.SwitchConf{StpVersion: "rstp", StpPriority: 4096, IsRoot: true},
 			IGMP: model.IGMP{SnoopingKnown: known, SnoopingOn: on,
-				Vlans: []model.VlanIGMP{{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.168.11.1"}, {VLAN: 13}}}}
+				Vlans: []model.VlanIGMP{{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.0.2.11"}, {VLAN: 13}}}}
 	}
 	audit := func(s *model.SwitchState) map[string]Finding {
 		e.mu.Lock()

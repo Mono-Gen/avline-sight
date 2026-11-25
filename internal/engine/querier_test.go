@@ -43,15 +43,15 @@ func TestQuerierAddressZeroIsNotAQuerier(t *testing.T) {
 	}
 
 	// 2) 片方が実アドレス、もう片方が 0.0.0.0 → 複数クエリアではない
-	set(mk(1, "A", model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.168.11.1"}),
+	set(mk(1, "A", model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.0.2.11"}),
 		mk(2, "B", model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "non-querier", LastQuerier: "0.0.0.0"}))
 	if got := codes(); got["QUERIER_CONFLICT"] || got["QUERIER_ABSENT"] {
 		t.Fatalf("0.0.0.0 counted as a second querier or hid the real one: %v", got)
 	}
 
 	// 3) 実アドレスが2つ → 複数クエリア
-	set(mk(1, "A", model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.168.11.1"}),
-		mk(2, "B", model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.168.11.2"}))
+	set(mk(1, "A", model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.0.2.11"}),
+		mk(2, "B", model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.0.2.12"}))
 	if got := codes(); !got["QUERIER_CONFLICT"] {
 		t.Fatalf("two real queriers not detected: %v", got)
 	}
@@ -59,7 +59,7 @@ func TestQuerierAddressZeroIsNotAQuerier(t *testing.T) {
 	for _, c := range []struct {
 		addr string
 		want bool
-	}{{"", false}, {"0.0.0.0", false}, {"::", false}, {"192.168.11.1", true}, {"fe80::1", true}} {
+	}{{"", false}, {"0.0.0.0", false}, {"::", false}, {"192.0.2.11", true}, {"fe80::1", true}} {
 		if got := realQuerier(c.addr); got != c.want {
 			t.Errorf("realQuerier(%q) = %v, want %v", c.addr, got, c.want)
 		}
@@ -79,12 +79,12 @@ func TestQuerierChangeThroughZero(t *testing.T) {
 		e.mu.Unlock()
 		e.evaluateCross(DefaultSettings())
 	}
-	poll("192.168.11.1")
+	poll("192.0.2.11")
 	poll("0.0.0.0")
 	if codes(t, st)["QUERIER_CHANGED"] != 0 {
 		t.Fatal("0.0.0.0 reported as a querier change")
 	}
-	poll("192.168.11.2")
+	poll("192.0.2.12")
 	if codes(t, st)["QUERIER_CHANGED"] != 1 {
 		t.Fatal("a change from .1 to .2 through 0.0.0.0 was missed")
 	}

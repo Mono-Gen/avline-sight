@@ -246,13 +246,13 @@ func TestChecklistMulticastItem(t *testing.T) {
 		t.Fatal("multicast item missing")
 		return ChecklistItem{}
 	}
-	ok := item(mk(1, "A", true, model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.168.11.1"}))
+	ok := item(mk(1, "A", true, model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", LastQuerier: "192.0.2.11"}))
 	if ok.State != checkPass || ok.Optional {
 		t.Fatalf("a healthy VLAN: %+v", ok)
 	}
 	bad := item(
-		mk(1, "A", true, model.VlanIGMP{VLAN: 11, Snooping: true, LastQuerier: "0.0.0.0"}, model.VlanIGMP{VLAN: 12, Snooping: true, QuerierOper: "querier", LastQuerier: "192.168.12.1"}),
-		mk(2, "B", false, model.VlanIGMP{VLAN: 12, Snooping: false, QuerierOper: "querier", LastQuerier: "192.168.12.2"}, model.VlanIGMP{VLAN: 13, Snooping: true, QuerierOper: "querier", LastQuerier: "192.168.13.1"}))
+		mk(1, "A", true, model.VlanIGMP{VLAN: 11, Snooping: true, LastQuerier: "0.0.0.0"}, model.VlanIGMP{VLAN: 12, Snooping: true, QuerierOper: "querier", LastQuerier: "198.51.100.1"}),
+		mk(2, "B", false, model.VlanIGMP{VLAN: 12, Snooping: false, QuerierOper: "querier", LastQuerier: "198.51.100.2"}, model.VlanIGMP{VLAN: 13, Snooping: true, QuerierOper: "querier", LastQuerier: "203.0.113.1"}))
 	if bad.State != checkReview {
 		t.Fatalf("problems not reported: %+v", bad)
 	}
@@ -263,7 +263,7 @@ func TestChecklistMulticastItem(t *testing.T) {
 	all := strings.Join(reasons, "\n")
 	for _, want := range []string{
 		"VLAN 11: VLAN 11: Snooping が有効ですがクエリアがいません。",
-		"VLAN 12: VLAN 12: クエリアが複数います（192.168.12.1, 192.168.12.2）。",
+		"VLAN 12: VLAN 12: クエリアが複数います（198.51.100.1, 198.51.100.2）。",
 		"VLAN 12: VLAN 12: スイッチによって Snooping の有効・無効が違います。",
 		"B: スイッチ全体の Snooping が無効です（VLAN 13 の設定が効いていません）。",
 	} {
