@@ -245,7 +245,7 @@ test('Topology uses device MAC alerts and limits port fallback to alerts for the
     { mac: 'OTHER', switch_id: 1, if_index: 4, port: '4', active: true },
     { mac: 'OTHER', switch_id: 3, if_index: 4, port: '4', active: true },
     { switch_id: 3, if_index: 4, port: '4', active: false },
-  ].map(alert => ({ severity: 'WARNING', acked: false, ...alert }));
+  ].map(alert => ({ severity: alert.active ? 'CRITICAL' : 'WARNING', acked: false, ...alert }));
   const model = buildTopology(topology, [], rows);
   updateTopology(graph, model, undefined, { nodeDetails: topologyNodeDetails(model, alerts) });
   const tone = mac => graph.getElementById(`device:${mac}`).data('statusTone');

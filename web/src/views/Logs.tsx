@@ -43,15 +43,15 @@ export function collapseRepeated(rows: readonly Event[]) {
   return out;
 }
 
-export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert, count = 1, switches, showAck = true, onPort, ongoing = false }: {
+export function LogEventRow({ event, ackable, disabled, onAcknowledge, expert, count = 1, switches, showAck = true, onPort, ongoing }: {
   event: Event; ackable: ReadonlySet<number>; disabled: boolean; onAcknowledge: (id: number) => void; expert?: boolean;
   count?: number; switches?: string[]; showAck?: boolean; onPort?: (event: Event) => void;
-  // True only while the alert behind this row is still active (not merely unacknowledged).
-  ongoing?: boolean;
+  // Set only while the alert behind this row is still active: red for critical, orange for a warning.
+  ongoing?: 'critical' | 'caution';
 }) {
   const syslog = event.category === 'SYSLOG' ? syslogMessage(event.title) : undefined;
   const switchLabel = switches && switches.length > 1 ? t('logs.andMore', { name: switches[0], count: switches.length - 1 }) : event.switch_name;
-  return <tr className={ongoing ? 'log-row-ongoing' : undefined}>
+  return <tr className={ongoing === 'critical' ? 'log-row-ongoing' : ongoing === 'caution' ? 'log-row-caution' : undefined}>
     <td className="whitespace-nowrap"><time dateTime={event.ts}>{pcTimestamp(event.ts, true)}</time></td>
     {/* Only warnings and critical events get a coloured badge; INFO stays quiet. */}
     <td className="whitespace-nowrap">{event.severity === 'INFO' ? <span className="log-info">{t('ui.m007')}</span> : <Badge text={event.severity} />}</td>
@@ -186,7 +186,7 @@ export function Logs(props: ViewProps) {
     if (value !== 'custom') setFilter(previous => ({ ...previous, from, to: '' }));
   };
   const grouped = collapseRepeated(rows);
-  const activeIds = new Set(asArray(props.operations?.alerts).filter(alert => alert.active).map(alert => alert.event_id));
+  const activeIds = new Map(asArray(props.operations?.alerts).filter(alert => alert.active).map(alert => [alert.event_id, alert.severity === 'CRITICAL' ? 'critical' : 'caution'] as const));
   const showAck = rows.some(event => canAcknowledgeEvent(event, ackable) || (event.acked && event.severity !== 'INFO'));
   const openPort = props.openPortMonitor
     ? (event: Event) => props.openPortMonitor?.({ switchId: event.switch_id, ifIndex: event.if_index })
@@ -253,7 +253,7 @@ export function Logs(props: ViewProps) {
           <tbody>
             {grouped.map(({ event, count, switches: names }) => (
               <LogEventRow key={event.id} event={event} ackable={ackable} disabled={disabled} expert={props.expert}
-                count={count} switches={names} showAck={showAck} onPort={openPort} ongoing={activeIds.has(event.id)}
+                count={count} switches={names} showAck={showAck} onPort={openPort} ongoing={activeIds.get(event.id)}
                 onAcknowledge={id => props.run(() => acknowledge([id]))} />
             ))}
           </tbody>

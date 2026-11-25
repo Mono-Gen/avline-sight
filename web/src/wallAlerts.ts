@@ -17,15 +17,21 @@ export function summarizeAlerts(alerts: Alert[]) {
   };
 }
 
+// Red fill and the round "!" are kept for ongoing CRITICAL alerts only; an ongoing WARNING (clock skew, high
+// utilisation, ...) is "caution": orange triangle and edge, so it no longer looks as severe as a switch going down.
 export const alertStates = {
   critical: { symbol: '!', label: 'rack.active', color: '#ff4d5e' },
-  warning: { symbol: '!', label: 'wall.recovered', color: '#facc15' },
+  caution: { symbol: '▲', label: 'rack.activeWarning', color: '#fb923c' },
+  warning: { symbol: '▲', label: 'wall.recovered', color: '#facc15' },
   healthy: { symbol: '✓', label: 'cleanup.switchOK', color: '#2dd4bf' },
   unknown: { symbol: '—', label: 'cleanup.switchUnknown', color: '#9aa3b2' },
 } as const;
 
+export const hasCriticalActive = (counts: ReturnType<typeof summarizeAlerts>) =>
+  counts.activeItems.some(alert => alert.severity === 'CRITICAL');
+
 export function alertTone(counts: ReturnType<typeof summarizeAlerts>, known: boolean) {
-  return counts.active ? 'critical' : counts.unacked ? 'warning' : known ? 'healthy' : 'unknown';
+  return hasCriticalActive(counts) ? 'critical' : counts.active ? 'caution' : counts.unacked ? 'warning' : known ? 'healthy' : 'unknown';
 }
 
 export const isPortAlert = (alert: Alert) => alert.if_index > 0 && !['FAN_FAIL', 'PSU_FAIL'].includes(alert.code);

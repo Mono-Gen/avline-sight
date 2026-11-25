@@ -1,11 +1,12 @@
 import { t } from '../i18n';
 import type { Alert } from '../types';
-import { alertTone, summarizeAlerts } from '../wallAlerts';
+import { alertTone, hasCriticalActive, summarizeAlerts } from '../wallAlerts';
 
 export type IndexSwitch = { id: number; name: string; group_tag: string; reachable: boolean };
 type Tone = ReturnType<typeof alertTone>;
 
-// State is told apart by shape, not colour alone: ongoing = round "!", recovered/unacknowledged = triangle, healthy = square, unknown = grey.
+// State is told apart by shape, not colour alone: ongoing critical = round "!", ongoing warning = orange triangle,
+// recovered/unacknowledged = yellow triangle, healthy = square, unknown = grey.
 export function StateMark({ tone }: { tone: Tone }) {
   return <span className={`state-mark state-mark-${tone}`} aria-hidden="true">{tone === 'critical' ? '!' : ''}</span>;
 }
@@ -47,7 +48,7 @@ export function SwitchIndex({ switches, groups, alerts, alertsKnown = true, focu
       <span className="switch-index-title">{t('focus.index')}</span>
       {/* Fault marks and counts stay visible when folded and on other pages. */}
       {alertsKnown && <span className="switch-index-marks" aria-label={t('focus.marks', { active: total.active, recovered })}>
-        {total.active > 0 && <span className="switch-index-mark"><StateMark tone="critical" />{total.active}</span>}
+        {total.active > 0 && <span className="switch-index-mark"><StateMark tone={hasCriticalActive(total) ? 'critical' : 'caution'} />{total.active}</span>}
         {recovered > 0 && <span className="switch-index-mark"><StateMark tone="warning" />{recovered}</span>}
       </span>}
     </div>

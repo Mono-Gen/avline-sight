@@ -15,7 +15,8 @@ export function WallSwitchTile({ summary, alerts, stale, selected = false, onSel
     <h2>{onSelect ? <button className="wall-switch-filter" aria-pressed={selected} onClick={onSelect}>{summary.name}</button> : summary.name}</h2>
     <p className="wall-switch-meta">{summary.group_tag || t('rack.ungrouped')} {summary.ip && <>· {summary.ip}</>}</p>
     {/* Same shapes everywhere: ongoing = round "!", recovered and unacknowledged = triangle. */}
-    <strong>{tone === 'critical' ? <><ErrorSymbol /> </> : tone === 'warning' ? <><span className="warning-symbol">▲</span> </> : null}{t(state.label)}</strong>
+    <strong>{tone === 'critical' ? <><ErrorSymbol /> </> : tone === 'caution' ? <><span className="caution-symbol">▲</span> </>
+      : tone === 'warning' ? <><span className="warning-symbol">▲</span> </> : null}{t(state.label)}</strong>
     {counts.count > 0 && <p className="wall-switch-counts">{t('wall.counts', counts)}</p>}
     {current.length > 0 && <ul>{current.slice(0, 3).map(alert => <li key={alert.event_id}>
       {alert.device_name || alert.port || summary.name} · {expert ? eventTitle(alert) : eventHeadline(alert)}

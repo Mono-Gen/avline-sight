@@ -13,9 +13,11 @@ interface HeaderProps {
   updatedAt?: number | string;
   openChecklist?: (gate: boolean) => void;
   run: (action: () => Promise<void>) => void;
+  // Leaves expert view from the header tag.
+  onExitExpert?: () => void;
 }
 export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, expert, status, busy, locked,
-  replay, markerInput, run, summary, updatedAt, openChecklist }: HeaderProps) {
+  replay, markerInput, run, summary, updatedAt, openChecklist, onExitExpert }: HeaderProps) {
   const [note, setNote] = useState('');
   const phaseControl = <PhaseControls {...{ phase, locked, busy, wall, run, onPhase }}
     openChecklist={openChecklist && (() => openChecklist(true))} />;
@@ -47,8 +49,10 @@ export function AppHeader({ online, phase, onPhase, onTrapHelp, wall, setWall, e
           value={note} disabled={busy || locked} onChange={event => setNote(event.target.value)} />
         <button type="submit" disabled={busy || locked}>{t('pages.record')}</button>
       </form>
-      {expertBadge}
       <button onClick={() => setWall(true)}>{t('rack.wall')}</button>
+      {/* Expert is a view mode, not an action: a quiet dashed tag set apart at the right, next to the clock. */}
+      {expert && <button type="button" className="header-expert" title={t('expert.exit')} aria-label={t('expert.exit')}
+        disabled={!onExitExpert} onClick={onExitExpert}>{t('expert.modeLabel')} <b>{t('expert.badge')}</b> <span aria-hidden="true">×</span></button>}
       {clock}
     </div>
     {summary}

@@ -1,5 +1,6 @@
 import { eventHeadline, eventTitle, t } from '../i18n';
-import { alertTone, matchingPortAlerts, summarizeAlerts } from '../wallAlerts';
+import type { TranslationKey } from '../i18n';
+import { alertTone, hasCriticalActive, matchingPortAlerts, summarizeAlerts } from '../wallAlerts';
 import { useEffect, useState } from 'react';
 import { StateMark } from '../components/SwitchIndex';
 import { switchHealth } from '../components/RackRow';
@@ -10,7 +11,7 @@ import { PollingStatus } from '../components/PollingStatus';
 import { PortHardware } from '../components/PortHardware';
 import { confirmCounterReset } from '../components/GroupActions';
 import { asArray, decimal, formatBps, resolveSwitchId } from '../format';
-import type { Alert, Event, MetricResult, ModelDefinitions, Port, SwitchSummary } from '../types';
+import type { Alert, Device, Event, MetricResult, ModelDefinitions, Port, SwitchSummary } from '../types';
 import { METRICS_REFRESH_MS, usePolling } from '../usePolling';
 import { useSwitchState } from '../useSwitchState';
 import type { PortMonitorTarget, ViewProps } from './props';
@@ -31,15 +32,16 @@ const roles = [
 ];
 // One line per alert title (ongoing first), with a count for repeats, so the reason is readable at a glance.
 function portAlertLines(alerts: Alert[], expert = false) {
-  const lines = new Map<string, { key: string; title: string; active: boolean; count: number }>();
+  const lines = new Map<string, { key: string; title: string; active: boolean; critical: boolean; count: number }>();
   for (const alert of alerts.filter(item => item.active || !item.acked)) {
     const title = expert ? eventTitle(alert) : eventHeadline(alert);
-    const line = lines.get(title) ?? { key: String(alert.event_id), title, active: false, count: 0 };
+    const line = lines.get(title) ?? { key: String(alert.event_id), title, active: false, critical: false, count: 0 };
     line.count++;
     line.active = line.active || alert.active;
+    line.critical = line.critical || alert.active && alert.severity === 'CRITICAL';
     lines.set(title, line);
   }
-  return [...lines.values()].sort((a, b) => Number(b.active) - Number(a.active));
+  return [...lines.values()].sort((a, b) => Number(b.critical) - Number(a.critical) || Number(b.active) - Number(a.active));
 }
 
 // Single-switch view of the port monitor (plan section 21): the former port detail page rearranged into switch health, port panel, linked-port table and a right-hand detail.
@@ -54,6 +56,33 @@ type SwitchPortsProps = ViewProps & {
   thresholds?: Record<string, number>;
   onClosePort?: () => void;
 };
+
+// Device shown by its label, LLDP name or (known) vendor; the MAC only when nothing better is known.
+export function deviceName(d: Pick<Device, 'label' | 'lldp_name' | 'vendor' | 'mac'>) {
+  return d.label || d.lldp_name || d.vendor || d.mac;
+}
+// Second line: IP, the MAC when it is not already the name, and the vendor when the name is a label. Never the same value twice.
+export function deviceDetails(d: Pick<Device, 'label' | 'lldp_name' | 'vendor' | 'mac' | 'ip'>) {
+  const name = deviceName(d);
+  return [d.ip, name !== d.mac ? d.mac : '', name !== d.vendor ? d.vendor : ''].filter(Boolean).join(' · ');
+}
+// Only a duplex the switch actually reports; raw values such as "unknown(0)" are not shown.
+function duplexLabel(duplex: string | undefined) {
+  return /full/i.test(duplex || '') ? t('focus.fullDuplex') : /half/i.test(duplex || '') ? t('focus.halfDuplex') : '';
+}
+export function speedLabel(mbps: number) {
+  return mbps >= 1000 ? `${mbps % 1000 === 0 ? mbps / 1000 : decimal(mbps / 1000)}G` : mbps > 0 ? `${mbps}M` : '—';
+}
+// RX+TX over the snapshots received since the view opened (no extra requests to the switch or the server).
+function Trend({ values }: { values: number[] }) {
+  if (values.length < 2) return <span aria-hidden="true">—</span>;
+  const max = Math.max(1, ...values);
+  const points = values.map((value, index) => `${index / (values.length - 1) * 100},${18 - value / max * 16}`).join(' ');
+  return <svg className="focus-trend" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+  </svg>;
+}
+const TREND_SAMPLES = 60;
 
 export function SwitchPorts(p: SwitchPortsProps) {
   const [idx, setIdx] = useState(0);
@@ -103,6 +132,31 @@ export function SwitchPorts(p: SwitchPortsProps) {
   // Only real issues (not INFO, not phase-suppressed), matching the lamps, the index and the number panels.
   const portAlerts = (port: Port) => s ? issueAlerts(matchingPortAlerts(switchAlerts, s.id, port.if_index)) : [];
   const linkedPorts = asArray(s?.ports).filter(x => x.oper === 'up' || summarizeAlerts(portAlerts(x)).count > 0);
+  // PoE details only while the port powers something or reports a fault (always in expert view).
+  const poeShown = !!port?.poe && (!!p.expert || port.poe.power_w > 0 || (!!port.poe.fault && port.poe.fault !== 'none') ||
+    /fault/i.test(port.poe.detect || '') || port.poe.denied_cnt > 0 || port.poe.overload_cnt > 0 || port.poe.short_cnt > 0);
+  // One chart at a time with its own unit, instead of every metric on one scale.
+  const [chartTab, setChartTab] = useState('bandwidth');
+  const chartTabs: { id: string; label: TranslationKey; keys: string[]; format?: (value: number) => string }[] = [
+    { id: 'bandwidth', label: 'focus.chartBandwidth', keys: ['rx_bps', 'tx_bps'], format: formatBps },
+    { id: 'errors', label: 'focus.chartErrors', keys: ['err_delta', 'discard_delta'] },
+    { id: 'multicast', label: 'metrics.multicast', keys: ['rx_mc_pps'] },
+    ...(p.expert ? [{ id: 'hardware', label: 'focus.chartHardware' as const, keys: ['poe_w', 'sfp_rx_dbm'] }] : []),
+  ];
+  const activeTab = chartTabs.find(tab => tab.id === chartTab) ?? chartTabs[0];
+  // One sample per new poll (keyed by last_poll), kept for linked ports only.
+  const [trend, setTrend] = useState<Record<number, number[]>>({});
+  useEffect(() => {
+    if (!s || p.replay) return;
+    setTrend(previous => {
+      const next: Record<number, number[]> = {};
+      for (const x of asArray(s.ports)) {
+        if (x.oper !== 'up') continue;
+        next[x.if_index] = [...(previous[x.if_index] || []).slice(-(TREND_SAMPLES - 1)), (x.rx_bps || 0) + (x.tx_bps || 0)];
+      }
+      return next;
+    });
+  }, [s?.id, s?.last_poll]); // eslint-disable-line react-hooks/exhaustive-deps
   const metrics = usePolling(async signal => {
     const end = new Date();
     const from = new Date(end.getTime() - range * 60000);
@@ -171,162 +225,182 @@ export function SwitchPorts(p: SwitchPortsProps) {
       {/* Linked ports: device name first, MAC and IP on the second line; fault rows get a state-coloured edge. */}
       <section className="panel focus-card"><h3>{t('focus.linkedPorts')}</h3>
         {linkedPorts.length ? <table className="focus-ports-table">
-          <thead><tr><th>{t('focus.colPort')}</th><th>{t('focus.colDevice')}</th><th>{t('focus.colState')}</th><th>{t('focus.colRate')}</th></tr></thead>
+          <thead><tr><th>{t('focus.colPort')}</th><th>{t('focus.colDevice')}</th><th>{t('focus.colState')}</th>
+            <th>{t('focus.colSpeed')}</th><th>{t('focus.colVlan')}</th><th>{t('focus.colPoe')}</th><th>{t('focus.colErrors')}</th>
+            <th className="num">{t('focus.colRate')}</th><th title={t('focus.trendHelp')}>{t('focus.colTrend')}</th></tr></thead>
           <tbody>{linkedPorts.map(x => {
             const counts = summarizeAlerts(portAlerts(x));
             const first = asArray(x.devices)[0];
             const lines = portAlertLines(portAlerts(x), p.expert);
-            return <tr key={x.if_index} className={[counts.active ? 'focus-row-active' : counts.count ? 'focus-row-recovered' : '',
+            const poeW = x.poe && x.poe.power_w > 0 ? x.poe.power_w : 0;
+            return <tr key={x.if_index} className={[hasCriticalActive(counts) ? 'focus-row-active' : counts.active ? 'focus-row-caution' : counts.count ? 'focus-row-recovered' : '',
               x.if_index === idx ? 'focus-row-selected' : ''].filter(Boolean).join(' ') || undefined}>
               <td><button type="button" className="focus-port-link" aria-pressed={x.if_index === idx} onClick={() => choose(x)}>{x.name}</button></td>
-              <td>{first ? <>{first.label || first.lldp_name || first.mac}
-                {asArray(x.devices).length > 1 && ` +${asArray(x.devices).length - 1}`}
-                {/* The MAC is already the name when the device has no label or LLDP name; do not repeat it. */}
-                <small>{[first.label || first.lldp_name ? first.mac : '', first.ip].filter(Boolean).join(' · ')}</small></> : '—'}</td>
-              <td>{lines.length ? <span className={lines[0].active ? 'rack-critical-count' : 'rack-warning-count'}>{lines[0].active ? '!' : '▲'} {lines[0].title}</span>
+              <td className="focus-device" title={first ? [deviceName(first), deviceDetails(first)].filter(Boolean).join(' · ') : undefined}>{first ? <>{deviceName(first)}
+                {asArray(x.devices).length > 1 && <span className="focus-more"> +{asArray(x.devices).length - 1}</span>}
+                <small>{deviceDetails(first)}</small></> : '—'}</td>
+              <td>{lines.length ? <span className={lines[0].critical ? 'rack-critical-count' : lines[0].active ? 'rack-caution-count' : 'rack-warning-count'}>{lines[0].critical ? '!' : '▲'} {lines[0].title}</span>
                 : t('focus.linked')}</td>
-              <td className="whitespace-nowrap">{formatBps(x.rx_bps)} / {formatBps(x.tx_bps)}</td>
+              <td>{speedLabel(x.speed_mbps)}</td>
+              <td>{x.pvid || '—'}</td>
+              <td>{poeW ? `${decimal(poeW)} W` : '—'}</td>
+              {/* Errors and discards: coloured only when above zero. */}
+              <td className="num"><span className={x.err_delta > 0 ? 'metric-bad' : undefined}>{x.err_delta}</span> / <span className={x.discard_delta > 0 ? 'metric-bad' : undefined}>{x.discard_delta}</span></td>
+              {/* RX above TX, so the column stays narrow next to the detail. */}
+              <td className="num focus-rate"><span>{formatBps(x.rx_bps)}</span><small>{formatBps(x.tx_bps)}</small></td>
+              <td><Trend values={trend[x.if_index] || []} /></td>
             </tr>;
           })}</tbody>
         </table> : <p>{t('focus.noLinkedPorts')}</p>}
       </section>
       </div>
-      {port && <aside className="panel focus-detail space-y-3" aria-label={t('rack.portDetail')}>
-        <div className="focus-detail-head"><strong>{s.name} / {port.name}</strong>
+      {port && <aside className="panel focus-detail" aria-label={t('rack.portDetail')}>
+        {/* Plan section 22: sections in reading order; settings folded; raw settings only in expert view. */}
+        <div className="focus-detail-head"><div><div className="detail-title">{port.name}</div>
+          <div className="detail-sub">{[s.name, (port.type || '').toUpperCase(), port.pvid ? `VLAN ${port.pvid}` : ''].filter(Boolean).join(' · ')}</div></div>
           <button type="button" aria-label={t('focus.closeDetail')} onClick={closePort}>{t('rack.close')}</button></div>
-        {/* Why this port is flagged, first and in its state colour (ongoing red, recovered/unacknowledged yellow). */}
+        <p className={`detail-state ${port.oper === 'up' ? 'detail-up' : 'detail-down'}`}>
+          {port.oper === 'up' ? [t('focus.linked'), port.speed_mbps ? `${port.speed_mbps} Mbps` : '', duplexLabel(port.duplex)].filter(Boolean).join(' · ') : t('focus.down')}</p>
+        {/* Why this port is flagged, first and in its state colour (ongoing critical red, ongoing warning orange, recovered yellow). */}
         {portAlertLines(portAlerts(port), p.expert)
-          .map(line => <p key={line.key} className={`port-alert-line ${line.active ? 'state-active' : 'state-recovered'}`}>
-            {line.active ? '!' : '▲'} {line.title}{line.count > 1 && <span className="port-alert-count"> ×{line.count}</span>}
+          .map(line => <p key={line.key} className={`port-alert-line ${line.critical ? 'state-active' : line.active ? 'state-caution' : 'state-recovered'}`}>
+            {line.critical ? '!' : '▲'} {line.title}{line.count > 1 && <span className="port-alert-count"> ×{line.count}</span>}
           </p>)}
-        <h2 className="text-xl">
-          {port.name}
-          ·
-          {port.type}
-          ·
-          {port.speed_mbps}
-          Mbps
-        </h2>
-        {/* Same shape for bandwidth and packet rates: "RX value / TX value", with a space after every label. */}
-        <p className="metric-line">{t('metrics.rxtx', { rx: formatBps(port.rx_bps), tx: formatBps(port.tx_bps) })}
-          <span className="metric-sep"> · </span><span className={port.err_delta > 0 ? 'metric-bad' : undefined}>{t('metrics.errors', { value: port.err_delta })}</span>
-          <span className="metric-sep"> · </span><span className={port.discard_delta > 0 ? 'metric-bad' : undefined}>{t('metrics.discards', { value: port.discard_delta })}</span></p>
-        <p className="metric-line">{t('metrics.multicast')} {t('metrics.rxtx', { rx: `${decimal(port.rx_mc_pps)} pps`, tx: `${decimal(port.tx_mc_pps)} pps` })}</p>
-        <p>{[
-          [t('portSummary.eee'), port.eee],
-          [t('portSummary.pause'), port.pause],
-          [t('portSummary.udld'), port.udld],
-          [t('portSummary.stp'), port.stp_state],
-          [t('portSummary.trust'), port.trust],
-        ].map(pair => pair.join(' ')).join(' · ')}</p>
-        <PortHardware port={port} />
-        <h3>{t('ui.m090')}</h3>
-        {(port.devices || []).length > 1 && <p>{t('ui.m287')}{port.devices.length}
-          {t('ui.m288')}</p>}
-        <ul className="divide-y divide-slate-500">
-          {asArray(port.devices).map(d => <li key={d.mac} className="space-y-1 py-2">
-            <div className="flex flex-wrap items-baseline gap-x-2">
-              <strong className="min-w-0 break-words" title={d.label && d.lldp_name || undefined}>{d.label || d.lldp_name || d.mac}</strong>
-              {d.link_local && <span className="text-xs">Link-Local</span>}
+        <section className="detail-section"><h4>{t('focus.nowValues')}</h4>
+          <dl className="detail-kv">
+            <dt>{t('focus.bandwidth')}</dt><dd className="detail-big">{t('metrics.rxtx', { rx: formatBps(port.rx_bps), tx: formatBps(port.tx_bps) })}</dd>
+            <dt>{t('focus.colErrors')}</dt><dd><span className={port.err_delta > 0 ? 'metric-bad' : undefined}>{port.err_delta}</span> / <span className={port.discard_delta > 0 ? 'metric-bad' : undefined}>{port.discard_delta}</span></dd>
+            <dt>{t('metrics.multicast')}</dt><dd>{t('metrics.rxtx', { rx: `${decimal(port.rx_mc_pps)} pps`, tx: `${decimal(port.tx_mc_pps)} pps` })}</dd>
+            {port.poe && !poeShown && <><dt>PoE</dt><dd className="detail-muted">{t('focus.poeNone')}</dd></>}
+          </dl>
+        </section>
+        {/* PoE table only while powering or faulted (always in expert view); SFP and cable test when present. */}
+        {(poeShown || port.sfp || port.cable) && <PortHardware port={poeShown ? port : { ...port, poe: null }} />}
+        <section className="detail-section">
+          <h4>{t('ui.m090')}</h4>
+          {(port.devices || []).length > 1 && <p>{t('ui.m287')}{port.devices.length}
+            {t('ui.m288')}</p>}
+          <ul className="divide-y divide-slate-500">
+            {asArray(port.devices).map(d => <li key={d.mac} className="space-y-1 py-2">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <strong className="min-w-0 break-words" title={d.label && d.lldp_name || undefined}>{deviceName(d)}</strong>
+                {d.link_local && <span className="text-xs">Link-Local</span>}
+              </div>
+              {/* MAC and vendor only when they are not already the name above. */}
+            {[deviceName(d) !== d.mac ? d.mac : '', deviceName(d) !== d.vendor ? d.vendor : '', d.ip].some(Boolean) &&
+              <p className="break-words text-sm opacity-80">{[deviceName(d) !== d.mac ? d.mac : '', deviceName(d) !== d.vendor ? d.vendor : '', d.ip].filter(Boolean).join(' · ')}</p>}
+              {d.ip && <div className="flex flex-wrap items-center gap-2 text-sm">
+                <button type="button" className="px-1.5 py-0.5"
+                  disabled={p.busy || p.locked}
+                  onClick={() => p.run(async () => {
+                    const r = await api<{
+                      ok: boolean;
+                      rtt_ms: number;
+                      output: string;
+                    }>('/api/diagnostics/ping', json('POST', { ip: d.ip }));
+                    alert(`${r.ok ? t('ui.m289') : t('ui.m290')} ${r.rtt_ms}ms ${r.output}`);
+                  })}
+                >Ping</button>
+                <a className="px-1.5 py-0.5 underline" target="_blank" rel="noreferrer" href={`http://${d.ip}`}>HTTP</a>
+                <a className="px-1.5 py-0.5 underline" target="_blank" rel="noreferrer" href={`https://${d.ip}`}>HTTPS</a>
+              </div>}
+            </li>)}
+          </ul>
+        </section>
+        {!p.replay && <section className="detail-section"><h4>{t('focus.chart')}</h4>
+          <div className="detail-chart-tools">
+            <div role="group" aria-label={t('focus.chart')} className="detail-tabs">
+              {chartTabs.map(tab => <button key={tab.id} type="button" aria-pressed={activeTab.id === tab.id} onClick={() => setChartTab(tab.id)}>{t(tab.label)}</button>)}
             </div>
-            <p className="break-words text-sm opacity-80">{[d.mac, d.vendor, d.ip].filter(Boolean).join(' · ')}</p>
-            {d.ip && <div className="flex flex-wrap items-center gap-2 text-sm">
-              <button type="button" className="px-1.5 py-0.5"
-                disabled={p.busy || p.locked}
-                onClick={() => p.run(async () => {
-                  const r = await api<{
-                    ok: boolean;
-                    rtt_ms: number;
-                    output: string;
-                  }>('/api/diagnostics/ping', json('POST', { ip: d.ip }));
-                  alert(`${r.ok ? t('ui.m289') : t('ui.m290')} ${r.rtt_ms}ms ${r.output}`);
-                })}
-              >Ping</button>
-              <a className="px-1.5 py-0.5 underline" target="_blank" rel="noreferrer" href={`http://${d.ip}`}>HTTP</a>
-              <a className="px-1.5 py-0.5 underline" target="_blank" rel="noreferrer" href={`https://${d.ip}`}>HTTPS</a>
-            </div>}
-          </li>)}
-        </ul>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex max-w-full items-center gap-2 whitespace-nowrap">
-            {t('ui.m101')}
-            <input className="min-w-0" value={memo} onChange={e => setMemo(e.target.value)} />
-          </label>
-
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={excluded} onChange={e => setExcluded(e.target.checked)} />
-            {t('ui.m133')}
-          </label>
-
-          <label className="flex max-w-full items-center gap-2 whitespace-nowrap">
-            {t('ui.m291')}
-            <input className="min-w-0" type="number" value={speed} onChange={e => setSpeed(Number(e.target.value))} />
-          </label>
-
-          <select value={role} onChange={e => setRole(e.target.value)}>
-            {asArray(roles).map(r => <option key={r} value={r}>
-              {r || t('ui.m292')}
-            </option>)}
-          </select>
-          <button
-            className="button-primary"
-            disabled={p.busy || p.locked}
-            onClick={() => p.run(async () => {
-              await api(`/api/switches/${p.selected}/ports/${idx}`, json('PUT', {
-                memo,
-                excluded,
-                expected_speed_mbps: speed,
-                av_role: role
-              }));
-            })}
-          >{t('ui.m187')}</button>
-
-          <button
-            disabled={p.busy || p.locked}
-            onClick={() => p.run(async () => {
-              const next = [
-                ...asArray(p.watch).filter(w => !(w.switch_id === p.selected && w.if_index === idx)),
-                {
-                  switch_id: p.selected,
-                  if_index: idx,
-                  label: `${s.name} ${port.name}`
-                }
-              ];
-              await api('/api/watchlist', json('PUT', next));
-              p.setWatch(next);
-            })}
-          >{t('ui.m293')}</button>
-        </div>
-        <div className="operation-area" role="group" aria-label={t('rack.actions')}><button
-          className=""
-          disabled={p.busy || p.locked}
-          onClick={() => {
-            if (confirmCounterReset(t('ui.m294'), p.operations?.phase || p.status?.phase)) p.run(async () => {
-              await api(`/api/switches/${p.selected}/counters/reset`, json('POST', { if_index: idx }));
-              setUntil(Date.now() + 600000);
-              setNow(Date.now());
-            });
-          }}
-        >{t('ui.m295')}</button></div>
-
-        {until > now && <span>{t('ui.m296')}{Math.ceil((until - now) / 1000)}
-          {t('ui.m297')}{port.err_since_reset}
-          {t('ui.m298')}{port.discard_since_reset}
-        </span>}
-        {!p.replay && <>
-          <select value={range} onChange={e => setRange(Number(e.target.value))}>
-            {[15, 60, 360, 1440].map(n => <option key={n} value={n}>
-              {n < 60 ? t('ui.m299', { p0: n }) : t('ui.m300', { p0: n / 60 })}
-            </option>)}
-          </select>
-          <Chart
-            points={metrics.data?.series.points || []}
-            keys={['rx_bps', 'tx_bps', 'rx_mc_pps', 'err_delta', 'discard_delta', 'poe_w', 'sfp_rx_dbm']}
-          />
-          <h3>{t('ui.m301')}</h3>
+            <select value={range} onChange={e => setRange(Number(e.target.value))}>
+              {[15, 60, 360, 1440].map(n => <option key={n} value={n}>
+                {n < 60 ? t('ui.m299', { p0: n }) : t('ui.m300', { p0: n / 60 })}
+              </option>)}
+            </select>
+          </div>
+          <Chart points={metrics.data?.series.points || []} keys={activeTab.keys} format={activeTab.format} height={200} />
+        </section>}
+        {!p.replay && <section className="detail-section"><h4>{t('ui.m301')}</h4>
           <PollingStatus {...metrics} />
           <Table rows={metrics.data?.history || []} hide={p.expert ? [] : ['detail', 'hint']} expert={p.expert} />
-        </>}
+        </section>}
+        <details className="detail-settings"><summary>{t('focus.portSettings')}</summary>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex max-w-full items-center gap-2 whitespace-nowrap">
+              {t('ui.m101')}
+              <input className="min-w-0" value={memo} onChange={e => setMemo(e.target.value)} />
+            </label>
+  
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={excluded} onChange={e => setExcluded(e.target.checked)} />
+              {t('ui.m133')}
+            </label>
+  
+            <label className="flex max-w-full items-center gap-2 whitespace-nowrap">
+              {t('ui.m291')}
+              <input className="min-w-0" type="number" value={speed} onChange={e => setSpeed(Number(e.target.value))} />
+            </label>
+  
+            <select value={role} onChange={e => setRole(e.target.value)}>
+              {asArray(roles).map(r => <option key={r} value={r}>
+                {r || t('ui.m292')}
+              </option>)}
+            </select>
+            <button
+              className="button-primary"
+              disabled={p.busy || p.locked}
+              onClick={() => p.run(async () => {
+                await api(`/api/switches/${p.selected}/ports/${idx}`, json('PUT', {
+                  memo,
+                  excluded,
+                  expected_speed_mbps: speed,
+                  av_role: role
+                }));
+              })}
+            >{t('ui.m187')}</button>
+  
+            <button
+              disabled={p.busy || p.locked}
+              onClick={() => p.run(async () => {
+                const next = [
+                  ...asArray(p.watch).filter(w => !(w.switch_id === p.selected && w.if_index === idx)),
+                  {
+                    switch_id: p.selected,
+                    if_index: idx,
+                    label: `${s.name} ${port.name}`
+                  }
+                ];
+                await api('/api/watchlist', json('PUT', next));
+                p.setWatch(next);
+              })}
+            >{t('ui.m293')}</button>
+          </div>
+          <div className="operation-area" role="group" aria-label={t('rack.actions')}><button
+            className=""
+            disabled={p.busy || p.locked}
+            onClick={() => {
+              if (confirmCounterReset(t('ui.m294'), p.operations?.phase || p.status?.phase)) p.run(async () => {
+                await api(`/api/switches/${p.selected}/counters/reset`, json('POST', { if_index: idx }));
+                setUntil(Date.now() + 600000);
+                setNow(Date.now());
+              });
+            }}
+          >{t('ui.m295')}</button></div>
+  
+          {until > now && <span>{t('ui.m296')}{Math.ceil((until - now) / 1000)}
+            {t('ui.m297')}{port.err_since_reset}
+            {t('ui.m298')}{port.discard_since_reset}
+          </span>}
+        </details>
+        {p.expert && <section className="detail-section detail-expert"><h4>{t('focus.expertOnly')}</h4>
+          <dl className="detail-kv">{[
+            [t('portSummary.eee'), port.eee],
+            [t('portSummary.pause'), port.pause],
+            [t('portSummary.udld'), port.udld],
+            [t('portSummary.stp'), port.stp_state],
+            [t('portSummary.trust'), port.trust],
+          ].flatMap(([label, value]) => [<dt key={`${label}-label`}>{label}</dt>, <dd key={`${label}-value`}>{value || '—'}</dd>])}</dl>
+        </section>}
       </aside>}
     </div>}
   </>;

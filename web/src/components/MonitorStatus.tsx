@@ -7,10 +7,11 @@ export function OverallStatus({ count, critical, ready, stopped, replay = false,
 }) {
   const unknown = stopped || !ready;
   const onlyUnacked = active === 0 && !!unacked;
-  const tone = unknown ? 'unknown' : count ? critical && !onlyUnacked ? 'critical' : 'warning' : 'healthy';
+  // critical = an ongoing CRITICAL alert; an ongoing warning only is "caution" (orange, no red fill).
+  const tone = unknown ? 'unknown' : count ? critical && !onlyUnacked ? 'critical' : active ? 'caution' : 'warning' : 'healthy';
   return <div className={`overall-status status-${tone}`} role="status">
     {label && <span>{label}</span>}
-    <strong>{unknown ? '—' : count ? tone === 'critical' ? <ErrorSymbol /> : <span className="warning-symbol">▲</span> : '✓'} {unknown
+    <strong>{unknown ? '—' : count ? tone === 'critical' ? <ErrorSymbol /> : <span className={tone === 'caution' ? 'caution-symbol' : 'warning-symbol'}>▲</span> : '✓'} {unknown
       ? t(stopped ? 'cleanup.unknown' : 'cleanup.pending') : count && active !== undefined && unacked !== undefined
         ? t('wall.counts', { active, unacked }) : t(count ? 'cleanup.issues' : 'cleanup.normal', { count })}</strong>
     {replay && <small>{t('rack.replay')}</small>}

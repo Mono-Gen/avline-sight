@@ -11,6 +11,7 @@ import type { ViewProps } from '../views/props';
 
 const lampStates = {
   critical: { symbol: '!', label: 'pages.abnormal' },
+  caution: { symbol: '▲', label: 'pages.caution' },
   warning: { symbol: '▲', label: 'pages.unconfirmed' },
   healthy: { symbol: '✓', label: 'pages.normal' },
   unused: { symbol: '·', label: 'pages.unused' },
@@ -122,8 +123,9 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlan
       {callouts.size > 0 && <div className="rack-callouts">{[...callouts.values()].slice(0, 3).map(alert => {
         const cause = actions.expert ? eventTitle(alert) : alert.code === 'PHY_ERRORS' ? t('pages.physicalError') : eventHeadline(alert);
         const text = `${alert.device_name || t('operations.unknownDevice')} · ${alert.port} ${cause}`;
-        return <span key={alert.if_index} title={text} className={alert.active ? 'text-red-400' : 'text-amber-400'}>
-          {alert.active ? <ErrorSymbol /> : '!'} {text}
+        const critical = alert.active && alert.severity === 'CRITICAL';
+        return <span key={alert.if_index} title={text} className={critical ? 'text-red-400' : alert.active ? 'rack-caution-count' : 'text-amber-400'}>
+          {critical ? <ErrorSymbol /> : '▲'} {text}
         </span>;
       })}{callouts.size > 3 && <span>{t('rack.more', { count: callouts.size - 3 })}</span>}</div>}
     </div>

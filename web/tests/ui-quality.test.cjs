@@ -104,7 +104,12 @@ test('port details separate summary pairs and memo controls as well as device me
     '../components/Common': { FrontPanel: () => null, Chart: () => null, Table: () => null },
   });
   const html = renderToStaticMarkup(SwitchPorts({ overview: { switches: [sw] }, selected: 1, locked: true }));
-  assert.match(html, /<p>EEE disable · PAUSE disabled · UDLD notApplicable · STP forwarding · Trust trustIpDscp<\/p>/);
+  // Plan section 22: the raw port settings (EEE, PAUSE, ...) are shown only in expert view, one labelled row each.
+  assert.doesNotMatch(html, /EEE|trustIpDscp/);
+  const expertHtml = renderToStaticMarkup(SwitchPorts({ overview: { switches: [sw] }, selected: 1, locked: true, expert: true }));
+  assert.match(expertHtml, /detail-expert[^]*<dt>EEE<\/dt><dd>disable<\/dd><dt>PAUSE<\/dt><dd>disabled<\/dd><dt>UDLD<\/dt><dd>notApplicable<\/dd><dt>STP<\/dt><dd>forwarding<\/dd><dt>Trust<\/dt><dd>trustIpDscp<\/dd>/);
+  // The detail reads top to bottom: current values, devices, then the folded port settings.
+  assert.match(html, /detail-title">1\/0\/1<[^]*いまの値[^]*<h4>[^<]*<\/h4>[^]*<details class="detail-settings">/);
   const memoRow = html.match(/<div class="flex flex-wrap items-center gap-2">(<label.*?)(?=<\/div>)/)[1];
   const inlineLabels = [...memoRow.matchAll(/<label class="([^"]+)">(.*?)<\/label>/g)];
   assert.deepEqual(inlineLabels.map(([, , content]) => content.match(/<input[^>]*>/)[0].match(/type="(\w+)"/)?.[1]),
@@ -583,7 +588,7 @@ test('ラックの手前に5状態の凡例を置き、2桁ポートと状態記
   });
   const html = render(OverviewView, {
     overview: { switches: [{ id: 1, name: 'West', group_tag: '', reachable: true, psu_ok: false, fans_ok: true }] }, replay: null, locked: true,
-    operations: { ready: true, alerts: [fault(1, { switch_id: 1, if_index: 11, active: true, code: 'PHY_ERRORS',
+    operations: { ready: true, alerts: [fault(1, { switch_id: 1, if_index: 11, active: true, code: 'PHY_ERRORS', severity: 'CRITICAL',
       device_name: 'Mixer', port: '1/0/11' })] },
   });
   const legend = html.match(/<ul class="rack-legend"[^]*?<\/ul>/)[0];
@@ -803,7 +808,7 @@ test('グループ、総合帯、壁、ランプは同じ発生中・未確認�
     switch_id: 1, port: { if_index, name: `1/0/${if_index}`, oper: if_index === 3 ? 'down' : 'up', type: 'sfp', sfp: { los: if_index === 3 } },
   }));
   const alerts = [
-    fault(1, { switch_id: 1, if_index: 1, active: true, acked: true }),
+    fault(1, { switch_id: 1, if_index: 1, active: true, acked: true, severity: 'CRITICAL' }),
     fault(2, { switch_id: 1, if_index: 2, active: false }),
     fault(3, { switch_id: 1, if_index: 3, active: true, suppressed: true }),
     fault(4, { switch_id: 1, if_index: 3, active: true, severity: 'INFO' }),
@@ -835,7 +840,7 @@ test('トポロジーと接続機器は同じ色・記号を使い、監視対�
       edges: [{ id: 'link', source: 'sw', target: 'ext', local_port: '1/0/2' }],
     }, [], []);
     updateTopology(cy, model, undefined, { nodeDetails: topologyNodeDetails(model, alerts) });
-    assert.equal(cy.getElementById('sw').data('statusLabel'), '! West');
+    assert.equal(cy.getElementById('sw').data('statusLabel'), '▲ West');
     assert.equal(cy.getElementById('ext').data('statusTone'), 'warning');
     assert.equal(cy.getElementById('ext').data('monitorSwitchId'), 1);
     assert.equal(cy.getElementById('ext').data('monitorPortName'), '1/0/2');
@@ -849,7 +854,7 @@ test('トポロジーと接続機器は同じ色・記号を使い、監視対�
     { mac: 'CC', seen: false },
   ] };
   const html = render(DeviceInventoryTable, props);
-  assert.match(html, /status-warning[^>]*>!</);
+  assert.match(html, /status-warning[^>]*>▲</);
   assert.match(html, /status-healthy[^>]*>✓</);
   assert.match(html, /status-unknown[^>]*>—</);
   const clickableRows = elements(DeviceInventoryTable(props), node => node.type === 'tr' && node.props.onClick);
@@ -889,7 +894,7 @@ test('External topology nodes use all linked switch ports and select the highest
     ],
   };
   const recovered = fault(2, { switch_id: 2, if_index: 2, port: '1/0/2', active: false });
-  const active = fault(3, { switch_id: 3, if_index: 3, port: '1/0/3', active: true, acked: true });
+  const active = fault(3, { switch_id: 3, if_index: 3, port: '1/0/3', active: true, acked: true, severity: 'CRITICAL' });
   const check = (alerts, tone, id) => {
     const model = buildTopology(topology, [], []);
     updateTopology(cy, model, undefined, { nodeDetails: topologyNodeDetails(model, alerts) });
@@ -1317,9 +1322,11 @@ test('Alert band and bulk acknowledgement use the same eligible IDs', async () =
 });
 
 test('確認・取り消しは処理中に無効化し、ロック中は隠し、既知の復旧時刻だけ表示する', () => {
-  const alert = fault(1, { active: true, ts: new Date().toISOString() });
+  const alert = fault(1, { active: true, ts: new Date().toISOString(), severity: 'CRITICAL' });
   const active = render(AlertBand, { alerts: [alert], wall: true, busy: true, ackMany: noop, undoCount: 1, undo: noop });
   assert.match(active, /wall-alert-group alert-active/);
+  // Plan section 22: an ongoing WARNING group on the wall is orange, not the red group.
+  assert.match(render(AlertBand, { alerts: [{ ...alert, severity: 'WARNING' }], wall: true, ackMany: noop }), /wall-alert-group wall-group-caution/);
   assert.match(active, /data-action="ack" disabled/);
   assert.match(active, /data-action="undo" disabled/);
   const locked = render(AlertBand, { alerts: [alert], wall: true, locked: true, ackMany: noop, undoCount: 1, undo: noop });
@@ -1469,7 +1476,7 @@ test('Number panels show whole-project counts and stay unknown when a replay has
   setLang('ja');
   const { MonitorKpis } = require('../src/components/MonitorKpis.tsx');
   const switches = [{ reachable: true, ports_up: 10 }, { reachable: false, ports_up: 0 }];
-  const alerts = [fault(1, { active: true }), fault(2, { active: false }), fault(3, { active: true, suppressed: true })];
+  const alerts = [fault(1, { active: true, severity: 'CRITICAL' }), fault(2, { active: false }), fault(3, { active: true, suppressed: true })];
   const html = render(MonitorKpis, { switches, alerts, uplink: { rx: 2e9, tx: 1e9 } });
   // Expected from the inputs: 1 of 2 switches reachable, 1 ongoing, 1 recovered (the suppressed one is not an issue), 10 linked ports.
   assert.match(html, /kpi kpi-critical" data-kpi="switches"[^]*>1 \/ 2</);
@@ -1480,6 +1487,31 @@ test('Number panels show whole-project counts and stay unknown when a replay has
   const legacy = render(MonitorKpis, { switches, alerts: [], alertsKnown: false });
   assert.match(legacy, /class="kpi" data-kpi="active"[^]*>—</);
   assert.match(legacy, /class="kpi" data-kpi="recovered"[^]*>—</);
+  // An ongoing WARNING only is orange ("caution"), not red.
+  assert.match(render(MonitorKpis, { switches, alerts: [fault(4, { active: true })] }), /kpi kpi-caution" data-kpi="active"[^]*>1</);
+});
+
+test('Only an ongoing CRITICAL alert is red; an ongoing WARNING is the orange triangle everywhere', () => {
+  setLang('ja');
+  const warning = fault(1, { switch_id: 1, if_index: 2, active: true, code: 'CLOCK_SKEW' });
+  const critical = fault(2, { switch_id: 1, if_index: 3, active: true, severity: 'CRITICAL', code: 'LINK_DOWN' });
+  const recovered = fault(3, { switch_id: 1, if_index: 4, active: false });
+  const { AlertEntry } = require('../src/components/AlertBand.tsx');
+  const { alertTone, summarizeAlerts } = require('../src/wallAlerts.ts');
+  // Expected tones from the rule: critical > caution (ongoing warning) > warning (recovered, unacknowledged).
+  assert.equal(alertTone(summarizeAlerts([warning]), true), 'caution');
+  assert.equal(alertTone(summarizeAlerts([warning, critical]), true), 'critical');
+  assert.equal(alertTone(summarizeAlerts([recovered]), true), 'warning');
+  const entry = render(AlertEntry, { alert: warning, busy: false });
+  assert.match(entry, /alert-entry alert-caution[^]*class="caution-symbol">▲</);
+  assert.doesNotMatch(entry, /error-symbol/);
+  assert.match(render(AlertEntry, { alert: critical, busy: false }), /alert-entry alert-critical[^]*error-symbol/);
+  const banner = render(OverallStatus, { count: 1, critical: false, ready: true, stopped: false, active: 1, unacked: 1 });
+  assert.match(banner, /status-caution[^]*caution-symbol/);
+  assert.match(render(OverallStatus, { count: 1, critical: true, ready: true, stopped: false, active: 1, unacked: 1 }), /status-critical[^]*error-symbol/);
+  assert.match(render(WallSwitchTile, { summary: { id: 1, name: 'West', reachable: true }, alerts: [warning] }), /status-caution[^]*caution-symbol[^]*発生中（警告）/);
+  const css = fs.readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
+  assert.match(css, /.status-caution {[^}]*background: #15181e/);
 });
 
 test('Switch index shows fault marks on every page and the list only on the port monitor', () => {
@@ -1494,7 +1526,7 @@ test('Switch index shows fault marks on every page and the list only on the port
   // Expected order from the rule: registered groups in project order, then other names sorted, ungrouped last.
   assert.deepEqual(orderedGroups(switches, ['core', 'FOH']), ['core', 'FOH', 'Stage', '']);
   const alerts = [
-    fault(1, { switch_id: 1, if_index: 14, active: true }),
+    fault(1, { switch_id: 1, if_index: 14, active: true, severity: 'CRITICAL' }),
     fault(2, { switch_id: 4, if_index: 3, active: false }),
   ];
   const props = { switches, groups: ['core', 'FOH'], alerts, focus: 1, open: true, showList: true, onFocus: noop, onToggle: noop };

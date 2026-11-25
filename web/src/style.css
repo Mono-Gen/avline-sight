@@ -512,3 +512,66 @@ td {
   .focus-layout { flex-direction: column; }
   .focus-detail { flex-basis: auto; max-width: none; width: 100%; position: static; max-height: none; }
 }
+
+/* ===== Ongoing warning ("caution", plan section 22): orange edge and triangle, no red fill ===== */
+.caution-symbol { color: #fb923c; font-weight: 900; }
+.alert-caution { color: #fed7aa; }
+.alert-entry.alert-caution { border: 1px solid #323946; border-inline-start: 5px solid #fb923c; background: #1f242d; }
+.alert-entry.alert-caution .alert-title { color: #fdba74; }
+.alert-caution .alert-state-badge.state-active, .alert-caution .alert-state-badge.state-ackedActive { background: #fb923c; color: #1a0d00; }
+.status-caution { background: #15181e; color: #fdba74; border-color: #fb923c; }
+.overall-status.status-caution { border-width: 2px; }
+.wall-switch-tile.status-caution { border-inline-start: 6px solid #fb923c; }
+.lamp-caution { background: #431c05; color: #fed7aa; box-shadow: inset 0 0 0 2px #fb923c; }
+.state-mark-caution { background: #fb923c; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.kpi-caution { border-color: #fb923c; } .kpi-caution .kpi-value { color: #fb923c; }
+.port-alert-line.state-caution { background: #2a1a0a; color: #fdba74; box-shadow: inset 4px 0 0 #fb923c; }
+.focus-ports-table tr.focus-row-caution td:first-child { box-shadow: inset 3px 0 #fb923c; }
+.rack-caution-count { color: #fdba74; }
+/* Expert view tag in the header: set apart at the right, dashed and quiet (plan section 22). */
+.app-header .header-expert { margin-inline-start: auto; border: 1px dashed #5a6372; border-radius: 999px; background: transparent; color: #9aa3b2; padding: 1px var(--space-3); font-size: var(--text-sm); }
+.app-header .header-expert b { color: #7dd3fc; font-weight: 600; }
+.app-header .header-expert + .header-time { margin-inline-start: var(--space-5); }
+/* Linked-ports table: extra columns and the per-port trend line (plan section 22). */
+.focus-ports-table th.num, .focus-ports-table td.num { text-align: end; font-variant-numeric: tabular-nums; }
+.focus-ports-table td { white-space: nowrap; }
+.focus-ports-table .focus-more { color: #9aa3b2; font-size: .8em; }
+.focus-trend { display: block; width: 6.5rem; height: 1.25rem; color: #38bdf8; }
+.focus-card { overflow-x: auto; }
+/* Right-hand port detail in reading order (plan section 22). */
+.focus-detail { display: grid; gap: var(--space-3); align-content: start; }
+.focus-detail .detail-title { font-size: 1.35rem; font-weight: 700; line-height: 1.2; }
+.focus-detail .detail-sub { color: #9aa3b2; font-size: var(--text-sm); }
+.focus-detail .detail-state { margin: 0; font-weight: 700; display: flex; align-items: center; gap: var(--space-2); }
+.focus-detail .detail-state::before { content: ""; width: .75rem; height: .75rem; border-radius: 2px; background: #9aa3b2; }
+.focus-detail .detail-up { color: #2dd4bf; } .focus-detail .detail-up::before { background: #2dd4bf; }
+.focus-detail .detail-down { color: #9aa3b2; }
+.focus-detail .detail-section h4 { margin: 0 0 var(--space-1); padding-bottom: 2px; border-bottom: 1px solid #323946; color: #9aa3b2; font-size: .78rem; font-weight: 600; letter-spacing: .04em; }
+.focus-detail .detail-kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px var(--space-3); margin: 0; }
+.focus-detail .detail-kv dt { color: #9aa3b2; white-space: nowrap; }
+.focus-detail .detail-kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.focus-detail .detail-big { font-size: 1.05rem; font-weight: 600; }
+.focus-detail .detail-muted { color: #9aa3b2; }
+.focus-detail .detail-chart-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-1); }
+.focus-detail .detail-tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.focus-detail .detail-tabs button { border-radius: 999px; padding: 0 var(--space-2); font-size: .8rem; }
+.focus-detail .detail-tabs button[aria-pressed="true"] { background: #1e60d5; border-color: #1e60d5; color: #fff; }
+.focus-detail .detail-settings { border: 1px solid #323946; border-radius: 4px; padding: var(--space-2) var(--space-3); }
+.focus-detail .detail-settings summary { cursor: pointer; color: #9aa3b2; }
+.focus-detail .detail-settings[open] summary { margin-bottom: var(--space-2); }
+.focus-detail .detail-expert { border: 1px dashed #5a6372; border-radius: 4px; padding: var(--space-2) var(--space-3); }
+.focus-detail .port-hardware-fields dt { white-space: nowrap; }
+/* Keep the linked-ports table within the card next to the detail. */
+.focus-ports-table th { white-space: nowrap; padding-inline: var(--space-2); }
+.focus-ports-table td { padding-inline: var(--space-2); }
+.focus-ports-table td.focus-device { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
+.focus-ports-table td.focus-device small { overflow: hidden; text-overflow: ellipsis; }
+.focus-ports-table td.focus-rate span, .focus-ports-table td.focus-rate small { display: block; }
+.focus-ports-table td.focus-rate small { font-size: .8em; color: #c4cad4; }
+.focus-trend { width: 5rem; }
+/* Audit round 1 (plan section 22): the remaining places now follow the same three states. */
+.wall-alert-group.wall-group-caution { background: #1f242d; color: #fdba74; border: 2px solid #fb923c; }
+.log-row-caution { background: rgba(251, 146, 60, .10); box-shadow: inset 4px 0 0 #fb923c; }
+.focus-detail { grid-template-columns: minmax(0, 1fr); }
+.focus-detail > * { min-width: 0; }
+.focus-detail .detail-section { overflow-x: auto; }

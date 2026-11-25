@@ -29,7 +29,7 @@ import { Topology } from './views/Topology';
 import { useLiveFeed } from './useLiveFeed';
 import { t, useLang } from './i18n';
 import { useOperations } from './useOperations';
-import { replayIssueCount, summarizeAlerts } from './wallAlerts';
+import { hasCriticalActive, replayIssueCount, summarizeAlerts } from './wallAlerts';
 import type { PortMonitorTarget, SwitchFilter } from './views/props';
 import { emptySwitchFilter } from './views/props';
 import { groupSwitches, hasGroupFilter } from './views/props';
@@ -269,7 +269,7 @@ export default function App() {
   const legacyReplay = replay && replay.alerts === undefined;
   const alertSummary = summarizeAlerts(replay ? asArray(replay.alerts) : operations.alerts);
   const issueCount = legacyReplay ? replayIssueCount(asArray(replay.states)) : alertSummary.count;
-  const critical = legacyReplay ? asArray(replay.states).some(state => (state.alert_counts?.CRITICAL || 0) > 0) : alertSummary.active > 0;
+  const critical = legacyReplay ? asArray(replay.states).some(state => (state.alert_counts?.CRITICAL || 0) > 0) : hasCriticalActive(alertSummary);
   const ready = replay ? !!replay.ts : operations.ready;
   const replaySummaryUnavailable = !!legacyReplay && ready && !asArray(replay.states).some(state => state.alert_counts != null);
   const activeDetailTab = replay && (detailTab === 'dhcp' || detailTab === 'config') ? 'multicast' : detailTab;
@@ -329,6 +329,7 @@ export default function App() {
     <AppHeader {...{ online, phase, onPhase: operations.setPhase, onTrapHelp: props.onTrapHelp,
       wall, setWall, expert, status, busy, locked, replay, markerInput, run, summary,
       updatedAt: replay ? replay.ts : live.updatedAt }}
+      onExitExpert={() => changeExpert(false)}
       openChecklist={gate => {
         setError('');
         setDialog(gate ? 'show-gate' : 'show-checklist');

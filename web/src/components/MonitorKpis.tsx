@@ -1,7 +1,7 @@
 import { formatBps } from '../format';
 import { t } from '../i18n';
 import type { Alert } from '../types';
-import { summarizeAlerts } from '../wallAlerts';
+import { hasCriticalActive, summarizeAlerts } from '../wallAlerts';
 
 // Number panels above the port monitor. Always whole-project values, also while one switch or a filter is shown, so faults elsewhere are not missed.
 export function MonitorKpis({ switches, alerts, uplink, alertsKnown = true }: {
@@ -16,9 +16,10 @@ export function MonitorKpis({ switches, alerts, uplink, alertsKnown = true }: {
   const recovered = counts.count - counts.active;
   const reachable = switches.filter(sw => sw.reachable).length;
   const linked = switches.reduce((sum, sw) => sum + (sw.ports_up || 0), 0);
-  const items: { key: string; label: string; value: string; tone?: 'critical' | 'warning'; small?: boolean }[] = [
+  const items: { key: string; label: string; value: string; tone?: 'critical' | 'caution' | 'warning'; small?: boolean }[] = [
     { key: 'switches', label: t('focus.kpiSwitches'), value: `${reachable} / ${switches.length}`, tone: reachable < switches.length ? 'critical' : undefined },
-    { key: 'active', label: t('focus.kpiActive'), value: alertsKnown ? String(counts.active) : '—', tone: alertsKnown && counts.active ? 'critical' : undefined },
+    { key: 'active', label: t('focus.kpiActive'), value: alertsKnown ? String(counts.active) : '—',
+      tone: alertsKnown && counts.active ? hasCriticalActive(counts) ? 'critical' : 'caution' : undefined },
     { key: 'recovered', label: t('focus.kpiRecovered'), value: alertsKnown ? String(recovered) : '—', tone: alertsKnown && recovered ? 'warning' : undefined },
     { key: 'linked', label: t('focus.kpiLinked'), value: String(linked) },
     { key: 'uplink', label: t('focus.kpiUplink'), small: true,

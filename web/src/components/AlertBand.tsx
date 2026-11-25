@@ -21,7 +21,7 @@ export function AlertEntry({ alert, busy, ack, expert, wall = false }: { alert: 
   const state = alert.active ? (alert.acked ? 'ackedActive' : 'active') : 'recovered';
   return <article className={`alert-entry alert-${tone} ${alert.active ? 'alert-active' : 'alert-recovered'}`}>
     <span className="alert-symbol" aria-hidden="true">{alert.suppressed ? '🔧' : tone === 'unknown' ? '—'
-      : alert.active ? <ErrorSymbol /> : <span className="warning-symbol">▲</span>}</span>
+      : tone === 'critical' ? <ErrorSymbol /> : <span className={tone === 'caution' ? 'caution-symbol' : 'warning-symbol'}>▲</span>}</span>
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap gap-x-3"><strong>{alert.switch_name} {alert.port} {alert.device_name}</strong>
         {/* State first as a coloured badge, then short times without the zone (the header clock shows JST). */}
@@ -61,7 +61,8 @@ export function AlertBand({ alerts, wall = false, busy = false, ack, ackMany, pe
     {wall && locked && <p className="wall-lock-note">{t('wall.locked')}</p>}
     {!locked && undoCount > 0 && undo && <div className="ack-undo" role="status">{t('wall.acknowledged', { count: undoCount })} <button data-action="undo" disabled={busy} onClick={undo}>{t('wall.undo')}</button></div>}
     <div className="alert-list" role="log" aria-live="polite">
-      {rows.length ? wall ? groups.map(group => <div key={group.key} className={`wall-alert-group ${group.members.some(alert => alert.active) ? 'alert-active' : 'alert-recovered'}`}>
+      {rows.length ? wall ? groups.map(group => <div key={group.key} className={`wall-alert-group ${group.members.some(alert => alert.active && alert.severity === 'CRITICAL') ? 'alert-active'
+        : group.members.some(alert => alert.active) ? 'wall-group-caution' : 'alert-recovered'}`}>
         <AlertEntry alert={group.alert} busy={busy} expert={expert} wall ack={canAck ? () => ackMany ? ackMany(group.members.map(alert => alert.event_id)) : ack?.(group.alert.event_id) : undefined} />
         {group.members.length > 1 && <details><summary>{expert ? eventTitle(group.alert) : eventHeadline(group.alert)}{t('wall.related', { count: group.members.length })}</summary>
           {group.members.map(alert => <AlertEntry key={alert.event_id} alert={alert} busy={busy} expert={expert} wall />)}
