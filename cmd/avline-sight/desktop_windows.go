@@ -9,7 +9,6 @@ package main
 import (
 	_ "embed"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -24,7 +23,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-//go:embed assets/tray.ico
+// 実行ファイルのアイコン（rsrc_windows_amd64.syso）と同じ絵。トレイ用に大きさを選んで使う。
+//
+//go:embed assets/app.ico
 var trayIcon []byte
 
 var (
@@ -58,6 +59,7 @@ var (
 	procGetCursorPos             = user32.NewProc("GetCursorPos")
 	procCreateIconFromResourceEx = user32.NewProc("CreateIconFromResourceEx")
 	procDestroyIcon              = user32.NewProc("DestroyIcon")
+	procGetSystemMetrics         = user32.NewProc("GetSystemMetrics")
 	procOpenClipboard            = user32.NewProc("OpenClipboard")
 	procEmptyClipboard           = user32.NewProc("EmptyClipboard")
 	procSetClipboardData         = user32.NewProc("SetClipboardData")
@@ -92,6 +94,7 @@ const (
 	tpmRightBtn = 0x2
 	tpmBottom   = 0x20
 
+	smCxSmIcon    = 49 // SM_CXSMICON
 	cfUnicodeText = 13
 	gmemMoveable  = 0x2
 )
@@ -171,34 +174,11 @@ func acquireSingleInstance(dataDir string) (func(), error) {
 
 // iconFromICO は埋め込んだ ICO から指定の大きさの画像を取り出してアイコンを作る。
 func iconFromICO(data []byte, size int) (windows.Handle, error) {
-	if len(data) < 6 {
-		return 0, errors.New("アイコンのデータが短すぎます")
+	img, err := pickICOImage(data, size)
+	if err != nil {
+		return 0, err
 	}
-	count := int(binary.LittleEndian.Uint16(data[4:6]))
-	best := -1
-	for i := 0; i < count; i++ {
-		entry := 6 + i*16
-		if entry+16 > len(data) {
-			break
-		}
-		w := int(data[entry])
-		if w == 0 {
-			w = 256
-		}
-		if best < 0 || w == size {
-			best = entry
-		}
-	}
-	if best < 0 {
-		return 0, errors.New("アイコンの画像が見つかりません")
-	}
-	length := binary.LittleEndian.Uint32(data[best+8:])
-	offset := binary.LittleEndian.Uint32(data[best+12:])
-	if length == 0 || uint64(offset)+uint64(length) > uint64(len(data)) {
-		return 0, errors.New("アイコンのデータが壊れています")
-	}
-	img := data[offset : offset+length]
-	h, _, err := procCreateIconFromResourceEx.Call(uintptr(unsafe.Pointer(&img[0])), uintptr(length), 1, 0x30000, uintptr(size), uintptr(size), 0)
+	h, _, err := procCreateIconFromResourceEx.Call(uintptr(unsafe.Pointer(&img[0])), uintptr(len(img)), 1, 0x30000, uintptr(size), uintptr(size), 0)
 	if h == 0 {
 		return 0, fmt.Errorf("アイコンを作れません: %w", err)
 	}
@@ -282,7 +262,12 @@ func (t *tray) loop(ready chan<- error) {
 	defer close(t.done)
 	activeTray = t
 	defer func() { activeTray = nil }()
-	icon, err := iconFromICO(trayIcon, 16)
+	// 画面の拡大率（125%・150%など）に合った小アイコンの大きさを使う
+	size := 16
+	if r, _, _ := procGetSystemMetrics.Call(smCxSmIcon); r > 0 {
+		size = int(r)
+	}
+	icon, err := iconFromICO(trayIcon, size)
 	if err != nil {
 		ready <- err
 		return

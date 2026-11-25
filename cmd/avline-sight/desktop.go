@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"errors"
 	"strings"
 )
@@ -54,4 +55,51 @@ func startupErrorText(err error, logPath string) string {
 		b.WriteString(logPath)
 	}
 	return b.String()
+}
+
+// pickICOImage は ICO の中から指定の大きさの画像を取り出す。同じ大きさが無ければ、
+// それより大きい中で最小のもの（縮小のほうが拡大より粗くなりにくい）、それも無ければ最大のものを選ぶ。
+func pickICOImage(data []byte, size int) ([]byte, error) {
+	if len(data) < 6 {
+		return nil, errors.New("アイコンのデータが短すぎます")
+	}
+	count := int(binary.LittleEndian.Uint16(data[4:6]))
+	best, bestWidth := -1, 0
+	better := func(w int) bool {
+		switch {
+		case best < 0:
+			return true
+		case bestWidth == size:
+			return false
+		case w == size:
+			return true
+		case w > size && (bestWidth < size || w < bestWidth):
+			return true
+		case w < size && bestWidth < size && w > bestWidth:
+			return true
+		}
+		return false
+	}
+	for i := 0; i < count; i++ {
+		entry := 6 + i*16
+		if entry+16 > len(data) {
+			break
+		}
+		w := int(data[entry])
+		if w == 0 {
+			w = 256 // ICO では 256 を 0 と書く
+		}
+		if better(w) {
+			best, bestWidth = entry, w
+		}
+	}
+	if best < 0 {
+		return nil, errors.New("アイコンの画像が見つかりません")
+	}
+	length := binary.LittleEndian.Uint32(data[best+8:])
+	offset := binary.LittleEndian.Uint32(data[best+12:])
+	if length == 0 || uint64(offset)+uint64(length) > uint64(len(data)) {
+		return nil, errors.New("アイコンのデータが壊れています")
+	}
+	return data[offset : offset+length], nil
 }

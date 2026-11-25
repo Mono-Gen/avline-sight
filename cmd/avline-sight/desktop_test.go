@@ -55,3 +55,51 @@ func TestTrayTooltipFitsWindowsLimit(t *testing.T) {
 		t.Fatalf("tooltip has %d characters", n)
 	}
 }
+
+// icoWith は指定の幅の画像（中身は幅の1バイト）を並べたICOを作る。
+func icoWith(widths ...int) []byte {
+	head := []byte{0, 0, 1, 0, byte(len(widths)), 0}
+	var body []byte
+	offset := 6 + 16*len(widths)
+	for _, w := range widths {
+		side := byte(w)
+		if w == 256 {
+			side = 0
+		}
+		entry := make([]byte, 16)
+		entry[0], entry[1] = side, side
+		entry[8] = 1 // 長さ1
+		pos := offset + len(body)
+		entry[12], entry[13] = byte(pos), byte(pos>>8)
+		head = append(head, entry...)
+		body = append(body, byte(w))
+	}
+	return append(head, body...)
+}
+
+// 同じ大きさがあればそれ、無ければ大きい中で最小、それも無ければ最大を選ぶ。
+func TestPickICOImageChoosesSize(t *testing.T) {
+	ico := icoWith(16, 24, 32, 48, 256)
+	for size, want := range map[int]byte{16: 16, 20: 24, 32: 32, 40: 48, 64: 0 /* 256 */, 300: 0} {
+		img, err := pickICOImage(ico, size)
+		if err != nil || len(img) != 1 || img[0] != want {
+			t.Fatalf("size %d: img=%v err=%v want %d", size, img, err, want)
+		}
+	}
+	if img, _ := pickICOImage(icoWith(16, 24), 64); img[0] != 24 {
+		t.Fatalf("largest fallback: %v", img)
+	}
+}
+
+// 壊れたICOはパニックせずエラーにする。
+func TestPickICOImageRejectsBrokenData(t *testing.T) {
+	outOfRange := icoWith(16)
+	outOfRange[18], outOfRange[19] = 0xff, 0xff // 画像の位置をデータの外へ
+	zeroLength := icoWith(16)
+	zeroLength[14] = 0 // 画像の長さを0に
+	for _, data := range [][]byte{nil, {0, 0, 1, 0}, outOfRange, zeroLength} {
+		if _, err := pickICOImage(data, 16); err == nil {
+			t.Fatalf("accepted broken data %v", data)
+		}
+	}
+}

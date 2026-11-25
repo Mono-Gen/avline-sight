@@ -10,6 +10,13 @@ try {
 } finally { Pop-Location }
 Push-Location $root
 try {
+    # アイコンとバージョン情報を埋め込むリソースを、このバージョンで作り直す（windres が無ければ同梱の物を使う）
+    if (Get-Command windres -ErrorAction SilentlyContinue) {
+        pwsh -File (Join-Path $PSScriptRoot "make_resources.ps1") -Version $Version
+        if ($LASTEXITCODE -ne 0) { throw "リソースの作成に失敗しました" }
+    } else {
+        Write-Warning "windres が無いため、同梱のリソース（アイコン・バージョン情報）をそのまま使います"
+    }
     $env:CGO_ENABLED = "0"
     go test ./...
     if ($LASTEXITCODE -ne 0) { throw "テストが失敗しました" }
