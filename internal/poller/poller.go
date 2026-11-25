@@ -231,7 +231,7 @@ func (w *worker) run(ctx context.Context) {
 	if port == 0 {
 		port = 161
 	}
-	c, err := sx.DialContext(ctx, cfg.IP, port, cfg.Community, w.iv.Timeout, w.iv.Retries)
+	c, err := dialSNMP(ctx, cfg.IP, port, cfg.Community, w.iv.Timeout, w.iv.Retries)
 	if err != nil {
 		if ctx.Err() != nil {
 			return
@@ -243,8 +243,22 @@ func (w *worker) run(ctx context.Context) {
 		w.sink.OnState(snap, "error")
 		return
 	}
-	defer c.Close()
 	w.c = c
+	defer func() { w.c.Close() }()
+	// 取得に失敗したらUDPソケットを作り直す。監視PCのLANアダプタが落ちて戻ると（USBアダプタの抜き差し・固まり）、
+	// 起動時に作ったソケットは古い経路のまま送れず、Pingが戻っても再起動までタイムアウトし続けた（2026-11-25 実機で確認）。
+	// UDPソケットの作成は軽く、再試行は5〜30秒間隔なので負荷は増えない。作れなければ今のソケットを使い続ける。
+	redial := func() {
+		nc, err := dialSNMP(ctx, cfg.IP, port, cfg.Community, w.iv.Timeout, w.iv.Retries)
+		if err != nil {
+			return
+		}
+		w.mu.Lock()
+		old := w.c
+		w.c = nc
+		w.mu.Unlock()
+		old.Close()
+	}
 
 	tiers := []struct {
 		name string
@@ -315,6 +329,7 @@ func (w *worker) run(ctx context.Context) {
 					return
 				}
 				retryAt = time.Now().Add(backoff[min(w.failures-1, len(backoff)-1)])
+				redial()
 				break
 			}
 			retryAt = time.Time{}
@@ -496,3 +511,6 @@ func (w *worker) onDevicesChange(p *model.Port, list []model.Device) {
 			Title: fmt.Sprintf("%s から機器が消失 %s", p.Name, m), Detail: map[string]any{"mac": m}})
 	}
 }
+
+// dialSNMP はテストで作り直しの回数を数えられるよう差し替え可能にしている。
+var dialSNMP = sx.DialContext
