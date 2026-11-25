@@ -217,6 +217,11 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "hint": "Check DHCP server settings and address pools for each VLAN.",
     "details": "DHCP server enabled on multiple switches (per-VLAN separation is not evaluated)"
   },
+  "SNOOP_GLOBAL_OFF": {
+    "title": "IGMP Snooping is off for the whole switch (VLAN {vlans} settings have no effect)",
+    "hint": "Check the switch-wide IGMP Snooping setting.",
+    "details": "VLANs are set to use IGMP Snooping, but it is off for the whole switch, so multicast reaches every port"
+  },
   "SNOOP_MISMATCH": {
     "title": "IGMP Snooping ON/OFF does not match across switches in the same VLAN",
     "hint": "Compare IGMP Snooping settings across switches in the same VLAN.",

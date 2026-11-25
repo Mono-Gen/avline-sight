@@ -10,8 +10,12 @@ import (
 	"github.com/Mono-Gen/avline-sight/internal/model"
 )
 
-// floodPps は未登録ポートへのマルチキャスト送出がフラッディングと見なされる目安（1Gbps級映像1本≒数万pps）。
-const floodPps = 20000
+// realQuerier は観測したクエリアIPが実在のアドレスかを返す。0.0.0.0 と :: はM4250の既定値
+// （set igmp querier N address 0.0.0.0 ＝ アドレス未指定）で、クエリアがいることを意味しない（2026-11-25 実機の設定で確認）。
+// これを実在扱いすると、別スイッチの実アドレスと並んで「複数クエリア」と誤検知し、本当の不在を見逃す。
+func realQuerier(addr string) bool {
+	return addr != "" && addr != "0.0.0.0" && addr != "::"
+}
 
 func isAVRole(r string) bool {
 	switch r {
@@ -297,6 +301,20 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 	}
 	vl := map[int]*vinfo{}
 	for _, s := range live {
+		// 全体のSnoopingがOFFだと、VLANごとのSnooping設定は効かず全ポートへフラッディングする。
+		// VLANではSnoopingを使う設定になっているのに全体がOFF、という食い違いを重大として出す（取れなかったときは判定しない）。
+		if s.IGMP.SnoopingKnown && !s.IGMP.SnoopingOn {
+			var intended []string
+			for _, v := range s.IGMP.Vlans {
+				if v.Snooping {
+					intended = append(intended, itoa(v.VLAN))
+				}
+			}
+			if len(intended) > 0 {
+				add(model.SevCritical, "SNOOP_GLOBAL_OFF", fmt.Sprintf("IGMP Snooping 全体設定がOFF（VLAN %s の設定が効いていない）", strings.Join(intended, ",")), s, "",
+					map[string]any{"vlans": strings.Join(intended, ",")})
+			}
+		}
 		for _, v := range s.IGMP.Vlans {
 			vi := vl[v.VLAN]
 			if vi == nil {
@@ -314,7 +332,7 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 					add(model.SevWarning, "QUERIER_ON_EDGE", fmt.Sprintf("VLAN%d エッジスイッチがクエリアに選出", v.VLAN), s, "", map[string]any{"vlan": v.VLAN})
 				}
 			}
-			if v.LastQuerier != "" {
+			if realQuerier(v.LastQuerier) {
 				vi.lastQ[v.LastQuerier] = true
 			}
 			if v.LastVersion > 0 {
@@ -383,6 +401,125 @@ func sevRank(s string) int {
 		return 1
 	}
 	return 2
+}
+
+// baseGroup は、ほぼ全機器が参加するため「このポートがストリームを受けている」根拠にならないグループ。
+// 224.0.0.0/24（リンクローカル: mDNS 224.0.0.251 等）と PTP（224.0.1.129〜132）。
+// M4250 はグループをMACアドレス（01:00:5E:…）でしか返さないことがある（実機 FW 13.0.7.6）ので両方の書式を見る。
+// MAC書式は同じMACになる別のIPグループ（例 239.0.0.x）と区別できないため、mac=true を返して呼び出し側で扱いを分ける。
+func baseGroup(group string) (base, mac bool) {
+	g := strings.ToUpper(strings.TrimSpace(group))
+	if strings.HasPrefix(g, "01:00:5E:") {
+		switch {
+		case strings.HasPrefix(g, "01:00:5E:00:00:"), g == "01:00:5E:00:01:81", g == "01:00:5E:00:01:82",
+			g == "01:00:5E:00:01:83", g == "01:00:5E:00:01:84":
+			return true, true
+		}
+		return false, true
+	}
+	switch g {
+	case "224.0.1.129", "224.0.1.130", "224.0.1.131", "224.0.1.132":
+		return true, false
+	}
+	return strings.HasPrefix(g, "224.0.0."), false
+}
+
+// floodMinPps 未満のマルチキャストは、フラッディングがあっても実害が小さく誤報の元なので判定しない
+// （mDNS・PTPの告知などは毎秒数〜数十パケット）。
+const floodMinPps = 500
+
+// floodedPorts は、Snooping有効のVLANで、ストリームに参加していないポートへ流入マルチキャストが複製されている
+// ポート数を返す（フラッディングでなければ0）。
+//   - Snooping無効のVLANは全ポートへ配るのが正しい動作なので対象外。
+//   - ほぼ全AV機器が参加する基本グループ（baseGroup）への参加は「受けている」根拠にしない（以前はこれで全ポートが対象外だった）。
+//     ただしMAC書式は実ストリームと区別できないので、そのVLANのリンク中ポートの過半が参加しているときだけ基本グループと見なす
+//     （PTP・mDNSはほぼ全機器が参加する。一部のポートだけなら実ストリームとして扱い、誤報しない側に倒す）。
+//   - 流入量は、そのVLANのアクセスポートに加えてアップリンク・LAG（タグ付きで複数VLANを運ぶ）の受信も候補にする。
+//     アップリンクは他VLANの流量も含むので多めに見積もる＝検知しにくい側に倒れる。
+//   - 固定のpps閾値ではなく、流入量の半分以上が、参加していないポート（送信元自身は除く）の過半（かつ2ポート以上）へ
+//     出ていればフラッディングとする（音声・照明のような少流量でも検知でき、規模に依存しない）。
+func floodedPorts(s *model.SwitchState) int {
+	// 全体がOFFなら全ポートへ配るのが今の正しい動作で、それ自体は SNOOP_GLOBAL_OFF で知らせる
+	if s.IGMP.SnoopingKnown && !s.IGMP.SnoopingOn {
+		return 0
+	}
+	snooping := map[int]bool{}
+	for _, v := range s.IGMP.Vlans {
+		snooping[v.VLAN] = v.Snooping
+	}
+	trunk := func(p *model.Port) bool { return p.Type == "lag" || isUplink(s, p) }
+	access := map[int][]*model.Port{}
+	accessName := map[string]bool{}
+	var trunkRx float64
+	for _, p := range s.Ports {
+		if p.Oper != "up" {
+			continue
+		}
+		if trunk(p) {
+			trunkRx = max(trunkRx, p.RxMcPps)
+			continue
+		}
+		access[p.PVID] = append(access[p.PVID], p)
+		accessName[fmt.Sprintf("%d|%s", p.PVID, p.Name)] = true
+	}
+	joined := map[string]bool{}
+	for _, g := range s.IGMP.Groups {
+		if base, mac := baseGroup(g.Group); base {
+			// MAC書式は、そのVLANのアクセスポートの過半が参加しているときだけ基本グループと見なす（トランクは数えない）
+			members := 0
+			for _, pn := range g.Ports {
+				if accessName[fmt.Sprintf("%d|%s", g.VLAN, pn)] {
+					members++
+				}
+			}
+			if !mac || members*2 > len(access[g.VLAN]) {
+				continue
+			}
+		}
+		for _, pn := range g.Ports {
+			joined[fmt.Sprintf("%d|%s", g.VLAN, pn)] = true
+		}
+	}
+	// 流入量 source に対して、参加していないポートの過半（かつ2ポート以上）へ半分以上が出ていれば、そのポート数を返す。
+	// 純粋な送信元（流入の半分以上を受け、出ているのは半分未満）は「参加していないポート」に数えない。
+	// 参加していない送信機でもフラッディングを受けていれば（出ている量が半分以上）数える。
+	check := func(vlan int, ports []*model.Port, source float64) int {
+		if source < floodMinPps {
+			return 0
+		}
+		high, candidates := 0, 0
+		for _, p := range ports {
+			if joined[fmt.Sprintf("%d|%s", vlan, p.Name)] {
+				continue
+			}
+			receives := p.TxMcPps >= source/2
+			if p.RxMcPps >= source/2 && !receives {
+				continue
+			}
+			candidates++
+			if receives {
+				high++
+			}
+		}
+		if high >= 2 && high*2 > candidates {
+			return high
+		}
+		return 0
+	}
+	flooded := 0
+	for vlan, ports := range access {
+		if !snooping[vlan] {
+			continue
+		}
+		var local float64
+		for _, p := range ports {
+			local = max(local, p.RxMcPps)
+		}
+		// 送信元がこのVLANのアクセスポートにある場合と、トランク（タグ付きで他VLANも運ぶ）から入る場合を別々に見る。
+		// トランクの量を全VLANの基準にすると、少流量VLANのフラッディングを見逃すため。
+		flooded += max(check(vlan, ports, local), check(vlan, ports, trunkRx))
+	}
+	return flooded
 }
 
 func isUplink(s *model.SwitchState, p *model.Port) bool {
@@ -471,35 +608,21 @@ func (e *Engine) evaluateCross(set Settings) {
 			k := itoa(int(s.ID)) + ":" + itoa(v.VLAN)
 			e.mu.Lock()
 			prev, ok := e.prevQuerier[k]
-			e.prevQuerier[k] = v.LastQuerier
+			// 0.0.0.0（クエリア不在の間）で上書きしない。落ちて別のクエリアに替わったときも変化として出すため
+			if realQuerier(v.LastQuerier) {
+				e.prevQuerier[k] = v.LastQuerier
+			}
 			e.mu.Unlock()
-			if ok && prev != "" && v.LastQuerier != "" && prev != v.LastQuerier {
+			if ok && realQuerier(prev) && realQuerier(v.LastQuerier) && prev != v.LastQuerier {
 				e.OnEvent(model.Event{SwitchID: s.ID, SwitchName: s.Name, Category: "ANOMALY", Severity: model.SevCritical, Code: "QUERIER_CHANGED",
 					Title: fmt.Sprintf("VLAN%d クエリアIP変化 %s → %s", v.VLAN, prev, v.LastQuerier), Hint: model.EventHintJa("QUERIER_CHANGED"),
 					Detail: map[string]any{"vlan": v.VLAN, "before": prev, "after": v.LastQuerier}})
 			}
 		}
-		// Unknown Multicastフラッディング: 多数ポートで送信Mcast ppsが高く、グループ登録が少ない
-		// 仕様3.6: 「Mcast急増 かつ IGMPグループ未登録」。登録済みグループの正規配信は除外する
-		joined := map[string]bool{}
-		for _, g := range s.IGMP.Groups {
-			for _, pn := range g.Ports {
-				joined[pn] = true
-			}
-		}
-		// 未登録ポートのうち過半（かつ2ポート以上）へ大量送出 → フラッディング。台数規模に依存しない比率判定
-		high, candidates := 0, 0
-		for _, p := range s.Ports {
-			if p.Oper != "up" || joined[p.Name] || p.Type == "lag" || isUplink(s, p) {
-				continue
-			}
-			candidates++
-			if p.TxMcPps > floodPps {
-				high++
-			}
-		}
+		// Unknown Multicastフラッディング（仕様3.6「Mcast急増 かつ IGMPグループ未登録」）
+		high := floodedPorts(s)
 		k := itoa(int(s.ID)) + "|" + model.SevCritical + "|MCAST_FLOOD|0|x"
-		if high >= 2 && high*2 > candidates {
+		if high > 0 {
 			e.raise(seen, k, model.Event{SwitchID: s.ID, SwitchName: s.Name, Category: "ANOMALY", Severity: model.SevCritical, Code: "MCAST_FLOOD",
 				Title: fmt.Sprintf("%dポートでマルチキャスト急増（フラッディングの疑い）", high), Hint: model.EventHintJa("MCAST_FLOOD")})
 		} else {

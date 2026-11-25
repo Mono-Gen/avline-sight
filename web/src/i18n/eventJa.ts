@@ -222,6 +222,11 @@ export const eventJa = {
     "hint": "DHCPサーバーの設定とVLANごとの割当範囲を確認。",
     "details": "複数スイッチでDHCPサーバー機能が有効（VLAN別構成の判定は未実施）"
   },
+  "SNOOP_GLOBAL_OFF": {
+    "title": "IGMP Snooping 全体設定がOFF（VLAN {vlans} の設定が効いていない）",
+    "hint": "スイッチ全体のIGMP Snooping設定を確認。",
+    "details": "VLANではIGMP Snoopingを使う設定だが、スイッチ全体の設定がOFFのため全ポートへマルチキャストが流れる"
+  },
   "SNOOP_MISMATCH": {
     "title": "同一VLAN内で IGMP Snooping のON/OFFがスイッチ間で不一致",
     "hint": "同じVLANのIGMP Snooping設定を各スイッチで確認。",

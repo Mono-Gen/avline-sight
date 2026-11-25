@@ -435,7 +435,10 @@ func (w *worker) collectIGMP() error {
 		return strconv.Itoa(ix)
 	}
 	res, _ := w.c.Get([]string{mib.SnoopingAdminMode + ".1"})
-	ig.SnoopingOn = sx.Int(res[mib.SnoopingAdminMode+".1"]) == 1
+	// 取れなかったときは OFF と区別する（OFF と誤判定して「Snooping全体OFF」を誤報しないため）
+	mode, known := res[mib.SnoopingAdminMode+".1"]
+	ig.SnoopingKnown = known
+	ig.SnoopingOn = known && sx.Int(mode) == 1
 	vrows, err := w.c.WalkColumns([]string{mib.SnoopVlanAdminMode, mib.SnoopVlanFastLeave})
 	if err != nil {
 		return err

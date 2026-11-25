@@ -221,6 +221,7 @@ type Process struct {
 // IGMP はSnooping/クエリア/グループ。
 type IGMP struct {
 	SnoopingOn       bool          `json:"snooping_on"`
+	SnoopingKnown    bool          `json:"snooping_known"` // 全体のSnooping設定を取得できたか（取れない機種・失敗時は false）
 	Vlans            []VlanIGMP    `json:"vlans"`
 	Groups           []McastGroup  `json:"groups"`
 	Mrouters         []Mrouter     `json:"mrouters"`
