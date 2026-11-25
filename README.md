@@ -7,6 +7,14 @@ It ships as one portable Windows executable with the web UI built in. By default
 
 日本語版は [README_JP.md](README_JP.md) を参照してください。
 
+## Screenshots
+
+All screenshots use the built-in lab (virtual switches), not real equipment.
+
+| Port monitor (all switches) | One switch and port detail | When a fault occurs |
+|---|---|---|
+| ![Port monitor showing every switch rack with summary panels](assets/screenshots/overview-en.png) | ![Single-switch view of a 48-port switch with the port detail on the right](assets/screenshots/switch-en.png) | ![Red banner and active alerts after a link drop and a PoE overload](assets/screenshots/alert-en.png) |
+
 ## Monitoring screens
 
 - **Port monitor** opens at startup. Switch between Diagram (rack view) and List to check switches and ports. The alert band shows active and unacknowledged alerts. The overall status covers all switches, including when the view is filtered by group.
