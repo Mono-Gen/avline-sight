@@ -70,6 +70,11 @@ export const en: Dictionary = {
     summary: 'Ping complete: {ok} responded / {ng} no response ({sec}s)', noReply: 'Devices with no response ({count})',
   },
   metrics: { rxtx: 'RX {rx} / TX {tx}', errors: 'Errors {value}', discards: 'Discards {value}', multicast: 'Multicast' },
+  device: {
+    title: 'Switch details', model: 'Model', serial: 'Serial number', firmware: 'Firmware', boot: 'Boot version', baseMac: 'Base MAC',
+    ip: 'IP address', sysName: 'System name', uptime: 'Uptime', uptimeValue: '{d} d {h} h {m} min',
+    otherFirmware: 'Same model with a different firmware: {list}', otherFirmwareShort: 'Firmware differs from others', peerFirmware: '{name} ({fw})', listSeparator: ', ',
+  },
   focus: {
     index: 'Switch index', all: 'All', allSwitches: 'All switches', foldIndex: 'Fold the switch index', openIndex: 'Open the switch index',
     marks: 'Ongoing {active} / Recovered, unacknowledged {recovered}', switchCount: '{count}',

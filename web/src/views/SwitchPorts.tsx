@@ -3,6 +3,7 @@ import type { TranslationKey } from '../i18n';
 import { alertTone, hasCriticalActive, matchingPortAlerts, summarizeAlerts } from '../wallAlerts';
 import { useEffect, useState } from 'react';
 import { StateMark } from '../components/SwitchIndex';
+import { DeviceInfo } from '../components/DeviceInfo';
 import { switchHealth } from '../components/RackRow';
 import { issueAlerts } from '../monitorHealth';
 import { api, json } from '../api';
@@ -209,6 +210,7 @@ export function SwitchPorts(p: SwitchPortsProps) {
             <span key={item.key}>{t(`rack.${item.key}`)} <span className={item.bad ? 'health-abnormal' : undefined}>{item.bad ? '⚠ ' : ''}{item.value}</span></span>)}
         </span>}
       </section>}
+      {summary && <DeviceInfo device={{ ...s, ip: summary.ip }} peers={asArray(p.overview?.switches)} />}
       <section className="panel focus-card"><h3>{t('focus.ports')}</h3>
       <FrontPanel
         showNote={p.expert}

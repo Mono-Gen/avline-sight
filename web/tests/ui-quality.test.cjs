@@ -1968,3 +1968,29 @@ test('Every alert headline is free of counter values, placeholders and dangling 
   }
   setLang('ja');
 });
+
+test('Switch details show facts only and list a different firmware of the same model without advice', () => {
+  setLang('ja');
+  const { DeviceInfo, bootVersion, uptimeText } = require('../src/components/DeviceInfo.tsx');
+  // Expected values from the real switch's sysDescr and the rule "last field when it looks like a version".
+  assert.equal(bootVersion('M4250-26G4F-PoE+ 26x1G PoE+ 300W and 4xSFP Managed Switch, 13.0.7.6, 1.0.0.13'), '1.0.0.13');
+  assert.equal(bootVersion('M4250 Managed Switch, 13.0.7.6'), '');
+  assert.equal(bootVersion(undefined), '');
+  assert.equal(uptimeText(90061), '1日 1時間 1分');
+  assert.equal(uptimeText(0), '');
+  const device = { id: 1, name: 'Core', ip: '192.0.2.1', model: 'M4250-26G4F-PoE+', fw: '13.0.7.6', serial: 'TESTSERIAL01',
+    base_mac: '02:00:5E:00:00:01', uptime_sec: 3600, sys_descr: 'M4250, 13.0.7.6, 1.0.0.13' };
+  const peers = [
+    { id: 1, name: 'Core', model: 'M4250-26G4F-PoE+', fw: '13.0.7.6' },
+    { id: 2, name: 'FOH', model: 'M4250-26G4F-PoE+', fw: '13.0.6.0' },
+    { id: 3, name: 'Stage', model: 'M4350-24X4V', fw: '14.0.1.2' },
+  ];
+  const html = render(DeviceInfo, { device, peers });
+  assert.match(html, /<summary>本体情報<span class="device-info-flag">ファームウェアが他と異なる<\/span><\/summary>/);
+  assert.match(html, /<dt>シリアル番号<\/dt><dd>TESTSERIAL01<\/dd>[^]*<dt>ブートバージョン<\/dt><dd>1\.0\.0\.13<\/dd>[^]*<dt>稼働時間<\/dt><dd>0日 1時間 0分<\/dd>/);
+  assert.match(html, /同じ機種でファームウェアが異なるスイッチ: FOH（13\.0\.6\.0）/);
+  // A different model is not compared, and nothing tells the user to update.
+  assert.doesNotMatch(html, /Stage|14\.0\.1\.2|更新|最新|推奨/);
+  const same = render(DeviceInfo, { device, peers: peers.slice(0, 1) });
+  assert.doesNotMatch(same, /device-info-flag|device-info-peers/);
+});

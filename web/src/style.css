@@ -575,3 +575,12 @@ td {
 .focus-detail { grid-template-columns: minmax(0, 1fr); }
 .focus-detail > * { min-width: 0; }
 .focus-detail .detail-section { overflow-x: auto; }
+/* Switch details (facts only; a firmware difference is shown neutrally, not as advice). */
+.device-info { background: #15181e; border: 1px solid #323946; border-radius: 6px; padding: var(--space-2) var(--space-3); }
+.device-info summary { cursor: pointer; color: #9aa3b2; display: flex; align-items: center; gap: var(--space-3); }
+.device-info[open] summary { margin-bottom: var(--space-2); }
+.device-info .detail-kv { display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 3px var(--space-3); margin: 0; }
+.device-info .detail-kv dt { color: #9aa3b2; white-space: nowrap; }
+.device-info .detail-kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.device-info-flag { border: 1px solid #5a6372; border-radius: 999px; padding: 0 var(--space-2); font-size: .78rem; color: #c4cad4; }
+.device-info-peers { margin: var(--space-2) 0 0; color: #c4cad4; font-size: var(--text-sm); }

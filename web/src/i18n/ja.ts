@@ -70,6 +70,12 @@ export const ja = {
   },
   metrics: { rxtx: '受信 {rx} / 送信 {tx}', errors: 'エラー {value}', discards: '破棄 {value}', multicast: 'マルチキャスト' },
   // ポートモニターのスイッチ索引・数字パネル・1台表示（計画§21）
+  // 本体情報（事実だけ。FWの更新を勧めない）
+  device: {
+    title: '本体情報', model: '機種', serial: 'シリアル番号', firmware: 'ファームウェア', boot: 'ブートバージョン', baseMac: 'ベースMAC',
+    ip: 'IPアドレス', sysName: 'システム名', uptime: '稼働時間', uptimeValue: '{d}日 {h}時間 {m}分',
+    otherFirmware: '同じ機種でファームウェアが異なるスイッチ: {list}', otherFirmwareShort: 'ファームウェアが他と異なる', peerFirmware: '{name}（{fw}）', listSeparator: '、',
+  },
   focus: {
     index: 'スイッチ索引', all: 'すべて', allSwitches: 'すべてのスイッチ', foldIndex: 'スイッチ索引を畳む', openIndex: 'スイッチ索引を開く',
     marks: '発生中 {active}件 / 復旧・未確認 {recovered}件', switchCount: '{count}件',
