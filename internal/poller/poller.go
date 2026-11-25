@@ -440,7 +440,9 @@ func (w *worker) onLinkChange(p *model.Port, oper string, spd int) {
 	p.LastChange = time.Now().UTC()
 	switch {
 	case p.Oper == "up" && oper != "up":
-		w.emit(model.Event{Category: "CONNECT", Severity: model.SevWarning, Code: "LINK_DOWN", IfIndex: p.IfIndex,
+		// リンク断は登録の有無に関係なく重大（2026-11-25 ユーザー決定）。登録漏れの機器が抜けても軽く見えないように色を統一する。
+		// 設営フェーズではポートのアラート自体を抑止するので、押し引きで赤くはならない。
+		w.emit(model.Event{Category: "CONNECT", Severity: model.SevCritical, Code: "LINK_DOWN", IfIndex: p.IfIndex,
 			Title: fmt.Sprintf("%s リンクダウン", p.Name), Detail: map[string]any{"port": p.Name}})
 	case p.Oper != "up" && oper == "up":
 		// LinkDown → 低速で再接続（例 1G→100M）は芯線断線の典型（仕様3.6）
