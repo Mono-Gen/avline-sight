@@ -162,7 +162,7 @@ test('switch action popup dismisses outside, on Escape and when an item is chose
     [() => listeners.get('click')({ target: outside }), 0],
     [() => listeners.get('keydown')({ key: 'Escape', preventDefault: noop, stopPropagation: noop }), 1],
     [menu => {
-      menu.props.onClickCapture({ target: inside });
+      menu.props.onClick({ target: inside });
       menu.props.children.props.onClick();
       assert.equal(actionCount, 1);
     }, 1],

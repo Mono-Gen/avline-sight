@@ -39,7 +39,9 @@ export function ActionPopup({ label, children, text = '⋯' }: { label: string; 
         event.currentTarget.focus({ preventScroll: true });
         setOpen(!open);
       }}>{text}</button>
-    {open && <div id={itemsId} className="group-menu-items" onClickCapture={event => {
+    {/* Close in the bubble phase, after the item's own onClick: closing in the capture phase moved focus to the trigger,
+        which flushed the unmount before the item's handler ran, so a real mouse click on "Edit" did nothing. */}
+    {open && <div id={itemsId} className="group-menu-items" onClick={event => {
       if (event.target instanceof Element && event.target.closest('button:enabled, a[href]')) close();
     }}>{children}</div>}
   </div>;

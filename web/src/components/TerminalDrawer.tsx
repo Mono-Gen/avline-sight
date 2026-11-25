@@ -41,8 +41,8 @@ export function TerminalDrawer({ id, close }: {
     ws.onopen = () => {
       ws.send(JSON.stringify({
         type: 'auth',
-        user,
-        password,
+        user: proto === 'ssh' ? user : '',
+        password: proto === 'ssh' ? password : '',
         cols: term.cols,
         rows: term.rows
       }));
@@ -99,8 +99,11 @@ export function TerminalDrawer({ id, close }: {
         <option>telnet
         </option>
       </select>
-      <input placeholder={t('ui.m201')} value={user} onChange={e => setUser(e.target.value)} />
-      <input type="password" placeholder={t('ui.m202')} value={password} onChange={e => setPassword(e.target.value)} />
+      {/* Telnet logs in at the switch's own prompt (the server ignores these), so the fields are for SSH only. */}
+      {proto === 'ssh' && <>
+        <input placeholder={t('ui.m201')} value={user} onChange={e => setUser(e.target.value)} />
+        <input type="password" placeholder={t('ui.m202')} value={password} onChange={e => setPassword(e.target.value)} />
+      </>}
       <button>{t('ui.m203')}</button>
     </form>}
     {error && <p role="alert">
