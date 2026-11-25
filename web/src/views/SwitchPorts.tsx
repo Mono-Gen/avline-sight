@@ -181,7 +181,8 @@ export function SwitchPorts(p: SwitchPortsProps) {
               <td><button type="button" className="focus-port-link" aria-pressed={x.if_index === idx} onClick={() => choose(x)}>{x.name}</button></td>
               <td>{first ? <>{first.label || first.lldp_name || first.mac}
                 {asArray(x.devices).length > 1 && ` +${asArray(x.devices).length - 1}`}
-                <small>{[first.mac, first.ip].filter(Boolean).join(' · ')}</small></> : '—'}</td>
+                {/* The MAC is already the name when the device has no label or LLDP name; do not repeat it. */}
+                <small>{[first.label || first.lldp_name ? first.mac : '', first.ip].filter(Boolean).join(' · ')}</small></> : '—'}</td>
               <td>{lines.length ? <span className={lines[0].active ? 'rack-critical-count' : 'rack-warning-count'}>{lines[0].active ? '!' : '▲'} {lines[0].title}</span>
                 : t('focus.linked')}</td>
               <td className="whitespace-nowrap">{formatBps(x.rx_bps)} / {formatBps(x.tx_bps)}</td>
