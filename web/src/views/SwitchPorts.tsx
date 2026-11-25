@@ -333,8 +333,6 @@ export function SwitchPorts(p: SwitchPortsProps) {
               <p className="break-words text-sm opacity-80">{[deviceName(d) !== d.mac ? d.mac : '', deviceName(d) !== d.vendor ? d.vendor : '', d.ip].filter(Boolean).join(' · ')}</p>}
               {d.ip && <div className="flex flex-wrap items-center gap-2 text-sm">
                 <PingButton key={d.ip} ip={d.ip} disabled={p.locked || !!p.replay} />
-                <a className="px-1.5 py-0.5 underline" target="_blank" rel="noreferrer" href={`http://${d.ip}`}>HTTP</a>
-                <a className="px-1.5 py-0.5 underline" target="_blank" rel="noreferrer" href={`https://${d.ip}`}>HTTPS</a>
               </div>}
             </li>)}
           </ul>

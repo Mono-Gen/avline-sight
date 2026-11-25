@@ -119,7 +119,9 @@ test('port details separate summary pairs and memo controls as well as device me
   const blocks = [...devices.matchAll(/<li[^>]*>(.*?)<\/li>/g)].map(match => match[1]);
   assert.equal(blocks.length, 2);
   assert.match(blocks[0], /<strong[^>]*>Mixer<\/strong>.*<p[^>]*>02:00:00:00:00:01 · Example · 192\.0\.2\.1<\/p>/);
-  assert.match(blocks[0], /gap-2.*<button[^>]*disabled[^>]*>Ping<\/button>.*href="http:\/\/192\.0\.2\.1">HTTP<\/a>.*href="https:\/\/192\.0\.2\.1">HTTPS<\/a>/);
+  assert.match(blocks[0], /gap-2.*<button[^>]*disabled[^>]*>Ping<\/button>/);
+  // No guessed web links: many AV devices have no web page, and probing for one would load them.
+  assert.doesNotMatch(blocks[0], /href="https?:\/\/192\.0\.2\.1"/);
   assert.match(blocks[1], /<strong[^>]*>02:00:00:00:00:02<\/strong>/);
   assert.doesNotMatch(blocks[1], /<button|<a | · /);
 });
