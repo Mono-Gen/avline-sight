@@ -154,6 +154,7 @@ type worker struct {
 	basePort    map[int]int
 	vlanNames   map[int]string
 	lastLogIdx  int
+	logPrimed   bool // 内部ログを一度でも取得したか（初回分は監視開始前のログ）
 	devSeen     map[int]string // ifIndex → MAC集合の署名（接続変化検知）
 	failures    int
 	lastUpSpeed map[int]int // ポート毎の直近リンクアップ速度

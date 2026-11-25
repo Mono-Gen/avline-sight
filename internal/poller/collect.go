@@ -1004,10 +1004,17 @@ func (w *worker) collectLogs() {
 		}
 		text := sx.Str(r.Cols[mib.LogInMemoryMsgText])
 		// 監視PC起動前のログも取り込む。アプリ再起動時の重複はDedupeキーでDB側が排除する
+		detail := map[string]any{"msg_index": ix}
+		if !w.logPrimed {
+			// 初回取得分はスイッチに溜まっていた過去のログ。受信時刻が今になるため、
+			// 「異常・警告」の絞り込みで今起きた警告に見えないよう印を付ける（ログ一覧には残す）
+			detail["backlog"] = true
+		}
 		w.emit(model.Event{Category: "SYSLOG", Severity: syslogSeverity(text), Code: "SWITCH_LOG", Title: text,
-			Detail: map[string]any{"msg_index": ix}, Dedupe: fmt.Sprintf("log:%d:%s", ix, text)})
+			Detail: detail, Dedupe: fmt.Sprintf("log:%d:%s", ix, text)})
 	}
 	w.lastLogIdx = maxIdx
+	w.logPrimed = true
 }
 
 // syslogSeverity はスイッチ内部ログ先頭の PRI（例: "<188>"）から重要度を決める。

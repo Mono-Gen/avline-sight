@@ -897,7 +897,8 @@ func (s *Store) Events(f EventFilter) ([]model.Event, error) {
 		conds, args = append(conds, "severity=?"), append(args, f.Severity)
 	}
 	if f.IssuesOnly {
-		conds = append(conds, "severity IN ('CRITICAL','WARNING')")
+		// 監視開始前にスイッチへ溜まっていた内部ログ（backlog）は今の異常ではないので除く
+		conds = append(conds, "severity IN ('CRITICAL','WARNING') AND COALESCE(json_extract(detail_json,'$.backlog'),0)=0")
 	}
 	if f.AlertIDs != nil {
 		ids, err := json.Marshal(f.AlertIDs)

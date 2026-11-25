@@ -66,6 +66,16 @@ func TestStoreRoundTrip(t *testing.T) {
 	if len(evs) != 1 {
 		t.Fatalf("検索結果 %d", len(evs))
 	}
+	// 監視開始前の内部ログ（backlog）は警告でも「異常・警告」に出さず、一覧には残す
+	s.InsertEvent(&model.Event{TS: time.Now(), SwitchID: sw.ID, Category: "SYSLOG", Severity: "WARNING", Code: "SWITCH_LOG", Title: "old warn", Detail: map[string]any{"backlog": true}, Dedupe: "log:2:old"})
+	s.InsertEvent(&model.Event{TS: time.Now(), SwitchID: sw.ID, Category: "SYSLOG", Severity: "WARNING", Code: "SWITCH_LOG", Title: "new warn", Dedupe: "log:3:new"})
+	issues, _ := s.Events(EventFilter{IssuesOnly: true, Category: "SYSLOG"})
+	if len(issues) != 1 || issues[0].Title != "new warn" {
+		t.Fatalf("issues_only のbacklog除外: %+v", issues)
+	}
+	if all, _ := s.Events(EventFilter{Category: "SYSLOG", Q: "warn"}); len(all) != 2 {
+		t.Fatalf("backlogが一覧から消えた: %d", len(all))
+	}
 
 	st := []*model.SwitchState{{ID: sw.ID, Name: "SW1", Ports: []*model.Port{{IfIndex: 1, Name: "1/0/1"}}}}
 	legacyAt := time.Now().Add(-time.Second).Truncate(time.Millisecond)
