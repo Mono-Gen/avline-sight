@@ -230,7 +230,7 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
   "VLAN_TRUNK_MISMATCH": {
     "title": "A VLAN is carried on only one side of a switch-to-switch link",
     "hint": "Check that both switches have the VLAN and that the Trunk/Auto-Trunk allowed VLANs match.",
-    "details": "VLAN carried on one end of an inter-switch link but not the other"
+    "details": "A VLAN present on both switches is carried on only one end of the link between them"
   },
   "QUERIER_ABSENT": {
     "title": "No IGMP Querier active on IGMP Snooping-enabled VLAN",

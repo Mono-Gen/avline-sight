@@ -8,7 +8,7 @@ import (
 	"github.com/Mono-Gen/avline-sight/internal/model"
 )
 
-// trunkMismatch は、LLDPでつながった監視対象スイッチ同士のリンクで、片側にしか流れていないVLAN。
+// trunkMismatch は、LLDPでつながった監視対象スイッチ同士のリンクで、両方のスイッチにあるのに片側にしか流れていないVLAN。
 type trunkMismatch struct {
 	A, B         *model.SwitchState
 	PortA, PortB string
@@ -18,6 +18,8 @@ type trunkMismatch struct {
 // trunkVlanMismatches はスイッチ間リンクの両端で流れるVLAN（tagged＋untagged）を比べる。
 // 片側のVLAN一覧が取れていないリンクは判定しない（未取得を「VLANなし」と取り違えないため）。
 // 相手が監視対象外のリンクも判定しない。
+// 相手スイッチにそもそも無いVLAN（どのポートにも割り当てが無い）は、片側だけで使う意図したVLANとみなして数えない
+// （2026-11-27 実機: VLAN 13/14 は .1 だけで使う設計。Auto-Trunk は全VLANを許可するため .1 側には流れて見える）。
 func trunkVlanMismatches(live []*model.SwitchState) []trunkMismatch {
 	ix := newSwitchIndex(live)
 	var out []trunkMismatch
@@ -36,7 +38,8 @@ func trunkVlanMismatches(live []*model.SwitchState) []trunkMismatch {
 			if len(va) == 0 || len(vb) == 0 {
 				continue
 			}
-			onlyA, onlyB := diffVLANs(va, vb), diffVLANs(vb, va)
+			onlyA := withinVLANs(diffVLANs(va, vb), switchVLANs(peer))
+			onlyB := withinVLANs(diffVLANs(vb, va), switchVLANs(s))
 			if len(onlyA) == 0 && len(onlyB) == 0 {
 				continue
 			}
@@ -162,4 +165,26 @@ func (ix switchIndex) peerOf(n model.Neighbor) *model.SwitchState {
 // pointsTo は隣接 n が from を指しているか。
 func (ix switchIndex) pointsTo(n model.Neighbor, from *model.SwitchState) bool {
 	return ix.peerOf(n) == from
+}
+
+// switchVLANs はスイッチのどこかのポートに割り当てのあるVLAN。
+func switchVLANs(s *model.SwitchState) map[int]bool {
+	in := map[int]bool{}
+	for _, p := range s.Ports {
+		for _, v := range carriedVLANs(p) {
+			in[v] = true
+		}
+	}
+	return in
+}
+
+// withinVLANs は vs のうち in にあるものだけを返す。
+func withinVLANs(vs []int, in map[int]bool) []int {
+	var out []int
+	for _, v := range vs {
+		if in[v] {
+			out = append(out, v)
+		}
+	}
+	return out
 }

@@ -235,7 +235,7 @@ export const eventJa = {
   "VLAN_TRUNK_MISMATCH": {
     "title": "スイッチ間リンクの片側にしかVLANが通っていない",
     "hint": "両側のスイッチに同じVLANがあるか、Trunk/Auto-Trunkの許可VLANを確認。",
-    "details": "スイッチ間リンクの片側だけに流れているVLAN"
+    "details": "両方のスイッチにあるVLANが、スイッチ間リンクの片側だけに流れている（途切れている）"
   },
   "QUERIER_ABSENT": {
     "title": "IGMP Snooping 有効VLANに IGMPクエリアが不在",
