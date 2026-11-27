@@ -46,7 +46,7 @@ export function PaneResizer({ cssVar, storageKey, side, min, max, defaultPx, lab
   useEffect(() => {
     const saved = load(storageKey);
     if (saved !== null) apply(cssVar, clamp(saved, min, max));
-    setWidth(rendered());
+    setWidth(Math.round(rendered()));
     return () => cleanup.current?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cssVar, storageKey, min, max]);

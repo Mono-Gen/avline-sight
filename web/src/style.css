@@ -216,7 +216,7 @@ td {
 .focus-layout > .pane-resizer { min-height: 4rem; }
 .legend-help summary { cursor: pointer; list-style: none; padding: 0 var(--space-1); }
 /* 開いた説明は凡例の下に全幅で出す（浮かせるとカード内で切れたり、幅が縮んで読めなくなるため） */
-li:has(> .legend-help[open]) { flex-basis: 100%; }
+li:has(> .legend-help[open]) { flex-basis: 100%; order: 1; } /* 説明は凡例の最後の行の下に出す */
 .legend-help[open] ul { max-width: 40rem; margin: var(--space-1) 0 0; padding: var(--space-2) var(--space-3);
   list-style: none; background: #111419; color: #eef1f6; border: 1px solid #334155; border-radius: .3rem; display: grid; gap: var(--space-1); }
 .device-port-role { margin-left: var(--space-1); padding: 0 3px; border: 1px solid currentColor; border-radius: 2px; font-size: .7rem; font-weight: 800; }
