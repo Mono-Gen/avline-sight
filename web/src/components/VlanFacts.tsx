@@ -3,7 +3,7 @@ import { t } from '../i18n';
 
 type VlanRow = { vlan: number; name?: string; snooping: boolean; fast_leave: boolean; querier_oper?: string; last_querier?: string };
 // config_settings holds a value only when the setting was actually read (absent after a failed read), so it is the source here.
-type PortRow = { name: string; type?: string; oper?: string; pvid: number; max_frame?: number; alias?: string; config_settings?: Record<string, string> | null };
+type PortRow = { name: string; type?: string; oper?: string; pvid: number; max_frame?: number; alias?: string; config_settings?: Record<string, string> | null; mode?: string; tagged_vlans?: number[] };
 
 // The text a port description holds. The AV UI writes "VID:<vlan>,<name>,<template>" there, but anyone can edit it,
 // so it is shown as written text, never as the profile in use (the switch does not store the profile itself).
@@ -35,7 +35,7 @@ function sameOrMixed(values: string[]) {
 // No judgement or warning here: what is right depends on the site, and the profile in use cannot be known for sure.
 export function VlanFacts({ vlans, ports, globalSnoopingOff = false }: { vlans: readonly VlanRow[]; ports: readonly PortRow[]; globalSnoopingOff?: boolean }) {
   const access = asArray(ports as PortRow[]).filter(port => port.type !== 'lag');
-  const ids = [...new Set([...asArray(vlans as VlanRow[]).map(v => v.vlan), ...access.map(port => port.pvid)])].filter(id => id > 0).sort((a, b) => a - b);
+  const ids = [...new Set([...asArray(vlans as VlanRow[]).map(v => v.vlan), ...access.map(port => port.pvid), ...asArray(ports as PortRow[]).flatMap(port => asArray(port.tagged_vlans))])].filter(id => id > 0).sort((a, b) => a - b);
   if (!ids.length) return null;
   return <section className="panel focus-card vlan-facts" aria-label={t('vlan.title')}>
     <h3>{t('vlan.title')}</h3>
@@ -43,6 +43,8 @@ export function VlanFacts({ vlans, ports, globalSnoopingOff = false }: { vlans: 
       const v = asArray(vlans as VlanRow[]).find(row => row.vlan === id);
       const members = access.filter(port => port.pvid === id);
       const linked = members.filter(port => port.oper === 'up').length;
+      // このVLANをタグ付きで運ぶポート（Trunk など）。VLANがスイッチ間を通っているかの手がかり
+      const carriers = asArray(ports as PortRow[]).filter(port => asArray(port.tagged_vlans).includes(id)).map(port => port.name);
       const written = sameOrMixed(members.map(port => writtenText(port.alias)).filter(Boolean));
       const facts = [
         // A VLAN set to snoop has no effect while snooping is off for the whole switch; say both facts.
@@ -53,6 +55,7 @@ export function VlanFacts({ vlans, ports, globalSnoopingOff = false }: { vlans: 
         members.some(port => port.config_settings?.bcast_storm_ctl)
           ? `${t('vlan.broadcastControl')} ${sameOrMixed(members.filter(port => port.config_settings?.bcast_storm_ctl)
             .map(port => t(port.config_settings?.bcast_storm_ctl === 'enabled' ? 'vlan.on' : 'vlan.off')))}` : '',
+        carriers.length ? `${t('trunk.carriedBy')} ${carriers.join(', ')}` : '',
       ].filter(Boolean);
       return <li key={id}>
         <div className="vlan-facts-head"><strong>VLAN {id}</strong>{v?.name && <span>{v.name}</span>}

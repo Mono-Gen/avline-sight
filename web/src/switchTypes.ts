@@ -50,6 +50,10 @@ export interface Port {
   speed_mbps: number;
   duplex: string;
   pvid: number;
+  mode?: string;
+  native_vlan?: number;
+  tagged_vlans?: number[];
+  untagged_vlans?: number[];
   rx_bps: number;
   tx_bps: number;
   util_rx: number;
@@ -196,6 +200,10 @@ export interface VlanIGMP {
 export interface McastGroup {
   vlan: number;
   group: string;
+  ip?: string;
+  ip_guessed?: boolean;
+  purpose_ja?: string;
+  purpose_en?: string;
   ports: (string)[];
   reporter?: string;
   protocol: string;

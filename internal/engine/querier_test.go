@@ -123,3 +123,27 @@ func TestFirmwareMismatchComparesSameModelOnly(t *testing.T) {
 		t.Fatalf("same-model mismatch: %+v", got)
 	}
 }
+
+// 2026-11-27 実機: VLAN11 で A(.1) だけが querier、B(.254) は non-querier で A を最後のクエリアとして聞いている。
+// A の LastQuerier には選出前に聞いた B の値が残っているが、選出は済んでいるので複数クエリアではない。
+func TestSingleElectedQuerierWithStaleLastQuerier(t *testing.T) {
+	e, _ := newTestEngine(t)
+	mk := func(id int64, name string, v model.VlanIGMP) *model.SwitchState {
+		return &model.SwitchState{ID: id, Name: name, Reachable: true, FW: "13.0.7.6", LastPoll: time.Now(),
+			Config: model.SwitchConf{StpVersion: "rstp", StpPriority: 4096, IsRoot: id == 1},
+			IGMP:   model.IGMP{Vlans: []model.VlanIGMP{v}}}
+	}
+	e.mu.Lock()
+	e.states = map[int64]*model.SwitchState{
+		1: mk(1, "A", model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "querier", QuerierAddr: "0.0.0.0", LastQuerier: "192.0.2.254"}),
+		2: mk(2, "B", model.VlanIGMP{VLAN: 11, Snooping: true, QuerierOper: "non-querier", QuerierAddr: "0.0.0.0", LastQuerier: "192.0.2.1"}),
+	}
+	e.order = []int64{1, 2}
+	e.mu.Unlock()
+	fs, _ := e.Audit()
+	for _, f := range fs {
+		if f.Code == "QUERIER_CONFLICT" || f.Code == "QUERIER_ABSENT" {
+			t.Fatalf("選出済みなのに %s: %s", f.Code, f.Title)
+		}
+	}
+}

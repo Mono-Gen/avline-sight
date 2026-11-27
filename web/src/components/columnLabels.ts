@@ -18,6 +18,7 @@ export const columnLabels: Record<string, string> = {
   get ports() { return t('ui.m021'); },
   vlan: 'VLAN',
   get group() { return t('ui.m022'); },
+  get purpose() { return t('mcast.purpose'); },
   get protocol() { return t('ui.m023'); },
   get reporter() { return t('ui.m024'); },
   get source() { return t('ui.m025'); },

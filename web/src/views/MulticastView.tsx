@@ -1,4 +1,4 @@
-import { isRecommendationEvent, t } from '../i18n';
+import { getLang, isRecommendationEvent, t } from '../i18n';
 import { api } from '../api';
 import { AvStatus } from '../components/AvStatus';
 import { PollingStatus } from '../components/PollingStatus';
@@ -13,12 +13,17 @@ import { enabledStatus, findingColumns, localizedStatus, switchColumn } from './
 const hasLastQuerier = (address?: string) => !!address && address !== '0.0.0.0' && address !== '::';
 
 export function VlanQuerierTable({ rows, networkRows = rows }: { rows: Multicast['vlans']; networkRows?: Multicast['vlans'] }) {
-  const queriersByVlan = new Map<number, { switches: Set<number>; addresses: Set<string> }>();
+  // The querier's own "last querier" can be a stale value heard before the election (seen on M4250, 2026-11-27),
+  // so it counts only while more than one switch claims to be the querier. Same rule as the server-side audit.
+  const queriersByVlan = new Map<number, { switches: Set<number>; addresses: Set<string>; selfAddresses: Set<string> }>();
   for (const row of networkRows) {
-    const queriers = queriersByVlan.get(row.vlan) ?? { switches: new Set<number>(), addresses: new Set<string>() };
+    const queriers = queriersByVlan.get(row.vlan) ?? { switches: new Set<number>(), addresses: new Set<string>(), selfAddresses: new Set<string>() };
     if (row.querier_oper === 'querier') queriers.switches.add(row.switch_id);
-    if (hasLastQuerier(row.last_querier)) queriers.addresses.add(row.last_querier);
+    if (hasLastQuerier(row.last_querier)) (row.querier_oper === 'querier' ? queriers.selfAddresses : queriers.addresses).add(row.last_querier);
     queriersByVlan.set(row.vlan, queriers);
+  }
+  for (const queriers of queriersByVlan.values()) {
+    if (queriers.switches.size > 1) queriers.selfAddresses.forEach(address => queriers.addresses.add(address));
   }
   const byVlan = new Map<number, (typeof rows)[number][]>();
   for (const row of rows) {
@@ -83,7 +88,12 @@ export function MulticastView(props: ViewProps) {
       <h2>{t('ui.m270')}</h2>
       <VlanQuerierTable rows={filter(data?.vlans)} networkRows={asArray(data?.vlans)} />
       <h2>{t('ui.m271')}</h2>
-      <Table {...switchColumn} rows={filter(data?.groups)} first={['switch_name', 'vlan', 'group']} />
+      {/* スイッチがMACしか返さないときは、既知の用途から推定したIPに「推定」と添える */}
+      <Table {...switchColumn} rows={filter(data?.groups).map(({ purpose_ja, purpose_en, ip_guessed, ...row }) => ({
+        ...row, ip: row.ip ? `${row.ip}${ip_guessed ? t('mcast.guessed') : ''}` : '',
+        purpose: (getLang() === 'en' ? purpose_en : purpose_ja) || '' }))}
+        first={['switch_name', 'vlan', 'group', 'ip', 'protocol', 'purpose']} />
+      {asArray(data?.groups).some(row => row.ip_guessed) && <p className="chart-help">{t('mcast.guessedHelp')}</p>}
       <h2>{t('ui.m272')}</h2>
       <Table {...switchColumn} rows={filter(data?.mrouters)} first={['switch_name', 'vlan', 'port']} />
       <h2>gPTP</h2>

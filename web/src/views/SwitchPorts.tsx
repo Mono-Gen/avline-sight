@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { StateMark } from '../components/SwitchIndex';
 import { DeviceInfo } from '../components/DeviceInfo';
 import { VlanFacts } from '../components/VlanFacts';
+import { PortVlan, portModeLabel } from '../components/PortVlan';
 import { PortLegend, switchHealth } from '../components/RackRow';
 import { jstTime, pcTimestamp } from '../pcTime';
 import { withoutUnusedLags } from '../rackModel';
@@ -160,11 +161,16 @@ export function SwitchPorts(p: SwitchPortsProps) {
     /fault/i.test(port.poe.detect || '') || port.poe.denied_cnt > 0 || port.poe.overload_cnt > 0 || port.poe.short_cnt > 0);
   // One chart at a time with its own unit, instead of every metric on one scale.
   const [chartTab, setChartTab] = useState('bandwidth');
-  const chartTabs: { id: string; label: TranslationKey; keys: string[]; format?: (value: number) => string }[] = [
-    { id: 'bandwidth', label: 'focus.chartBandwidth', keys: ['rx_bps', 'tx_bps'], format: formatBps },
-    { id: 'errors', label: 'focus.chartErrors', keys: ['err_delta', 'discard_delta'] },
-    { id: 'multicast', label: 'metrics.multicast', keys: ['rx_mc_pps'] },
-    ...(p.expert ? [{ id: 'hardware', label: 'focus.chartHardware' as const, keys: ['poe_w', 'sfp_rx_dbm'] }] : []),
+  // help: グラフの下に出す「何の値か」の一行説明。labels: 凡例の名前（内部のキー名を見せない）。
+  const chartTabs: { id: string; label: TranslationKey; keys: string[]; format?: (value: number) => string; unit?: string; help: TranslationKey; labels: Record<string, string> }[] = [
+    { id: 'bandwidth', label: 'focus.chartBandwidth', keys: ['rx_bps', 'tx_bps'], format: formatBps, help: 'chart.bandwidthHelp',
+      labels: { rx_bps: t('chart.rxBps'), tx_bps: t('chart.txBps') } },
+    { id: 'errors', label: 'focus.chartErrors', keys: ['err_delta', 'discard_delta'], help: 'chart.errorsHelp',
+      labels: { err_delta: t('chart.err'), discard_delta: t('chart.discard') } },
+    { id: 'multicast', label: 'metrics.multicast', keys: ['rx_mc_pps', 'tx_mc_pps'], unit: 'pps', help: 'chart.multicastHelp',
+      labels: { rx_mc_pps: t('chart.rxMc'), tx_mc_pps: t('chart.txMc') } },
+    ...(p.expert ? [{ id: 'hardware', label: 'focus.chartHardware' as const, keys: ['poe_w', 'sfp_rx_dbm'], help: 'chart.hardwareHelp' as const,
+      labels: { poe_w: t('chart.poe'), sfp_rx_dbm: t('chart.sfpRx') } }] : []),
   ];
   const activeTab = chartTabs.find(tab => tab.id === chartTab) ?? chartTabs[0];
   // One sample per new poll (keyed by last_poll), kept for linked ports only.
@@ -277,7 +283,8 @@ export function SwitchPorts(p: SwitchPortsProps) {
               <td>{lines.length ? <span className={lines[0].critical ? 'rack-critical-count' : lines[0].active ? 'rack-caution-count' : 'rack-warning-count'}>{lines[0].critical ? '!' : '▲'} {lines[0].title}</span>
                 : t('focus.linked')}</td>
               <td>{speedLabel(x.speed_mbps)}</td>
-              <td>{x.pvid || '—'}</td>
+              {/* Trunk は VLAN 番号の代わりに Trunk と出す（PVID だけでは複数 VLAN を運ぶことが分からないため） */}
+              <td title={x.mode === 'trunk' ? [t('trunk.tagged'), asArray(x.tagged_vlans).join(', ')].join(': ') : undefined}>{x.mode === 'trunk' ? portModeLabel(x, s) : (x.pvid || '—')}</td>
               <td>{poeW ? `${decimal(poeW)} W` : '—'}</td>
               {/* Errors and discards: coloured only when above zero. */}
               <td className="num"><span className={x.err_delta > 0 ? 'metric-bad' : undefined}>{x.err_delta}</span> / <span className={x.discard_delta > 0 ? 'metric-bad' : undefined}>{x.discard_delta}</span></td>
@@ -316,6 +323,8 @@ export function SwitchPorts(p: SwitchPortsProps) {
             {port.poe && !poeShown && <><dt>PoE</dt><dd className="detail-muted">{t('focus.poeNone')}</dd></>}
           </dl>
         </section>
+        {/* VLAN mode and the VLANs this port carries (Trunk / Auto-Trunk). */}
+        <PortVlan port={port} state={s} />
         {/* PoE table only while powering or faulted (always in expert view); SFP and cable test when present. */}
         {(poeShown || port.sfp || port.cable) && <PortHardware port={poeShown ? port : { ...port, poe: null }} />}
         <section className="detail-section">
@@ -348,7 +357,9 @@ export function SwitchPorts(p: SwitchPortsProps) {
               </option>)}
             </select>
           </div>
-          <Chart points={metrics.data?.series.points || []} keys={activeTab.keys} format={activeTab.format} height={200} />
+          <Chart points={metrics.data?.series.points || []} keys={activeTab.keys} format={activeTab.format} height={200}
+            labels={activeTab.labels} unit={activeTab.unit} />
+          <p className="chart-help">{t(activeTab.help)}</p>
         </section>}
         {!p.replay && <section className="detail-section"><h4>{t('focus.history', { count: HISTORY_ROWS })}</h4>
           <PollingStatus {...metrics} />

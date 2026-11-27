@@ -38,6 +38,7 @@ var eventHintsJa = map[string]string{
 	"PRE_SHOW_CHECKLIST_REMAINDER": "本番前チェックの残項目を確認。",
 	"PSU_FAIL": "電源ケーブルが奥まで刺さっているか、コンセントに通電しているか確認。冗長PSU構成なら異常側を確認し、予備手配を検討する。",
 	"QUERIER_ABSENT": "コアスイッチなどのIGMPクエリア設定をすぐ確認。",
+	"VLAN_TRUNK_MISMATCH": "両側のスイッチに同じVLANがあるか、Trunk/Auto-Trunkの許可VLANを確認。",
 	"QUERIER_CHANGED": "マルチキャスト配信の状態とIGMPクエリの送信元を確認。",
 	"QUERIER_CONFLICT": "IGMPクエリの送信元とIGMPクエリアの選出状態を確認。",
 	"RELINK_SLOWER": "コネクタの破損や緩みを確認し、予備ケーブルに交換する。接続機器側のポートやオートネゴシエーション設定が変わっていないか確認。",

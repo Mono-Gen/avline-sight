@@ -71,6 +71,24 @@ export const ja = {
   metrics: { rxtx: '受信 {rx} / 送信 {tx}', rxOnly: '受信 {value}', txOnly: '送信 {value}', errors: 'エラー {value}', discards: '破棄 {value}', multicast: 'マルチキャスト' },
   // ポートモニターのスイッチ索引・数字パネル・1台表示（計画§21）
   // VLANごとの事実（SNMPで読めた設定）と、ポート説明欄に書かれた文字。判定はしない
+  // VLANの通し方（Trunk/Auto-Trunk）とマルチキャストの用途
+  trunk: {
+    mode: "VLANモード", access: "Access", general: "General", trunk: "Trunk", autoTrunk: "Trunk（Auto-Trunk 推定）",
+    autoTrunkHelp: "相手がLLDPでNETGEARスイッチと分かり、Trunkになっているポートです。Auto-Trunkで自動設定されたものと推定しています（スイッチは自動かどうかをSNMPで返しません）。",
+    native: "Native VLAN", tagged: "タグ付きで通すVLAN", untagged: "タグなしで通すVLAN", none: "なし",
+    carriedBy: "Trunkで運ぶポート", peerMissing: "相手側に無い: {list}",
+  },
+  mcast: {
+    ip: "IPアドレス", purpose: "用途", guessed: "（推定）",
+    guessedHelp: "スイッチはMACアドレスしか返さないため、既知の用途に当てはまるIPを推定しています（同じMACになるIPは32通りあります）。",
+  },
+  chart: {
+    rxMc: "マルチキャスト受信", txMc: "マルチキャスト送信", rxBps: "受信", txBps: "送信", err: "エラー", discard: "破棄", poe: "PoE電力", sfpRx: "SFP受信光",
+    bandwidthHelp: "このポートの1秒あたりの通信量（受信・送信）。",
+    errorsHelp: "ポーリング間隔ごとに増えたエラー・破棄パケットの数。0が正常です。",
+    multicastHelp: "このポートで1秒あたりに受信・送信したマルチキャストのパケット数（pps）。Dante・AES67 などの音声映像や、機器探索の通信が含まれます。",
+    hardwareHelp: "PoEの給電電力（W）とSFPの受信光レベル（dBm）。",
+  },
   vlan: {
     title: 'VLAN', ports: 'ポート {count}（接続中 {linked}）', settings: '設定', written: '記入',
     writtenHelp: 'ポートの説明欄に書かれた文字です（AV画面がプロファイル適用時に書きますが、手で書き換えられます）。実際の設定とは連動しません。',

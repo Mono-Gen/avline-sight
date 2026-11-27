@@ -70,6 +70,23 @@ export const en: Dictionary = {
     summary: 'Ping complete: {ok} responded / {ng} no response ({sec}s)', noReply: 'Devices with no response ({count})',
   },
   metrics: { rxtx: 'RX {rx} / TX {tx}', rxOnly: 'RX {value}', txOnly: 'TX {value}', errors: 'Errors {value}', discards: 'Discards {value}', multicast: 'Multicast' },
+  trunk: {
+    mode: "VLAN mode", access: "Access", general: "General", trunk: "Trunk", autoTrunk: "Trunk (likely Auto-Trunk)",
+    autoTrunkHelp: "This port is a trunk and LLDP shows a NETGEAR switch on the other end, so it is probably set by Auto-Trunk (the switch does not report over SNMP whether it was automatic).",
+    native: "Native VLAN", tagged: "Tagged VLANs", untagged: "Untagged VLANs", none: "none",
+    carriedBy: "Carried on trunk ports", peerMissing: "Missing on the other end: {list}",
+  },
+  mcast: {
+    ip: "IP address", purpose: "Purpose", guessed: " (estimated)",
+    guessedHelp: "The switch reports only the MAC address, so the IP is estimated from known uses (32 IP addresses share one MAC).",
+  },
+  chart: {
+    rxMc: "Multicast received", txMc: "Multicast sent", rxBps: "Received", txBps: "Sent", err: "Errors", discard: "Discards", poe: "PoE power", sfpRx: "SFP receive power",
+    bandwidthHelp: "Traffic per second on this port (received and sent).",
+    errorsHelp: "Error and discarded packets added in each polling interval. 0 is normal.",
+    multicastHelp: "Multicast packets per second received and sent on this port (pps), including Dante/AES67 audio and video and device discovery.",
+    hardwareHelp: "PoE power (W) and SFP receive light level (dBm).",
+  },
   vlan: {
     title: 'VLANs', ports: '{count} ports ({linked} linked)', settings: 'Settings', written: 'Written',
     writtenHelp: 'Text written in the port descriptions (the AV UI writes it when a profile is applied, but it can be edited by hand). It is not linked to the actual settings.',

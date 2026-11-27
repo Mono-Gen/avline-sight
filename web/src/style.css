@@ -683,3 +683,5 @@ td {
 .front-panel .hardware-port { width: auto; min-width: 0; padding: 2px 0; line-height: 1.1; }
 .front-port-number { display: block; font-weight: 700; white-space: normal; overflow-wrap: anywhere; font-size: .78rem; }
 .front-port-marks { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 1px; font-size: .7rem; }
+/* グラフ・欄の下の「何の値か」の一行説明 */
+.chart-help { margin: var(--space-1) 0 0; font-size: .8rem; line-height: 1.5; color: var(--text-muted, #4b5563); }
