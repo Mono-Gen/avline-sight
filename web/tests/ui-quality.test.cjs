@@ -638,7 +638,7 @@ test('VLAN表の列順とクエリア状態の翻訳、VLANごとの正常・要
     { querier_oper: 'non-querier', switch_id: 2, switch_name: 'East', vlan: 20, name: 'Video', snooping: true, last_querier: '192.0.2.6' },
   ];
   const html = render(VlanQuerierTable, { rows });
-  assert.deepEqual(headers(html).slice(0, 6), ['スイッチ', 'VLAN', '名前', 'Snooping', 'クエリア状態', 'クエリアIP']);
+  assert.deepEqual(headers(html).slice(0, 7), ['スイッチ', 'VLAN', '名前', 'Snooping', 'クエリア状態', '使用中のクエリアIP', 'VLANに設定したクエリアIP']);
   assert.doesNotMatch(html, /スイッチID|>non-querier<|>querier</);
   assert.match(html, /<td>非クエリア<\/td>/);
   assert.match(html, /VLAN 10 クエリア 正常 1 \/ 要確認 1、Snooping 正常 1 \/ 要確認 1[^]*VLAN 20 クエリア 正常 1 \/ 要確認 0/);

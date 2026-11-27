@@ -499,6 +499,12 @@ func (w *worker) collectIGMP() error {
 			v.OperVersion = int(sx.Int(r.Cols[mib.QuerierOperVersion]))
 		}
 	}
+	// 全体のクエリアアドレス（取れなければ未設定扱い）
+	gres, _ := w.c.Get([]string{mib.QuerierGlobalAddress + ".1"})
+	global := realIP(sx.BytesToIP(sx.Bytes(gres[mib.QuerierGlobalAddress+".1"])))
+	for _, v := range byV {
+		v.QuerierInUse, v.InUseGuessed = querierInUse(v, global, w.cfg.IP)
+	}
 	sort.Ints(order)
 	// nil は「まだ読んでいない」の印（エンジンがクエリア不在の判定を待つ）。読めたら行が無くても空スライスにする
 	if ig.Vlans == nil {
@@ -1186,4 +1192,31 @@ func switchportModeName(v int64) string {
 		return "general"
 	}
 	return ""
+}
+
+// realIP は未設定（空・0.0.0.0）を空文字にする。
+func realIP(ip string) string {
+	if ip == "" || ip == "0.0.0.0" {
+		return ""
+	}
+	return ip
+}
+
+// querierInUse はその VLAN で実際に使われているクエリアIPを返す。
+// M4250 は VLAN と全体のアドレスがどちらも 0.0.0.0 のとき管理IPでクエリを送る（TechSupport の
+// 「Querier Address」が管理IPと一致）。管理IPで補ったときは guessed=true。
+func querierInUse(v *model.VlanIGMP, global, mgmt string) (ip string, guessed bool) {
+	switch v.QuerierOper {
+	case "querier":
+		if a := realIP(v.QuerierAddr); a != "" {
+			return a, false
+		}
+		if global != "" {
+			return global, false
+		}
+		return realIP(mgmt), realIP(mgmt) != ""
+	case "non-querier":
+		return realIP(v.LastQuerier), false
+	}
+	return "", false
 }

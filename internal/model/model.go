@@ -109,17 +109,17 @@ type Port struct {
 	ErrSinceReset     uint64 `json:"err_since_reset"`
 	DiscardSinceReset uint64 `json:"discard_since_reset"`
 
-	PoE           *PoE      `json:"poe,omitempty"`
-	SFP           *SFP      `json:"sfp,omitempty"`
-	EEE           string    `json:"eee"`
-	Pause         string    `json:"pause"`
-	MaxFrame      int       `json:"max_frame"`
-	UDLD          string    `json:"udld"`
-	StpState      string    `json:"stp_state"`
-	Trust         string    `json:"trust"`
+	PoE      *PoE   `json:"poe,omitempty"`
+	SFP      *SFP   `json:"sfp,omitempty"`
+	EEE      string `json:"eee"`
+	Pause    string `json:"pause"`
+	MaxFrame int    `json:"max_frame"`
+	UDLD     string `json:"udld"`
+	StpState string `json:"stp_state"`
+	Trust    string `json:"trust"`
 	// 所属している LAG（IEEE 802.3ad の dot3adAggPortAttachedAggID。0 は所属なし・取れない機種）
-	LagIfIndex int    `json:"lag_if_index,omitempty"`
-	LagName    string `json:"lag_name,omitempty"`
+	LagIfIndex    int       `json:"lag_if_index,omitempty"`
+	LagName       string    `json:"lag_name,omitempty"`
 	McastCtl      bool      `json:"mcast_storm_ctl"`
 	BcastCtl      bool      `json:"bcast_storm_ctl"`
 	Excluded      bool      `json:"excluded"`
@@ -231,7 +231,7 @@ type Process struct {
 type IGMP struct {
 	SnoopingOn       bool          `json:"snooping_on"`
 	SnoopingKnown    bool          `json:"snooping_known"` // 全体のSnooping設定を取得できたか（取れない機種・失敗時は false）
-	Vlans            []VlanIGMP    `json:"vlans"` // nil = まだ収集していない（空スライスは「VLANの行が無い」）
+	Vlans            []VlanIGMP    `json:"vlans"`          // nil = まだ収集していない（空スライスは「VLANの行が無い」）
 	Groups           []McastGroup  `json:"groups"`
 	Mrouters         []Mrouter     `json:"mrouters"`
 	MVR              bool          `json:"mvr"`
@@ -256,6 +256,11 @@ type VlanIGMP struct {
 	LastQuerier  string `json:"last_querier"`
 	LastVersion  int    `json:"last_version"`
 	OperVersion  int    `json:"oper_version"`
+	// QuerierInUse はこの VLAN で実際に使われているクエリアIP。
+	// querier のとき: VLAN のアドレス → 全体のアドレス → 管理IP（どちらも 0.0.0.0 なら管理IPを使う。TechSupport で確認）。
+	// non-querier のとき: 選出された相手（LastQuerier）。InUseGuessed は管理IPで補ったとき true。
+	QuerierInUse string `json:"querier_in_use,omitempty"`
+	InUseGuessed bool   `json:"querier_in_use_guessed,omitempty"`
 }
 
 // McastGroup はマルチキャストグループ×ポート。

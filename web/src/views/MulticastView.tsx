@@ -43,9 +43,11 @@ export function VlanQuerierTable({ rows, networkRows = rows }: { rows: Multicast
     {summary.length > 0 && <ul className="multicast-summary">{summary.map(line => <li key={line}>{line}</li>)}</ul>}
     {/* Received and operating versions in one column. -1/0 means no query heard yet, so it is not shown.
         The received version is added only when it differs (a version mismatch can stop Dante/AES67). */}
-    <Table rows={rows.map(({ last_version, oper_version, ...row }) => ({ ...row,
+    {/* The IP actually querying: configured VLAN/global address, else the management IP (marked as estimated). */}
+    <Table rows={rows.map(({ last_version, oper_version, querier_in_use, querier_in_use_guessed, ...row }) => ({ ...row,
+      querier_in_use: querier_in_use ? `${querier_in_use}${querier_in_use_guessed ? t('mcast.guessed') : ''}` : '—',
       igmp_version: [oper_version > 0 ? `v${oper_version}` : '—', last_version > 0 && last_version !== oper_version ? `（${t('mcast.heardVersion', { v: last_version })}）` : ''].join('') }))}
-      first={['switch_name', 'vlan', 'name', 'snooping', 'querier_oper', 'querier_addr']}
+      first={['switch_name', 'vlan', 'name', 'snooping', 'querier_oper', 'querier_in_use', 'querier_addr']}
       hide={switchColumn.hide} values={{ snooping: enabledStatus, querier_admin: enabledStatus, querier_oper: localizedStatus }} />
   </>;
 }
