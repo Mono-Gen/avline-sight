@@ -188,3 +188,64 @@ func withinVLANs(vs []int, in map[int]bool) []int {
 	}
 	return out
 }
+
+// vlanNameMismatch はスイッチ間リンクで両端に流れている同じ番号の VLAN が、スイッチごとに違う名前を持つもの。
+type vlanNameMismatch struct {
+	A, B         *model.SwitchState
+	PortA        string
+	VLAN         int
+	NameA, NameB string
+}
+
+// vlanNameMismatches は、LLDPでつながった監視対象スイッチ同士のリンクで両端に流れている VLAN の名前を比べる。
+// 動作には影響しないが、名前が違うと同じ VLAN か取り違えやすい（2026-11-27 実機: VLAN11 が "Dante-Pri" と "dante"）。
+// 名前が取れていない（空）側があれば比べない。大文字小文字と前後の空白だけの違いは同じ名前とみなす。
+// 同じスイッチの組で同じ VLAN は1回だけ数える（LAG など複数本のリンクで重複させないため）。
+func vlanNameMismatches(live []*model.SwitchState) []vlanNameMismatch {
+	ix := newSwitchIndex(live)
+	seen := map[string]bool{}
+	var out []vlanNameMismatch
+	for _, s := range live {
+		for _, n := range s.Neighbors {
+			peer := ix.peerOf(n)
+			if !n.IsNetgear || peer == nil || peer.ID == s.ID || s.ID > peer.ID {
+				continue
+			}
+			pa := portByIfIndex(s, n.LocalIfIndex)
+			pb := peerPort(ix, peer, s, n.PortID)
+			if pa == nil || pb == nil {
+				continue
+			}
+			na, nb := vlanNameMap(s), vlanNameMap(peer)
+			inB := map[int]bool{}
+			for _, v := range carriedVLANs(pb) {
+				inB[v] = true
+			}
+			for _, v := range carriedVLANs(pa) {
+				key := fmt.Sprintf("%d|%d|%d", s.ID, peer.ID, v)
+				a, b := strings.TrimSpace(na[v]), strings.TrimSpace(nb[v])
+				if !inB[v] || seen[key] || a == "" || b == "" || strings.EqualFold(a, b) {
+					continue
+				}
+				seen[key] = true
+				out = append(out, vlanNameMismatch{A: s, B: peer, PortA: pa.Name, VLAN: v, NameA: a, NameB: b})
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].A.Name+out[i].B.Name != out[j].A.Name+out[j].B.Name {
+			return out[i].A.Name+out[i].B.Name < out[j].A.Name+out[j].B.Name
+		}
+		return out[i].VLAN < out[j].VLAN
+	})
+	return out
+}
+
+// vlanNameMap はスイッチの VLAN 番号→名前（IGMP の VLAN 一覧に入っている名前）。
+func vlanNameMap(s *model.SwitchState) map[int]string {
+	m := map[int]string{}
+	for _, v := range s.IGMP.Vlans {
+		m[v.VLAN] = v.Name
+	}
+	return m
+}

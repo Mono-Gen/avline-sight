@@ -66,3 +66,25 @@ func TestTrunkVlanMismatchWithoutSysName(t *testing.T) {
 		t.Fatalf("got %+v", ms)
 	}
 }
+
+func withNames(s *model.SwitchState, names map[int]string) {
+	for v, n := range names {
+		s.IGMP.Vlans = append(s.IGMP.Vlans, model.VlanIGMP{VLAN: v, Name: n})
+	}
+}
+
+// 2026-11-28 TechSupport: VLAN11 は "Dante-Pri" と "dante"、VLAN12 は "Dante-Sec" と "Audio AES67"。
+// 大文字小文字だけの違い・片側の名前が空・リンクに流れていない VLAN は数えない。
+func TestVlanNameMismatch(t *testing.T) {
+	sw := trunkPair([]int{1, 11, 12, 13}, []int{1, 11, 12})
+	withNames(sw[0], map[int]string{1: "default", 11: "Dante-Pri", 12: "Dante-Sec", 13: "Control"})
+	withNames(sw[1], map[int]string{1: "DEFAULT", 11: "dante", 12: "Audio AES67", 13: "Other"})
+	ms := vlanNameMismatches(sw)
+	if len(ms) != 2 || ms[0].VLAN != 11 || ms[0].NameA != "Dante-Pri" || ms[0].NameB != "dante" || ms[1].VLAN != 12 || ms[0].PortA != "0/25" {
+		t.Fatalf("got %+v", ms)
+	}
+	sw[1].IGMP.Vlans = nil // 名前が取れていない
+	if ms := vlanNameMismatches(sw); len(ms) != 0 {
+		t.Fatalf("名前が無いのに検出: %+v", ms)
+	}
+}
