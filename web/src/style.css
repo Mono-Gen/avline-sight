@@ -192,7 +192,8 @@ td {
 .rack-front { min-width: 0; }
 .rack-port-row { display: flex; width: 100%; align-items: stretch; gap: 2px; flex-wrap: wrap; }
 .rack-port-row + .rack-port-row { margin-top: 2px; }
-.rack-port-slot, .rack-port-gap { flex: 0 1 1.76rem; min-width: 1.76rem; position: relative; }
+/* ラック図のポートは右側の余白を使って大きめにする。スイッチごとに大きさが変わらないよう伸縮はさせず固定幅（入りきらなければ折り返す） */
+.rack-port-slot, .rack-port-gap { flex: 0 0 2.4rem; min-width: 2.4rem; position: relative; }
 .rack-port-gap { opacity: .4; }
 .port-lamp {
   width: 100%;
@@ -208,8 +209,8 @@ td {
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
-.lamp-symbol { position: absolute; inset: 1px 1px auto auto; font-size: .52rem; font-weight: 800; }
-.lamp-number { font-size: var(--text-sm); font-weight: 700; }
+.lamp-symbol { position: absolute; inset: 1px 2px auto auto; font-size: .62rem; font-weight: 800; }
+.lamp-number { font-size: 1rem; font-weight: 700; }
 /* ペインの幅を変える仕切り（左ペインとメイン、ポート表とポート詳細の間） */
 .pane-resizer { flex: 0 0 6px; align-self: stretch; cursor: col-resize; background: transparent; border-inline: 1px solid transparent; touch-action: none; }
 .pane-resizer:hover, .pane-resizer:focus-visible { background: #334155; border-color: #7dd3fc; outline: none; }
@@ -224,8 +225,8 @@ body.pane-resizing { cursor: col-resize; user-select: none; }
 @media (max-width: 767px) { .app-workspace > .pane-resizer { display: none; } }
 /* ポートの役割（T/G/L/B）は番号の下の段に置く。記号の有無で枠の縦横比が変わらないよう、
    すべてのポートの枠を同じ高さにして下の段を空けておく */
-.port-lamp { min-height: 2.2rem; padding-bottom: .55rem; }
-.lamp-role { position: absolute; inset: auto 0 1px 0; text-align: center; font-size: .62rem; font-weight: 800; line-height: 1; letter-spacing: .04em; }
+.port-lamp { min-height: 2.75rem; padding-bottom: .65rem; }
+.lamp-role { position: absolute; inset: auto 0 2px 0; text-align: center; font-size: .72rem; font-weight: 800; line-height: 1; letter-spacing: .04em; }
 .port-role-marks { display: block; font-size: .62rem; font-weight: 800; letter-spacing: .05em; }
 /* ブロックは背景色に左右されないよう枠で強調（色だけに頼らない） */
 .port-role-blocked { outline: 1px solid currentColor; border-radius: 2px; padding: 0 1px; }
