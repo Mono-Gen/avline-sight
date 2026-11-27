@@ -11,10 +11,10 @@ import (
 
 	"github.com/gosnmp/gosnmp"
 
+	"github.com/Mono-Gen/avline-sight/internal/mcast"
 	"github.com/Mono-Gen/avline-sight/internal/mib"
 	"github.com/Mono-Gen/avline-sight/internal/model"
 	"github.com/Mono-Gen/avline-sight/internal/oui"
-	"github.com/Mono-Gen/avline-sight/internal/mcast"
 	sx "github.com/Mono-Gen/avline-sight/internal/snmpx"
 )
 
@@ -466,7 +466,12 @@ func (w *worker) collectIGMP() error {
 	if err != nil {
 		return err
 	}
-	qrows, qerr := w.c.WalkColumns([]string{mib.QuerierVlanAdminMode, mib.QuerierVlanOperMode, mib.QuerierVlanAddress, mib.QuerierOperVersion, mib.QuerierLastQuerierAddress, mib.QuerierLastQuerierVersion})
+	qrows, err := w.c.WalkColumns([]string{mib.QuerierVlanAdminMode, mib.QuerierVlanOperMode, mib.QuerierVlanAddress, mib.QuerierOperVersion, mib.QuerierLastQuerierAddress, mib.QuerierLastQuerierVersion})
+	if err != nil {
+		// 取れなかったクエリア情報を空のまま入れると「クエリア不在」と誤判定するため、前回の値を残して失敗として返す
+		// （表が無い機種は err にならず空で返る）
+		return err
+	}
 	byV := map[int]*model.VlanIGMP{}
 	var order []int
 	get := func(v int) *model.VlanIGMP {
@@ -496,10 +501,6 @@ func (w *worker) collectIGMP() error {
 	}
 	sort.Ints(order)
 	// nil は「まだ読んでいない」の印（エンジンがクエリア不在の判定を待つ）。読めたら行が無くても空スライスにする
-	// クエリア表を読めなかったときは、まだ一度も読めていなければ「未収集」のまま残す（誤って不在と判定しない）
-	if qerr != nil && ig.Vlans == nil {
-		return nil
-	}
 	if ig.Vlans == nil {
 		ig.Vlans = []model.VlanIGMP{}
 	}

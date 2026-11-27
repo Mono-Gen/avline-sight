@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Mono-Gen/avline-sight/internal/api"
@@ -336,32 +337,44 @@ func registerReplay(st *store.Store, pid int64, rp *sim.Replay) error {
 		return err
 	}
 	// 前回と違うダンプを読んだときに、古い名前のまま・相手のいないポートが残らないよう、
-	// 再生用のポート帯にある登録は今回の台に合わせて名前を直し、余った分は監視を止める。
+	// 再生で登録した分（名前が Replay-）だけを今回の台に合わせて直し、余った分は監視を止める。
+	// 利用者が自分で登録した 127.0.0.1 のスイッチには触らない。
+	const prefix = "Replay-"
 	byPort := map[int]model.SwitchConfig{}
+	taken := map[int]bool{}
 	for _, c := range existing {
-		if c.IP == "127.0.0.1" {
+		if c.IP != "127.0.0.1" {
+			continue
+		}
+		if strings.HasPrefix(c.Name, prefix) {
 			byPort[c.SNMPPort] = c
+		} else {
+			taken[c.SNMPPort] = true
 		}
 	}
 	used := map[int]bool{}
 	for _, a := range rp.Agents {
 		port := api.LabSNMPBase + a.Index
 		used[port] = true
-		name := "Replay-" + a.SourceIP
+		if taken[port] {
+			slog.Warn("再生用のポートに利用者のスイッチが登録済みのため、この台は監視に足しません", "port", port, "dump", a.SourceIP)
+			continue
+		}
+		name := prefix + a.SourceIP
 		c, ok := byPort[port]
-		if ok && c.Name == name && c.Enabled {
+		if ok && c.Name == name && c.Enabled && c.Community == sim.Community {
 			continue
 		}
 		if !ok {
-			c = model.SwitchConfig{ProfileID: pid, IP: "127.0.0.1", SNMPPort: port, Community: sim.Community}
+			c = model.SwitchConfig{ProfileID: pid, IP: "127.0.0.1", SNMPPort: port}
 		}
-		c.Name, c.Enabled = name, true
+		c.Name, c.Enabled, c.Community = name, true, sim.Community
 		if err := st.SaveSwitch(&c); err != nil {
 			return err
 		}
 	}
 	for port, c := range byPort {
-		if !used[port] && c.Enabled && port >= api.LabSNMPBase && port < api.LabSNMPBase+100 {
+		if !used[port] && c.Enabled {
 			c.Enabled = false
 			if err := st.SaveSwitch(&c); err != nil {
 				return err

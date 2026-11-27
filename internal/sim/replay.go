@@ -114,7 +114,7 @@ func readDump(path string, out map[string]entry) error {
 			continue // ツールの見出し行など
 		}
 		o, err := snmpx.ParseOID(strings.TrimSpace(name))
-		if err != nil {
+		if err != nil || len(o) < 2 { // 2要素未満の OID は SNMP で送れない（"2 = down" のようなメモ行）
 			slog.Warn("ダンプの読めない行を飛ばします", "file", path, "line", line)
 			continue // 見出し・コメント行など
 		}
@@ -162,8 +162,8 @@ var typedColumns = []struct {
 	{"1.3.6.1.2.1.31.1.1.1.11.", gosnmp.Counter64},
 	{"1.3.6.1.2.1.31.1.1.1.12.", gosnmp.Counter64},
 	{"1.3.6.1.2.1.31.1.1.1.13.", gosnmp.Counter64},
-	{"1.3.6.1.2.1.31.1.1.1.15.", gosnmp.Gauge32}, // ifHighSpeed
-	{"1.3.6.1.2.1.10.7.2.1.", gosnmp.Counter32},  // EtherLike dot3StatsTable
+	{"1.3.6.1.2.1.31.1.1.1.15.", gosnmp.Gauge32},      // ifHighSpeed
+	{"1.3.6.1.2.1.10.7.2.1.", gosnmp.Counter32},       // EtherLike dot3StatsTable
 	{mib.Dot3HCInPauseFrames + ".", gosnmp.Counter64}, // dot3PauseTable の .2 は設定値（Integer）なので列ごとに指定
 	{mib.Dot3HCOutPauseFrames + ".", gosnmp.Counter64},
 	{mib.CosQueueIntfHCTotalDrop + ".", gosnmp.Counter64},
