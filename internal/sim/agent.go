@@ -121,6 +121,10 @@ func serve(pc net.PacketConn, h func(*gosnmp.SnmpPacket) *gosnmp.SnmpPacket) {
 				break
 			}
 		}
+		if err != nil || len(out) == 0 {
+			slog.Warn("sim: 応答を縮めた後のエンコードに失敗", "err", err)
+			continue // 空のパケットは送らない
+		}
 		if _, err := pc.WriteTo(out, addr); err != nil {
 			slog.Debug("sim: 送信失敗", "err", err)
 		}

@@ -322,12 +322,7 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 	vl := map[int]*vinfo{}
 	// 起動直後はスイッチごとに IGMP を読み終える時刻がずれる。非クエリア側だけ先に読めた時点で
 	// 「クエリア不在」を出さないよう、全台が読み終えるまで不在の判定は保留する（2026-11-27 実機ダンプ再生で確認）。
-	igmpPending := false
-	for _, s := range live {
-		if s.IGMP.Vlans == nil {
-			igmpPending = true
-		}
-	}
+	igmpPending := igmpPendingIn(live)
 	for _, s := range live {
 		// 全体のSnoopingがOFFだと、VLANごとのSnooping設定は効かず全ポートへフラッディングする。
 		// VLANではSnoopingを使う設定になっているのに全体がOFF、という食い違いを重大として出す（取れなかったときは判定しない）。
@@ -694,6 +689,16 @@ func chainDepth(live []*model.SwitchState) int {
 	return maxd
 }
 
+// igmpPendingIn は、比較対象のうち IGMP をまだ読めていないスイッチがあるか（nil = 未収集）。
+func igmpPendingIn(states []*model.SwitchState) bool {
+	for _, s := range states {
+		if s.Reachable && s.FW != "" && s.Config.StpVersion != "" && s.IGMP.Vlans == nil { // live と同じ条件
+			return true
+		}
+	}
+	return false
+}
+
 // evaluateCross は横断ルールをイベント化する（監査結果のCRITICAL/WARNINGを立ち上がりで発報）。
 func (e *Engine) evaluateCross(set Settings) {
 	states := e.States()
@@ -737,6 +742,11 @@ func (e *Engine) evaluateCross(set Settings) {
 			e.clearKeys(func(key string, a *Alert) bool { return key == k })
 		}
 	}
-	e.clearPrefix("0|", seen)
+	// 判定を保留している間（スイッチ追加・再接続の直後）は、出ている「クエリア不在」を消さない。
+	// 消すと全台そろった時点で未確認として出し直しになり、確認済みの印が失われる。
+	pending := igmpPendingIn(states)
+	e.clearKeys(func(k string, a *Alert) bool {
+		return strings.HasPrefix(k, "0|") && !seen[k] && !(pending && strings.Contains(k, "|AUDIT|QUERIER_ABSENT|"))
+	})
 	_ = set
 }

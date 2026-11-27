@@ -466,7 +466,7 @@ func (w *worker) collectIGMP() error {
 	if err != nil {
 		return err
 	}
-	qrows, _ := w.c.WalkColumns([]string{mib.QuerierVlanAdminMode, mib.QuerierVlanOperMode, mib.QuerierVlanAddress, mib.QuerierOperVersion, mib.QuerierLastQuerierAddress, mib.QuerierLastQuerierVersion})
+	qrows, qerr := w.c.WalkColumns([]string{mib.QuerierVlanAdminMode, mib.QuerierVlanOperMode, mib.QuerierVlanAddress, mib.QuerierOperVersion, mib.QuerierLastQuerierAddress, mib.QuerierLastQuerierVersion})
 	byV := map[int]*model.VlanIGMP{}
 	var order []int
 	get := func(v int) *model.VlanIGMP {
@@ -496,6 +496,10 @@ func (w *worker) collectIGMP() error {
 	}
 	sort.Ints(order)
 	// nil は「まだ読んでいない」の印（エンジンがクエリア不在の判定を待つ）。読めたら行が無くても空スライスにする
+	// クエリア表を読めなかったときは、まだ一度も読めていなければ「未収集」のまま残す（誤って不在と判定しない）
+	if qerr != nil && ig.Vlans == nil {
+		return nil
+	}
 	if ig.Vlans == nil {
 		ig.Vlans = []model.VlanIGMP{}
 	}

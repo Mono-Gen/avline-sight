@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -77,7 +78,7 @@ func LoadReplay(dir string) (*Replay, error) {
 		sort.Slice(a.tree, func(i, j int) bool { return snmpx.CompareOID(a.tree[i].oid, a.tree[j].oid) < 0 })
 		up := snmpx.MustOID(mib.SysUpTime)
 		for k, e := range a.tree {
-			if snmpx.CompareOID(e.oid, up) == 0 {
+			if snmpx.CompareOID(e.oid, up) == 0 && e.pdu.Type == gosnmp.TimeTicks {
 				a.upIdx = k
 				a.upBase = uint32(gosnmp.ToBigInt(e.pdu.Value).Uint64())
 			}
@@ -112,16 +113,17 @@ func readDump(path string, out map[string]entry) error {
 		if !ok {
 			continue // ツールの見出し行など
 		}
-		name = strings.TrimSpace(name)
-		if _, dup := out[name]; dup {
+		o, err := snmpx.ParseOID(strings.TrimSpace(name))
+		if err != nil {
+			slog.Warn("ダンプの読めない行を飛ばします", "file", path, "line", line)
+			continue // 見出し・コメント行など
+		}
+		key := snmpx.FormatOID(o) // 先頭の "." の有無で同じOIDが2件にならないよう正規化
+		if _, dup := out[key]; dup {
 			continue
 		}
-		o, err := snmpx.ParseOID(name)
-		if err != nil {
-			return fmt.Errorf("%s %d行目: OID を読めません: %w", path, line, err)
-		}
-		t, v := inferValue(name, val)
-		out[name] = entry{o, gosnmp.SnmpPDU{Name: "." + snmpx.FormatOID(o), Type: t, Value: v}}
+		t, v := inferValue(key, val)
+		out[key] = entry{o, gosnmp.SnmpPDU{Name: "." + snmpx.FormatOID(o), Type: t, Value: v}}
 	}
 	if err := sc.Err(); err != nil {
 		return fmt.Errorf("ダンプの読み込みに失敗 %s: %w", path, err)
@@ -162,7 +164,14 @@ var typedColumns = []struct {
 	{"1.3.6.1.2.1.31.1.1.1.13.", gosnmp.Counter64},
 	{"1.3.6.1.2.1.31.1.1.1.15.", gosnmp.Gauge32}, // ifHighSpeed
 	{"1.3.6.1.2.1.10.7.2.1.", gosnmp.Counter32},  // EtherLike dot3StatsTable
-	{"1.3.6.1.2.1.10.7.10.1.", gosnmp.Counter32}, // dot3PauseTable
+	{mib.Dot3HCInPauseFrames + ".", gosnmp.Counter64}, // dot3PauseTable の .2 は設定値（Integer）なので列ごとに指定
+	{mib.Dot3HCOutPauseFrames + ".", gosnmp.Counter64},
+	{mib.CosQueueIntfHCTotalDrop + ".", gosnmp.Counter64},
+	{mib.PethPortPowerDeniedCnt + ".", gosnmp.Counter32},
+	{mib.PethPortOverLoadCnt + ".", gosnmp.Counter32},
+	{mib.PethPortShortCnt + ".", gosnmp.Counter32},
+	{mib.MbufAllocFails + ".", gosnmp.Counter32},
+	{mib.DhcpSnoopInvalidServer + ".", gosnmp.Counter32},
 }
 
 var dottedQuad = regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$`)
@@ -179,7 +188,7 @@ func inferValue(oid, s string) (gosnmp.Asn1BER, any) {
 	if strings.HasPrefix(s, ".") {
 		return gosnmp.ObjectIdentifier, s
 	}
-	if dottedQuad.MatchString(s) {
+	if dottedQuad.MatchString(s) && net.ParseIP(s).To4() != nil {
 		return gosnmp.IPAddress, s
 	}
 	bare := strings.TrimPrefix(oid, ".")
@@ -195,7 +204,8 @@ func inferValue(oid, s string) (gosnmp.Asn1BER, any) {
 			return c.t, uint32(n)
 		}
 	}
-	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+	// Integer は符号付き32bit。範囲外の値（未登録の Counter64 や 2^31 以上の符号なし32bit）は値を保つため Counter64 で返す
+	if n, err := strconv.ParseInt(s, 10, 32); err == nil {
 		return gosnmp.Integer, int(n)
 	}
 	if n, err := strconv.ParseUint(s, 10, 64); err == nil {

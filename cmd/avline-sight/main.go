@@ -335,20 +335,37 @@ func registerReplay(st *store.Store, pid int64, rp *sim.Replay) error {
 	if err != nil {
 		return err
 	}
-	have := map[int]bool{}
+	// 前回と違うダンプを読んだときに、古い名前のまま・相手のいないポートが残らないよう、
+	// 再生用のポート帯にある登録は今回の台に合わせて名前を直し、余った分は監視を止める。
+	byPort := map[int]model.SwitchConfig{}
 	for _, c := range existing {
 		if c.IP == "127.0.0.1" {
-			have[c.SNMPPort] = true
+			byPort[c.SNMPPort] = c
 		}
 	}
+	used := map[int]bool{}
 	for _, a := range rp.Agents {
 		port := api.LabSNMPBase + a.Index
-		if have[port] {
+		used[port] = true
+		name := "Replay-" + a.SourceIP
+		c, ok := byPort[port]
+		if ok && c.Name == name && c.Enabled {
 			continue
 		}
-		c := model.SwitchConfig{ProfileID: pid, Name: "Replay-" + a.SourceIP, IP: "127.0.0.1", SNMPPort: port, Community: sim.Community, Enabled: true}
+		if !ok {
+			c = model.SwitchConfig{ProfileID: pid, IP: "127.0.0.1", SNMPPort: port, Community: sim.Community}
+		}
+		c.Name, c.Enabled = name, true
 		if err := st.SaveSwitch(&c); err != nil {
 			return err
+		}
+	}
+	for port, c := range byPort {
+		if !used[port] && c.Enabled && port >= api.LabSNMPBase && port < api.LabSNMPBase+100 {
+			c.Enabled = false
+			if err := st.SaveSwitch(&c); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

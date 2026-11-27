@@ -194,3 +194,49 @@ func TestQuerierAbsentWaitsForAllSwitches(t *testing.T) {
 		t.Fatal("VLAN行の無いスイッチで判定が止まった")
 	}
 }
+
+// スイッチ追加・再接続で一時的に IGMP が未収集になっても、出ている「クエリア不在」は消さない（確認済みの印を保つ）。
+func TestQuerierAbsentKeptWhilePending(t *testing.T) {
+	e, _ := newTestEngine(t)
+	mk := func(id int64, name string, vlans []model.VlanIGMP) *model.SwitchState {
+		return &model.SwitchState{ID: id, Name: name, SysName: name, Reachable: true, FW: "13.0.7.6", LastPoll: time.Now(),
+			Config: model.SwitchConf{StpVersion: "rstp", StpPriority: 4096, IsRoot: id == 1},
+			IGMP:   model.IGMP{Vlans: vlans}}
+	}
+	set := func(states ...*model.SwitchState) {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		e.states = map[int64]*model.SwitchState{}
+		e.order = nil
+		for _, s := range states {
+			e.states[s.ID] = s
+			e.order = append(e.order, s.ID)
+		}
+	}
+	active := func() bool {
+		for _, a := range e.Alerts() {
+			if a.Code == "QUERIER_ABSENT" && a.Active {
+				return true
+			}
+		}
+		return false
+	}
+	none := []model.VlanIGMP{{VLAN: 11, Snooping: true, QuerierOper: "disabled", LastQuerier: "0.0.0.0"}}
+	set(mk(1, "A", none), mk(2, "B", none))
+	e.evaluateCross(Settings{})
+	if !active() {
+		t.Fatal("前提: クエリア不在が出ていない")
+	}
+	// C を追加（IGMP 未収集）→ 不在は消えない
+	set(mk(1, "A", none), mk(2, "B", none), mk(3, "C", nil))
+	e.evaluateCross(Settings{})
+	if !active() {
+		t.Fatal("保留中に既存のクエリア不在が消えた")
+	}
+	// C を読めて C がクエリア → ここで消える
+	set(mk(1, "A", none), mk(2, "B", none), mk(3, "C", []model.VlanIGMP{{VLAN: 11, Snooping: true, QuerierOper: "querier"}}))
+	e.evaluateCross(Settings{})
+	if active() {
+		t.Fatal("クエリアが見つかったのに不在が残った")
+	}
+}
