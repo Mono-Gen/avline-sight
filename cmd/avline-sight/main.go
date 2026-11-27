@@ -337,16 +337,17 @@ func registerReplay(st *store.Store, pid int64, rp *sim.Replay) error {
 		return err
 	}
 	// 前回と違うダンプを読んだときに、古い名前のまま・相手のいないポートが残らないよう、
-	// 再生で登録した分（名前が Replay-）だけを今回の台に合わせて直し、余った分は監視を止める。
+	// ダンプから登録した分（名前が 仮想-。旧名 Replay- も含む）だけを今回の台に合わせて直し、余った分は監視を止める。
 	// 利用者が自分で登録した 127.0.0.1 のスイッチには触らない。
-	const prefix = "Replay-"
+	// 「仮想」は実機と見間違えないための印。アプリの「オフライン再生」と紛れないよう Replay は使わない
+	const prefix = "仮想-"
 	byPort := map[int]model.SwitchConfig{}
 	taken := map[int]bool{}
 	for _, c := range existing {
 		if c.IP != "127.0.0.1" {
 			continue
 		}
-		if strings.HasPrefix(c.Name, prefix) {
+		if strings.HasPrefix(c.Name, prefix) || strings.HasPrefix(c.Name, "Replay-") {
 			byPort[c.SNMPPort] = c
 		} else {
 			taken[c.SNMPPort] = true

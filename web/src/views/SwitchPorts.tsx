@@ -22,6 +22,7 @@ import { METRICS_REFRESH_MS, usePolling } from '../usePolling';
 import { useSwitchState } from '../useSwitchState';
 import type { PortMonitorTarget, ViewProps } from './props';
 import { groupSwitches } from './props';
+import { PaneResizer } from '../components/PaneResizer';
 const roles = [
   '',
   'dante',
@@ -302,6 +303,7 @@ export function SwitchPorts(p: SwitchPortsProps) {
       </section>
       <VlanFacts vlans={asArray(s.igmp?.vlans)} ports={asArray(s.ports)} globalSnoopingOff={!!s.igmp?.snooping_known && !s.igmp?.snooping_on} />
       </div>
+      {port && <PaneResizer cssVar="--detail-width" storageKey="pane-detail-width" side="right" min={288} max={960} defaultPx={400} label={t('pane.detail')} />}
       {port && <aside className="panel focus-detail" aria-label={t('rack.portDetail')}>
         {/* Plan section 22: sections in reading order; settings folded; raw settings only in expert view. */}
         <div className="focus-detail-head"><div><div className="detail-title">{port.name}</div>

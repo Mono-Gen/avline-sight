@@ -62,7 +62,7 @@ export const en: Dictionary = {
     selection: 'Topology selection', noSelection: 'Nothing selected', affected: '⚠ Affected',
     noPath: 'No path to the core switch was confirmed for the selected device.',
     linkMetrics: '{speed} · {utilization} utilization', linkDown: '⚠ Link down',
-    deviceCount: '{count} connected devices', deviceList: 'Devices connected to {name}', noDevices: 'No connected devices detected.',
+    deviceCount: '{count} connected devices', countBadge: '{count} dev.', vlanList: 'VLAN {list}', vlanCount: '{count} VLANs', deviceList: 'Devices connected to {name}', noDevices: 'No connected devices detected.',
   },
   ping: {
     target: 'Ping target', visible: 'Shown devices ({count})', group: 'Group {name} ({count})', manual: 'Manual entry',
@@ -70,17 +70,20 @@ export const en: Dictionary = {
     summary: 'Ping complete: {ok} responded / {ng} no response ({sec}s)', noReply: 'Devices with no response ({count})',
   },
   metrics: { rxtx: 'RX {rx} / TX {tx}', rxOnly: 'RX {value}', txOnly: 'TX {value}', errors: 'Errors {value}', discards: 'Discards {value}', multicast: 'Multicast' },
+  pane: { nav: "Left pane width", detail: "Port detail width", resizeHelp: "drag or use ←/→ to resize, double-click to reset" },
   trunk: {
     mode: "VLAN mode", access: "Access", general: "General", trunk: "Trunk", autoTrunk: "Trunk (likely Auto-Trunk)",
     autoTrunkHelp: "This port is a trunk and LLDP shows a NETGEAR switch on the other end, so it is probably set by Auto-Trunk (the switch does not report over SNMP whether it was automatic).",
     native: "Native VLAN", tagged: "Tagged VLANs", untagged: "Untagged VLANs", none: "none",
     carriedBy: "Carried on trunk ports", peerMissing: "Missing on the other end: {list}",
-    markTrunk: "Trunk (carries several VLANs, e.g. between switches)", markGeneral: "General (VLANs set per port, carries several)",
-    markLag: "LAG member (one of several links bundled together)", markLagOf: "LAG member ({lag})",
-    markBlocked: "Blocked by STP (stopped to prevent a loop)", marksLegend: "Port roles",
+    markTrunk: "Trunk", markGeneral: "General", markLag: "LAG", markLagOf: "LAG ({lag})", markBlocked: "STP blocked", marksLegend: "Port roles",
+    marksHelp: "What the marks mean", helpTrunk: "Trunk: links switches and carries several VLANs together.",
+    helpGeneral: "General: VLANs set per port, carrying two or more (no mark when it carries only one).",
+    helpLag: "LAG: one of several links bundled to act as one.",
+    helpBlocked: "STP blocked: the switch stops traffic here to prevent a loop. Check that this is an intended redundant path.",
   },
   mcast: {
-    ip: "IP address", purpose: "Purpose", guessed: " (estimated)",
+    ip: "IP address", purpose: "Purpose", guessed: " (estimated)", ipGuessed: "IP address (estimated)", igmpVersion: "IGMP version", heardVersion: "heard v{v}",
     guessedHelp: "The switch reports only the MAC address, so the IP is estimated from known uses (32 IP addresses share one MAC).",
   },
   chart: {

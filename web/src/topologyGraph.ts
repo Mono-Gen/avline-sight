@@ -64,7 +64,7 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
   {
     selector: 'node[kind = "device-count"]',
     style: {
-      shape: 'round-rectangle', width: 28, height: 22, 'font-size': 11,
+      shape: 'round-rectangle', width: 36, height: 22, 'font-size': 11, // 「10台」の幅に合わせる
       'background-color': '#111419', 'border-color': '#c4cad4', 'border-width': 1,
       'text-valign': 'center', 'text-outline-width': 0, 'z-index': 10
     }
@@ -76,6 +76,16 @@ export function countPosition(position: cytoscape.Position): cytoscape.Position 
 }
 
 export const countId = (node: string) => `count:${node}`;
+
+// リンクの線に流れている VLAN を添える。5本までは番号、それより多ければ本数（全部はリンクを選ぶと見える）。
+// 両端で食い違うときは ⚠ を付ける（色だけに頼らない）。
+const VLAN_LIST_MAX = 5;
+export function vlanLine(edge: { vlans?: number[]; vlan_mismatch?: boolean }) {
+  const vlans = edge.vlans ?? [];
+  if (!vlans.length) return '';
+  const body = vlans.length <= VLAN_LIST_MAX ? t('topology.vlanList', { list: vlans.join(',') }) : t('topology.vlanCount', { count: vlans.length });
+  return `\n${edge.vlan_mismatch ? '⚠ ' : ''}${body}`;
+}
 export const deviceLabel = (row: { label: string; lldp_name: string; mac: string }) => row.label || row.lldp_name || row.mac;
 
 function updateData(element: cytoscape.SingularElementReturnValue, data: Record<string, unknown>) {
@@ -163,7 +173,7 @@ export function updateTopology(
         id: edge.id, source: edge.source, target: edge.target, interSwitch: true,
         lineWidth: width, lineColor: color, down, path: path?.has(edge.id) ?? false,
         selected: selection?.kind === 'edge' && selection.id === edge.id,
-        edgeLabel: `${edge.local_port} ↔ ${edge.remote_port}\n${down ? `${t('topology.linkDown')} · ` : ''}${metrics}`,
+        edgeLabel: `${edge.local_port} ↔ ${edge.remote_port}\n${down ? `${t('topology.linkDown')} · ` : ''}${metrics}${vlanLine(edge)}`,
         highlight: groups.some(item =>
           carries(edge.source, edge.local_port, item.vlan) && carries(edge.target, edge.remote_port, item.vlan)),
       });
@@ -185,11 +195,11 @@ export function updateTopology(
       const position = countPosition(core.getElementById(node.id).position());
       const existing = core.getElementById(id);
       if (existing.length) {
-        updateData(existing, { statusLabel: String(count) });
+        updateData(existing, { statusLabel: t('topology.countBadge', { count }) });
         const current = existing.position();
         if (current.x !== position.x || current.y !== position.y) existing.position(position);
       } else {
-        core.add({ group: 'nodes', data: { id, kind: 'device-count', switchNode: node.id, statusLabel: String(count), statusColor: '#111419' },
+        core.add({ group: 'nodes', data: { id, kind: 'device-count', switchNode: node.id, statusLabel: t('topology.countBadge', { count }), statusColor: '#111419' },
           position, grabbable: false, selectable: false });
       }
     }

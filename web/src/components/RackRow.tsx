@@ -39,8 +39,12 @@ export function PortLegend({ single = false }: { single?: boolean } = {}) {
   </ul>;
 }
 
+// 凡例は短い名前だけにし、意味は ⓘ を押すと開く（本番中に README を探しに行かなくて済むよう画面内に置く）
 function MarkLegend() {
-  return <>{portMarkLegend().map(({ mark, label }) => <li key={mark}><span className="port-role-marks" aria-hidden="true">{mark}</span>{label}</li>)}</>;
+  return <>{portMarkLegend().map(({ mark, label }) => <li key={mark}><span className="port-role-marks" aria-hidden="true">{mark}</span>{label}</li>)}
+    <li><details className="legend-help"><summary aria-label={t('trunk.marksHelp')} title={t('trunk.marksHelp')}>ⓘ</summary>
+      <ul>{(['helpTrunk', 'helpGeneral', 'helpLag', 'helpBlocked'] as const).map(key => <li key={key}>{t(`trunk.${key}`)}</li>)}</ul>
+    </details></li></>;
 }
 
 export function PortLamp({ port, alerts, devices, reachable, wall, onSelect }: {
@@ -56,7 +60,7 @@ export function PortLamp({ port, alerts, devices, reachable, wall, onSelect }: {
   const content = <><span className="lamp-number">{port.name.match(/(\d+)\D*$/)?.[1] || port.name}</span>
     <span className="lamp-symbol" aria-hidden="true">{symbol}</span>
     {marks.length > 0 && <span className={`lamp-role${marks.some(m => m.mark === 'B') ? ' port-role-blocked' : ''}`} aria-hidden="true">{marks.map(m => m.mark).join('')}</span>}</>;
-  const className = `port-lamp lamp-${tone}`;
+  const className = `port-lamp lamp-${tone}${marks.length ? ' has-role' : ''}`;
   return wall ? <span className={className} title={label} aria-label={label}>{content}</span>
     : <button className={className} title={label} aria-label={label} onClick={onSelect}>{content}</button>;
 }

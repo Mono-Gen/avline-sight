@@ -122,6 +122,8 @@ export interface TopologyEdge {
   blocking: boolean;
   speed_mbps: number;
   util_pct: number;
+  vlans?: number[];
+  vlan_mismatch?: boolean;
 }
 export interface Topology {
   nodes: TopologyNode[];
@@ -259,6 +261,8 @@ export interface InventoryRow {
   last_seen?: string;
   source: string;
   via_uplink: boolean;
+  port_trunk?: boolean;
+  port_lag?: string;
   ping?: PingMark;
 }
 

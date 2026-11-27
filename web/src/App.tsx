@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, json, message } from './api';
 import { AppHeader } from './components/AppHeader';
 import { AppSidebar } from './components/AppSidebar';
+import { PaneResizer } from './components/PaneResizer';
 import { pruneSwitchFilter, SwitchFilters } from './components/SwitchFilters';
 import { ConfigCredentialsDialog } from './components/ConfigCredentialsDialog';
 import { ConfigImportDialog } from './components/ConfigImportDialog';
@@ -399,6 +400,7 @@ export default function App() {
           {v === 'details' ? t('cleanup.details') : t(`rack.nav.${v}`)}
         </button>)}
       </AppSidebar>}
+      {!wall && <PaneResizer cssVar="--nav-width" storageKey="pane-nav-width" side="left" min={160} max={448} defaultPx={240} label={t('pane.nav')} />}
       <main className={wall ? 'wall-main' : 'min-w-0 flex-1 space-y-4 p-4'}>
         {!wall && <h1 className="text-2xl font-bold">{pageTitle}</h1>}
         <ErrorBoundary key={wall ? 'wall' : page} name={wall ? t('rack.wall') : pageTitle}>

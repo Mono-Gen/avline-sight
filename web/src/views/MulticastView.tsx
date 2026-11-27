@@ -41,7 +41,11 @@ export function VlanQuerierTable({ rows, networkRows = rows }: { rows: Multicast
   return <>
     {/* One line per VLAN so the summary can be scanned. */}
     {summary.length > 0 && <ul className="multicast-summary">{summary.map(line => <li key={line}>{line}</li>)}</ul>}
-    <Table rows={rows} first={['switch_name', 'vlan', 'name', 'snooping', 'querier_oper', 'querier_addr']}
+    {/* 受信版と動作版を1列にまとめる。-1/0 は「まだクエリを受けていない」というスイッチの値なので出さない。
+        受信した版が動作版と違うときだけ添える（版の食い違いは Dante/AES67 が流れない原因になる） */}
+    <Table rows={rows.map(({ last_version, oper_version, ...row }) => ({ ...row,
+      igmp_version: [oper_version > 0 ? `v${oper_version}` : '—', last_version > 0 && last_version !== oper_version ? `（${t('mcast.heardVersion', { v: last_version })}）` : ''].join('') }))}
+      first={['switch_name', 'vlan', 'name', 'snooping', 'querier_oper', 'querier_addr']}
       hide={switchColumn.hide} values={{ snooping: enabledStatus, querier_admin: enabledStatus, querier_oper: localizedStatus }} />
   </>;
 }
@@ -82,6 +86,8 @@ export function MulticastView(props: ViewProps) {
     switch_id: number
   }>(rows: T[] | undefined) => asArray(rows).filter(row =>
     (!vlans.length || vlans.includes(row.vlan)) && visible(row));
+  const withIp = filter(data?.groups).filter(row => row.ip);
+  const allGuessed = withIp.length > 0 && withIp.every(row => row.ip_guessed);
   return (
     <div className="panel space-y-4">
       {!props.replay && <PollingStatus {...result} />}
@@ -89,10 +95,11 @@ export function MulticastView(props: ViewProps) {
       <VlanQuerierTable rows={filter(data?.vlans)} networkRows={asArray(data?.vlans)} />
       <h2>{t('ui.m271')}</h2>
       {/* スイッチがMACしか返さないときは、既知の用途から推定したIPに「推定」と添える */}
-      <Table {...switchColumn} rows={filter(data?.groups).map(({ purpose_ja, purpose_en, ip_guessed, ...row }) => ({
-        ...row, ip: row.ip ? `${row.ip}${ip_guessed ? t('mcast.guessed') : ''}` : '',
+      {/* IP が全部推定なら列名に1回だけ「推定」と書く。確定と推定が混ざるときは行ごとに添える */}
+      <Table {...switchColumn} rows={filter(data?.groups).map(({ purpose_ja, purpose_en, ip_guessed, ip, ...row }) => ({
+        ...row, [allGuessed ? 'ip_guessed_all' : 'ip']: ip ? `${ip}${ip_guessed && !allGuessed ? t('mcast.guessed') : ''}` : '',
         purpose: (getLang() === 'en' ? purpose_en : purpose_ja) || '' }))}
-        first={['switch_name', 'vlan', 'group', 'ip', 'protocol', 'purpose']} />
+        first={['switch_name', 'vlan', 'group', allGuessed ? 'ip_guessed_all' : 'ip', 'protocol', 'purpose']} />
       {asArray(data?.groups).some(row => row.ip_guessed) && <p className="chart-help">{t('mcast.guessedHelp')}</p>}
       <h2>{t('ui.m272')}</h2>
       <Table {...switchColumn} rows={filter(data?.mrouters)} first={['switch_name', 'vlan', 'port']} />

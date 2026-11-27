@@ -63,7 +63,7 @@ export function SwitchIndex({ switches, groups, alerts, alertsKnown = true, focu
           <ul>{rows.map(sw => {
             const counts = summarizeAlerts(bySwitch.get(sw.id) || []);
             const tone = alertsKnown ? alertTone(counts, sw.reachable) : 'unknown';
-            return <li key={sw.id}><button type="button" aria-current={focus === sw.id ? 'true' : undefined} onClick={() => onFocus(sw.id)}>
+            return <li key={sw.id}><button type="button" aria-current={focus === sw.id ? 'true' : undefined} title={sw.name} onClick={() => onFocus(sw.id)}>
               <StateMark tone={tone} /><span className="switch-index-name">{sw.name}</span>
               {counts.count > 0 && <span className="switch-index-count">{counts.count}</span>}
             </button></li>;

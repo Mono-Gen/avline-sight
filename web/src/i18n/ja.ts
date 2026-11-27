@@ -61,7 +61,7 @@ export const ja = {
     selection: 'トポロジー上の選択', noSelection: '選択なし', affected: '⚠ 影響範囲',
     noPath: '選択した機器からコアスイッチまでの経路を確認できません。',
     linkMetrics: '{speed} · 使用率 {utilization}', linkDown: '⚠ リンクダウン',
-    deviceCount: '接続機器 {count}台', deviceList: '{name} の接続機器', noDevices: '接続機器は確認されていません。',
+    deviceCount: '接続機器 {count}台', countBadge: '{count}台', vlanList: 'VLAN {list}', vlanCount: 'VLAN {count}本', deviceList: '{name} の接続機器', noDevices: '接続機器は確認されていません。',
   },
   ping: {
     target: 'Ping対象', visible: '表示中の機器（{count}台）', group: 'グループ {name}（{count}台）', manual: '手入力',
@@ -72,17 +72,21 @@ export const ja = {
   // ポートモニターのスイッチ索引・数字パネル・1台表示（計画§21）
   // VLANごとの事実（SNMPで読めた設定）と、ポート説明欄に書かれた文字。判定はしない
   // VLANの通し方（Trunk/Auto-Trunk）とマルチキャストの用途
+  // 左右ペインの幅を変える仕切り
+  pane: { nav: "左ペインの幅", detail: "ポート詳細の幅", resizeHelp: "ドラッグか←→キーで変更、ダブルクリックで元に戻す" },
   trunk: {
     mode: "VLANモード", access: "Access", general: "General", trunk: "Trunk", autoTrunk: "Trunk（Auto-Trunk 推定）",
     autoTrunkHelp: "相手がLLDPでNETGEARスイッチと分かり、Trunkになっているポートです。Auto-Trunkで自動設定されたものと推定しています（スイッチは自動かどうかをSNMPで返しません）。",
     native: "Native VLAN", tagged: "タグ付きで通すVLAN", untagged: "タグなしで通すVLAN", none: "なし",
     carriedBy: "Trunkで運ぶポート", peerMissing: "相手側に無い: {list}",
-    markTrunk: "Trunk（スイッチ間などでVLANを複数運ぶ）", markGeneral: "General（VLANを個別に設定し、複数運ぶ）",
-    markLag: "LAG のメンバー（複数の線を束ねた1本の一部）", markLagOf: "LAG のメンバー（{lag}）",
-    markBlocked: "STPでブロック中（ループ防止で止めている）", marksLegend: "ポートの役割",
+    markTrunk: "Trunk", markGeneral: "General", markLag: "LAG", markLagOf: "LAG（{lag}）", markBlocked: "STPブロック", marksLegend: "ポートの役割",
+    marksHelp: "記号の意味", helpTrunk: "Trunk: スイッチどうしをつなぎ、VLANを複数まとめて運ぶポート。",
+    helpGeneral: "General: VLANを個別に設定し、2つ以上運んでいるポート（VLANが1つだけなら記号は付けません）。",
+    helpLag: "LAG: 複数の線を束ねて1本として使う、そのうちの1本。",
+    helpBlocked: "STPブロック: ループを防ぐため、スイッチが通信を止めているポート。意図した冗長経路か確認してください。",
   },
   mcast: {
-    ip: "IPアドレス", purpose: "用途", guessed: "（推定）",
+    ip: "IPアドレス", purpose: "用途", guessed: "（推定）", ipGuessed: "IPアドレス（推定）", igmpVersion: "IGMPバージョン", heardVersion: "受信 v{v}",
     guessedHelp: "スイッチはMACアドレスしか返さないため、既知の用途に当てはまるIPを推定しています（同じMACになるIPは32通りあります）。",
   },
   chart: {

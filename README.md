@@ -44,6 +44,22 @@ When switching to Show, review the **Pre-show checklist**. It checks switch reac
 - AV checks cover IGMP querier status, multicast groups by port, EEE/LPI, PAUSE frames with an NDI4 exception, CoS queue drops, DSCP Trust, FrameTooLongs (MTU mismatch), UDLD, SFP DOM, PoE faults, STP/MSTP and duplicate or rogue DHCP servers. Expert display also provides cross-switch audits based on the NETGEAR ProAV Guide.
 - Detected changes to monitored port settings, such as PVID, EEE and maximum frame size, appear in Logs as `PORT_CONFIG_CHANGED` events with before and after values. Expert display provides a comparison with the latest baseline and a list of recent configuration changes.
 - Save and compare baselines, add an incident marker with `M`, export an `.avsight` session for offline replay, and export monitoring data as CSV or JSON.
+- Each port's VLAN mode (Access / Trunk / General) and the VLANs it carries are read, and a role mark appears under the port number in the rack view (see Glossary below). Inter-switch links in Topology show the VLANs carried at both ends.
+- `VLAN_TRUNK_MISMATCH` warns when a VLAN that exists on both switches is carried on only one end of an inter-switch link. A VLAN that the other switch does not have at all is treated as intentionally local and is not reported.
+- When a switch reports only the MAC address of a multicast group, the IP address and purpose are estimated from known uses (Dante, mDNS, VRRP and others).
+
+## Glossary
+
+| Mark or term | Meaning |
+|---|---|
+| T (Trunk) | A port that links switches and carries several VLANs together. A trunk whose LLDP neighbor is a NETGEAR switch is shown as "likely Auto-Trunk" (the switch does not report over SNMP whether it was set automatically). |
+| G (General) | A port with VLANs set individually, carrying two or more. The M4250 reports ordinary device ports as General too, so a General port carrying only one VLAN has no mark. |
+| L (LAG) | A member port of a LAG, which bundles several links to act as one. |
+| B (STP blocked) | A port where the switch stops traffic to prevent a loop. Check that it is an intended redundant path. |
+| Querier | The switch that sends IGMP queries to find multicast listeners. Each VLAN needs one. |
+| (estimated) | A value not read directly from the switch but estimated from other information. |
+
+Drag the dividers between the left pane and the main area, and between the port list and port details, to change their widths (←/→ keys also work; double-click to reset).
 
 ## Quick start
 
@@ -90,6 +106,10 @@ Get-Service SNMPTRAP -ErrorAction SilentlyContinue
 
 3. If the port is in use, stop the Windows SNMP Trap service if it can be stopped, or start the app on a different port with `--trap` and use the same destination port on the switches. Check that the Windows firewall permits inbound UDP traffic on that port.
 4. After configuring the switch, verify that the last trap time updates. The CLI example still requires hardware verification. [API documentation](docs/api.md#snmp-trap)
+
+## Checking the screens without switches
+
+To check the screens on a PC without switches, load SNMP dumps taken from real switches (`snmp_<IP>.txt`) with `--snmp-dump <folder>`. The app then monitors virtual switches (named `仮想-<IP>`) that answer with the dumped values. Counters stay frozen and no traps arrive.
 
 ## Watching from several PCs
 
