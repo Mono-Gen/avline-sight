@@ -176,7 +176,7 @@ td {
 .rack-groups { display: grid; gap: var(--space-2); }
 .rack-row {
   display: grid;
-  grid-template-columns: minmax(8rem, 13rem) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2);
   min-height: 4.1rem;
@@ -186,7 +186,9 @@ td {
 .rack-row:nth-child(odd) { background: #13161b; }
 .rack-offline .rack-identity strong, .rack-stale { color: #fde68a; }
 .rack-identity { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-2); min-width: 0; }
-.rack-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+/* 名前は … で切らず折り返して全部見せる（ポートを大きくして名前の欄が狭くなったため、切ると「● …」しか残らない） */
+.rack-identity strong { display: flex; align-items: baseline; gap: .25rem; max-width: 100%; }
+.rack-identity .rack-switch-name { min-width: 0; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; text-align: start; } /* 「仮/想-…」のように1文字目の後で折れないよう、和文の途中では折らず入りきらない分だけ折る */
 .rack-identity > span { color: #9aa3b2; font-variant-numeric: tabular-nums; font-size: .75em; }
 .rack-switch-actions { display: flex; align-items: center; gap: var(--space-1); }
 .rack-front { min-width: 0; }
