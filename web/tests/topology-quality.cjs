@@ -277,7 +277,7 @@ test('Topology switch count badges point to the exact attached device list, incl
   for (const [id, macs] of [['a', ['AA']], ['b', []], ['c', ['CC']], ['d', ['DD']]]) {
     const badge = graph.getElementById(countId(id));
     assert.equal(badge.data('switchNode'), id);
-    assert.equal(badge.data('statusLabel'), String(macs.length));
+    assert.equal(badge.data('statusLabel'), `${macs.length}台`); // the badge carries its unit (2026-11-28 UI review)
     assert.deepEqual((model.devices.get(badge.data('switchNode')) ?? []).map(row => row.mac), macs);
     assert.deepEqual(badge.position(), countPosition(graph.getElementById(id).position()));
   }

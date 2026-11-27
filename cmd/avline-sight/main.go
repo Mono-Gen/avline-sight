@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Mono-Gen/avline-sight/internal/api"
@@ -63,6 +64,7 @@ func run(hasConsole bool) (logPath string, err error) {
 		listen   = flag.String("listen", "127.0.0.1:8080", "WebUI待受アドレス（LAN公開は 0.0.0.0:8080。閲覧専用ロック併用推奨）")
 		trapAddr = flag.String("trap", "", "SNMP Trap待受アドレス（既定 0.0.0.0:162、失敗時は設定画面で変更）")
 		lab      = flag.Int("lab", 0, "仮想M4250ラボを N 台起動して監視する（実機なし検証用、1〜20）")
+		replay   = flag.String("snmp-dump", "", "実機のSNMPダンプ（snmp_<IP>.txt）のフォルダを読み、その内容で応答する仮想スイッチを監視する（実機なし検証用）")
 		labOff   = flag.Int("lab-port-offset", 0, "ラボのSNMP/Telnet/SSHポートをまとめてずらす（ラボを2つ同時に動かす検証用）")
 		openUI   = flag.Bool("open", false, "起動後に既定ブラウザでWebUIを開く")
 		fast     = flag.Duration("fast", poller.DefaultIntervals.Fast, "Fast周期")
@@ -92,6 +94,9 @@ func run(hasConsole bool) (logPath string, err error) {
 	api.LabSNMPBase += *labOff
 	api.LabCLIBase += *labOff
 	api.LabSSHBase += *labOff
+	if *lab > 0 && *replay != "" {
+		return "", fmt.Errorf("--lab と --snmp-dump は同時に使えません（同じポートを使うため）")
+	}
 	if *lab < 0 || *lab > 20 {
 		return "", fmt.Errorf("--lab は 0〜20 で指定してください")
 	}
@@ -119,6 +124,8 @@ func run(hasConsole bool) (logPath string, err error) {
 	dbName := "avline-sight.db"
 	if *lab > 0 {
 		dbName = "avline-sight-lab.db" // ラボのデータで本番DBを汚さない
+	} else if *replay != "" {
+		dbName = "avline-sight-replay.db" // 再生のデータも本番・ラボと分ける
 	}
 	st, err := store.Open(filepath.Join(*dataDir, dbName), false)
 	if err != nil {
@@ -148,7 +155,7 @@ func run(hasConsole bool) (logPath string, err error) {
 		var saved string
 		if st.DB.QueryRow(`SELECT v FROM meta WHERE k='trap_addr'`).Scan(&saved) == nil && saved != "" {
 			ta = saved
-		} else if *lab > 0 {
+		} else if *lab > 0 || *replay != "" {
 			ta = "127.0.0.1:1162" // ラボは管理者権限不要のポートを使う
 		} else {
 			ta = "0.0.0.0:162"
@@ -171,6 +178,20 @@ func run(hasConsole bool) (logPath string, err error) {
 		}
 		eng.Reload()
 		slog.Info("仮想M4250ラボを起動しました", "台数", *lab, "SNMP", fmt.Sprintf("127.0.0.1:%d〜", api.LabSNMPBase))
+	}
+	if *replay != "" {
+		rp, err := sim.LoadReplay(*replay)
+		if err != nil {
+			return logPath, err
+		}
+		if err := rp.Start(ctx, api.LabSNMPBase); err != nil {
+			return logPath, err
+		}
+		if err := registerReplay(st, pid, rp); err != nil {
+			return logPath, err
+		}
+		eng.Reload()
+		slog.Info("SNMPダンプの再生を始めました", "台数", len(rp.Agents), "SNMP", fmt.Sprintf("127.0.0.1:%d〜", api.LabSNMPBase))
 	}
 
 	iv := poller.Intervals{Fast: *fast, Medium: *medium, Slow: *slow, Timeout: poller.DefaultIntervals.Timeout, Retries: poller.DefaultIntervals.Retries}
@@ -304,6 +325,61 @@ func registerLab(st *store.Store, pid int64, lab *sim.Lab) error {
 		c := model.SwitchConfig{ProfileID: pid, Name: s.Name, GroupTag: tag, IP: "127.0.0.1", SNMPPort: port, Community: sim.Community, Enabled: true}
 		if err := st.SaveSwitch(&c); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// registerReplay は再生エージェントを監視対象に登録する（同じポートが登録済みなら飛ばす）。
+func registerReplay(st *store.Store, pid int64, rp *sim.Replay) error {
+	existing, err := st.Switches(pid)
+	if err != nil {
+		return err
+	}
+	// 前回と違うダンプを読んだときに、古い名前のまま・相手のいないポートが残らないよう、
+	// ダンプから登録した分（名前が 仮想-。旧名 Replay- も含む）だけを今回の台に合わせて直し、余った分は監視を止める。
+	// 利用者が自分で登録した 127.0.0.1 のスイッチには触らない。
+	// 「仮想」は実機と見間違えないための印。アプリの「オフライン再生」と紛れないよう Replay は使わない
+	const prefix = "仮想-"
+	byPort := map[int]model.SwitchConfig{}
+	taken := map[int]bool{}
+	for _, c := range existing {
+		if c.IP != "127.0.0.1" {
+			continue
+		}
+		if strings.HasPrefix(c.Name, prefix) || strings.HasPrefix(c.Name, "Replay-") {
+			byPort[c.SNMPPort] = c
+		} else {
+			taken[c.SNMPPort] = true
+		}
+	}
+	used := map[int]bool{}
+	for _, a := range rp.Agents {
+		port := api.LabSNMPBase + a.Index
+		used[port] = true
+		if taken[port] {
+			slog.Warn("再生用のポートに利用者のスイッチが登録済みのため、この台は監視に足しません", "port", port, "dump", a.SourceIP)
+			continue
+		}
+		name := prefix + a.SourceIP
+		c, ok := byPort[port]
+		if ok && c.Name == name && c.Enabled && c.Community == sim.Community {
+			continue
+		}
+		if !ok {
+			c = model.SwitchConfig{ProfileID: pid, IP: "127.0.0.1", SNMPPort: port}
+		}
+		c.Name, c.Enabled, c.Community = name, true, sim.Community
+		if err := st.SaveSwitch(&c); err != nil {
+			return err
+		}
+	}
+	for port, c := range byPort {
+		if !used[port] && c.Enabled {
+			c.Enabled = false
+			if err := st.SaveSwitch(&c); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gosnmp/gosnmp"
 
+	"github.com/Mono-Gen/avline-sight/internal/mcast"
 	"github.com/Mono-Gen/avline-sight/internal/mib"
 	"github.com/Mono-Gen/avline-sight/internal/model"
 	"github.com/Mono-Gen/avline-sight/internal/oui"
@@ -465,7 +466,12 @@ func (w *worker) collectIGMP() error {
 	if err != nil {
 		return err
 	}
-	qrows, _ := w.c.WalkColumns([]string{mib.QuerierVlanAdminMode, mib.QuerierVlanOperMode, mib.QuerierVlanAddress, mib.QuerierOperVersion, mib.QuerierLastQuerierAddress, mib.QuerierLastQuerierVersion})
+	qrows, err := w.c.WalkColumns([]string{mib.QuerierVlanAdminMode, mib.QuerierVlanOperMode, mib.QuerierVlanAddress, mib.QuerierOperVersion, mib.QuerierLastQuerierAddress, mib.QuerierLastQuerierVersion})
+	if err != nil {
+		// 取れなかったクエリア情報を空のまま入れると「クエリア不在」と誤判定するため、前回の値を残して失敗として返す
+		// （表が無い機種は err にならず空で返る）
+		return err
+	}
 	byV := map[int]*model.VlanIGMP{}
 	var order []int
 	get := func(v int) *model.VlanIGMP {
@@ -494,6 +500,10 @@ func (w *worker) collectIGMP() error {
 		}
 	}
 	sort.Ints(order)
+	// nil は「まだ読んでいない」の印（エンジンがクエリア不在の判定を待つ）。読めたら行が無くても空スライスにする
+	if ig.Vlans == nil {
+		ig.Vlans = []model.VlanIGMP{}
+	}
 	ig.Vlans = ig.Vlans[:0]
 	for _, v := range order {
 		ig.Vlans = append(ig.Vlans, *byV[v])
@@ -548,7 +558,14 @@ func (w *worker) collectIGMP() error {
 		w.st.Caps["igmp_groups"] = "SUPPORTED"
 	}
 	for _, k := range gorder {
-		ig.Groups = append(ig.Groups, *agg[k])
+		g := agg[k]
+		// 推定IPと用途を添える。L2（MAC）しか取れないときはプロトコル名も辞書の値にする
+		info := mcast.Lookup(g.Group)
+		g.IP, g.IPGuessed, g.PurposeJa, g.PurposeEn = info.IP, info.Guessed, info.PurposeJa, info.PurposeEn
+		if g.Source == "l2" && info.Protocol != "Unknown" {
+			g.Protocol = info.Protocol
+		}
+		ig.Groups = append(ig.Groups, *g)
 	}
 	mrows, _ := w.c.WalkColumns([]string{mib.VlanStaticMrouterAdminMode})
 	ig.Mrouters = ig.Mrouters[:0]
@@ -699,6 +716,7 @@ func (w *worker) collectSlow() error {
 	} else {
 		w.markConfigFailed("pvid")
 	}
+	w.collectVlanMembership(pm)
 
 	// --- 接続機器の統合（LLDP → DHCP Snooping → ARP → FDB+OUI） ---
 	devs := map[int]map[string]*model.Device{} // ifIndex → MAC → 機器
@@ -924,6 +942,24 @@ func (w *worker) collectConfig(pm map[int]*model.Port) {
 	perPort([]string{mib.UdldIntfOperStatus}, func(p *model.Port, r sx.Row) {
 		p.UDLD = mib.UdldOperEnum.Name(int(sx.Int(r.Cols[mib.UdldIntfOperStatus])))
 	})
+	// LAG の所属（標準 IEEE8023-LAG-MIB。値は所属する LAG の ifIndex、未所属は 0）。
+	// 読めたときだけ全ポートを一度クリアしてから入れ直す（抜けたポートに古い所属を残さない）。
+	if rows, err := w.c.WalkColumns([]string{mib.Dot3adAggPortAttached}); err == nil {
+		for _, p := range pm {
+			p.LagIfIndex, p.LagName = 0, ""
+		}
+		for _, r := range rows {
+			p := pm[ifIdx(r)]
+			agg := int(sx.Int(r.Cols[mib.Dot3adAggPortAttached]))
+			if p == nil || agg <= 0 || agg == p.IfIndex {
+				continue
+			}
+			p.LagIfIndex = agg
+			if lag := pm[agg]; lag != nil {
+				p.LagName = lag.Name
+			}
+		}
+	}
 	perPort([]string{mib.StpCstPortFwdState}, func(p *model.Port, r sx.Row) {
 		p.StpState = mib.StpFwdStateEnum.Name(int(sx.Int(r.Cols[mib.StpCstPortFwdState])))
 	})
@@ -1092,4 +1128,62 @@ func lldpDeviceKey(chassis, portID string, portIsMAC bool) string {
 func isMACText(s string) bool {
 	_, err := net.ParseMAC(s)
 	return err == nil && len(s) == 17
+}
+
+// collectVlanMembership はポートごとのVLANモードと、実際に流れているVLAN（tagged/untagged）を取る。
+// 毎回空に戻してから埋める（取れなかったときに古い値を「今の構成」と誤認させないため）。
+func (w *worker) collectVlanMembership(pm map[int]*model.Port) {
+	for _, p := range pm {
+		p.Mode, p.NativeVLAN, p.TaggedVLANs, p.UntaggedVLANs = "", 0, nil, nil
+	}
+	if rows, err := w.c.WalkColumns([]string{mib.SwitchportMode, mib.SwitchportNativeVlan}); err == nil {
+		for _, r := range rows {
+			if p := pm[ifIdx(r)]; p != nil {
+				p.Mode = switchportModeName(sx.Int(r.Cols[mib.SwitchportMode]))
+				p.NativeVLAN = int(sx.Int(r.Cols[mib.SwitchportNativeVlan]))
+			}
+		}
+	}
+	rows, err := w.c.WalkColumns([]string{mib.Dot1qVlanCurrentEgress, mib.Dot1qVlanCurrentUntagged})
+	if err != nil {
+		return
+	}
+	for _, r := range rows {
+		if len(r.Index) == 0 {
+			continue
+		}
+		vlan := int(r.Index[len(r.Index)-1]) // INDEX=timeMark,vlan
+		untagged := map[int]bool{}
+		for _, bp := range sx.PortListBits(sx.Bytes(r.Cols[mib.Dot1qVlanCurrentUntagged])) {
+			untagged[bp] = true
+		}
+		for _, bp := range sx.PortListBits(sx.Bytes(r.Cols[mib.Dot1qVlanCurrentEgress])) {
+			p := pm[w.basePortToIf(bp)]
+			if p == nil {
+				continue
+			}
+			if untagged[bp] {
+				p.UntaggedVLANs = append(p.UntaggedVLANs, vlan)
+			} else {
+				p.TaggedVLANs = append(p.TaggedVLANs, vlan)
+			}
+		}
+	}
+	for _, p := range pm {
+		sort.Ints(p.TaggedVLANs)
+		sort.Ints(p.UntaggedVLANs)
+	}
+}
+
+// switchportModeName は agentSwitchportMode の値を名前にする（FASTPATH系MIB: access(1) trunk(2) general(3)）。
+func switchportModeName(v int64) string {
+	switch v {
+	case 1:
+		return "access"
+	case 2:
+		return "trunk"
+	case 3:
+		return "general"
+	}
+	return ""
 }

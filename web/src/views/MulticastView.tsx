@@ -1,4 +1,4 @@
-import { isRecommendationEvent, t } from '../i18n';
+import { getLang, isRecommendationEvent, t } from '../i18n';
 import { api } from '../api';
 import { AvStatus } from '../components/AvStatus';
 import { PollingStatus } from '../components/PollingStatus';
@@ -13,12 +13,17 @@ import { enabledStatus, findingColumns, localizedStatus, switchColumn } from './
 const hasLastQuerier = (address?: string) => !!address && address !== '0.0.0.0' && address !== '::';
 
 export function VlanQuerierTable({ rows, networkRows = rows }: { rows: Multicast['vlans']; networkRows?: Multicast['vlans'] }) {
-  const queriersByVlan = new Map<number, { switches: Set<number>; addresses: Set<string> }>();
+  // The querier's own "last querier" can be a stale value heard before the election (seen on M4250, 2026-11-27),
+  // so it counts only while more than one switch claims to be the querier. Same rule as the server-side audit.
+  const queriersByVlan = new Map<number, { switches: Set<number>; addresses: Set<string>; selfAddresses: Set<string> }>();
   for (const row of networkRows) {
-    const queriers = queriersByVlan.get(row.vlan) ?? { switches: new Set<number>(), addresses: new Set<string>() };
+    const queriers = queriersByVlan.get(row.vlan) ?? { switches: new Set<number>(), addresses: new Set<string>(), selfAddresses: new Set<string>() };
     if (row.querier_oper === 'querier') queriers.switches.add(row.switch_id);
-    if (hasLastQuerier(row.last_querier)) queriers.addresses.add(row.last_querier);
+    if (hasLastQuerier(row.last_querier)) (row.querier_oper === 'querier' ? queriers.selfAddresses : queriers.addresses).add(row.last_querier);
     queriersByVlan.set(row.vlan, queriers);
+  }
+  for (const queriers of queriersByVlan.values()) {
+    if (queriers.switches.size > 1) queriers.selfAddresses.forEach(address => queriers.addresses.add(address));
   }
   const byVlan = new Map<number, (typeof rows)[number][]>();
   for (const row of rows) {
@@ -36,7 +41,11 @@ export function VlanQuerierTable({ rows, networkRows = rows }: { rows: Multicast
   return <>
     {/* One line per VLAN so the summary can be scanned. */}
     {summary.length > 0 && <ul className="multicast-summary">{summary.map(line => <li key={line}>{line}</li>)}</ul>}
-    <Table rows={rows} first={['switch_name', 'vlan', 'name', 'snooping', 'querier_oper', 'querier_addr']}
+    {/* Received and operating versions in one column. -1/0 means no query heard yet, so it is not shown.
+        The received version is added only when it differs (a version mismatch can stop Dante/AES67). */}
+    <Table rows={rows.map(({ last_version, oper_version, ...row }) => ({ ...row,
+      igmp_version: [oper_version > 0 ? `v${oper_version}` : '—', last_version > 0 && last_version !== oper_version ? `（${t('mcast.heardVersion', { v: last_version })}）` : ''].join('') }))}
+      first={['switch_name', 'vlan', 'name', 'snooping', 'querier_oper', 'querier_addr']}
       hide={switchColumn.hide} values={{ snooping: enabledStatus, querier_admin: enabledStatus, querier_oper: localizedStatus }} />
   </>;
 }
@@ -77,13 +86,22 @@ export function MulticastView(props: ViewProps) {
     switch_id: number
   }>(rows: T[] | undefined) => asArray(rows).filter(row =>
     (!vlans.length || vlans.includes(row.vlan)) && visible(row));
+  const withIp = filter(data?.groups).filter(row => row.ip);
+  const allGuessed = withIp.length > 0 && withIp.every(row => row.ip_guessed);
   return (
     <div className="panel space-y-4">
       {!props.replay && <PollingStatus {...result} />}
       <h2>{t('ui.m270')}</h2>
       <VlanQuerierTable rows={filter(data?.vlans)} networkRows={asArray(data?.vlans)} />
       <h2>{t('ui.m271')}</h2>
-      <Table {...switchColumn} rows={filter(data?.groups)} first={['switch_name', 'vlan', 'group']} />
+      {/* When the switch reports only the MAC, the IP is estimated from known uses and marked as estimated. */}
+      {/* If every IP is estimated, say so once in the header; when mixed, mark each row. */}
+      <Table {...switchColumn} rows={filter(data?.groups).map(({ purpose_ja, purpose_en, ip_guessed, ip, ...row }) => ({
+        ...row, ip: ip ? `${ip}${ip_guessed && !allGuessed ? t('mcast.guessed') : ''}` : '',
+        purpose: (getLang() === 'en' ? purpose_en : purpose_ja) || '' }))}
+        labels={allGuessed ? { ip: t('mcast.ipGuessed') } : {}}
+        first={['switch_name', 'vlan', 'group', 'ip', 'protocol', 'purpose']} />
+      {asArray(data?.groups).some(row => row.ip_guessed) && <p className="chart-help">{t('mcast.guessedHelp')}</p>}
       <h2>{t('ui.m272')}</h2>
       <Table {...switchColumn} rows={filter(data?.mrouters)} first={['switch_name', 'vlan', 'port']} />
       <h2>gPTP</h2>

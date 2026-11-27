@@ -1,15 +1,13 @@
-import type React from 'react';
-import { formatBps } from '../format';
 import { t } from '../i18n';
 import type { Alert } from '../types';
 import { hasCriticalActive, summarizeAlerts } from '../wallAlerts';
 
 // Number panels above the port monitor. Always whole-project values, also while one switch or a filter is shown, so faults elsewhere are not missed.
-export function MonitorKpis({ switches, alerts, uplink, alertsKnown = true }: {
+// The former uplink total was removed (2026-11-28): with two or more switches each link was counted at both ends,
+// so the figure was doubled and receive/send lost their meaning.
+export function MonitorKpis({ switches, alerts, alertsKnown = true }: {
   switches: readonly { reachable: boolean; ports_up?: number }[];
   alerts: readonly Alert[];
-  // Uplink total summed from the existing snapshot; undefined when no uplink is known.
-  uplink?: { rx: number; tx: number };
   // False when the alert list is not available (legacy replay): show "—" instead of a misleading zero.
   alertsKnown?: boolean;
 }) {
@@ -17,20 +15,17 @@ export function MonitorKpis({ switches, alerts, uplink, alertsKnown = true }: {
   const recovered = counts.count - counts.active;
   const reachable = switches.filter(sw => sw.reachable).length;
   const linked = switches.reduce((sum, sw) => sum + (sw.ports_up || 0), 0);
-  const items: { key: string; label: string; value: React.ReactNode; tone?: 'critical' | 'caution' | 'warning'; small?: boolean }[] = [
+  const items: { key: string; label: string; value: string; tone?: 'critical' | 'caution' | 'warning' }[] = [
     { key: 'switches', label: t('focus.kpiSwitches'), value: `${reachable} / ${switches.length}`, tone: reachable < switches.length ? 'critical' : undefined },
     { key: 'active', label: t('focus.kpiActive'), value: alertsKnown ? String(counts.active) : '—',
       tone: alertsKnown && counts.active ? hasCriticalActive(counts) ? 'critical' : 'caution' : undefined },
     { key: 'recovered', label: t('focus.kpiRecovered'), value: alertsKnown ? String(recovered) : '—', tone: alertsKnown && recovered ? 'warning' : undefined },
     { key: 'linked', label: t('focus.kpiLinked'), value: String(linked) },
-    { key: 'uplink', label: t('focus.kpiUplink'), small: true,
-      // Receive and send stacked, each on one line (same as the port detail).
-      value: uplink ? <span className="detail-pair"><span>{t('metrics.rxOnly', { value: formatBps(uplink.rx) })}</span><span>{t('metrics.txOnly', { value: formatBps(uplink.tx) })}</span></span> : '—' },
   ];
   return <section className="kpi-row" aria-label={t('focus.kpi')}>
     {items.map(item => <div key={item.key} className={`kpi${item.tone ? ` kpi-${item.tone}` : ''}`} data-kpi={item.key}>
       <div className="kpi-label">{item.label}</div>
-      <div className={`kpi-value${item.small ? ' kpi-value-small' : ''}`}>{item.value}</div>
+      <div className="kpi-value">{item.value}</div>
       <div className="kpi-scope">{t('focus.kpiScope')}</div>
     </div>)}
   </section>;

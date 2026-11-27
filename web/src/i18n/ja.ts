@@ -61,7 +61,7 @@ export const ja = {
     selection: 'トポロジー上の選択', noSelection: '選択なし', affected: '⚠ 影響範囲',
     noPath: '選択した機器からコアスイッチまでの経路を確認できません。',
     linkMetrics: '{speed} · 使用率 {utilization}', linkDown: '⚠ リンクダウン',
-    deviceCount: '接続機器 {count}台', deviceList: '{name} の接続機器', noDevices: '接続機器は確認されていません。',
+    deviceCount: '接続機器 {count}台', countBadge: '{count}台', vlanNone: '共通VLANなし', vlanList: 'VLAN {list}', vlanCount: 'VLAN {count}本', deviceList: '{name} の接続機器', noDevices: '接続機器は確認されていません。',
   },
   ping: {
     target: 'Ping対象', visible: '表示中の機器（{count}台）', group: 'グループ {name}（{count}台）', manual: '手入力',
@@ -71,6 +71,31 @@ export const ja = {
   metrics: { rxtx: '受信 {rx} / 送信 {tx}', rxOnly: '受信 {value}', txOnly: '送信 {value}', errors: 'エラー {value}', discards: '破棄 {value}', multicast: 'マルチキャスト' },
   // ポートモニターのスイッチ索引・数字パネル・1台表示（計画§21）
   // VLANごとの事実（SNMPで読めた設定）と、ポート説明欄に書かれた文字。判定はしない
+  // VLANの通し方（Trunk/Auto-Trunk）とマルチキャストの用途
+  // 左右ペインの幅を変える仕切り
+  pane: { nav: "左ペインの幅", detail: "ポート詳細の幅", resizeHelp: "ドラッグか←→キーで変更、ダブルクリックかEnterで元に戻す" },
+  trunk: {
+    mode: "VLANモード", access: "Access", general: "General", trunk: "Trunk", autoTrunk: "Trunk（Auto-Trunk 推定）",
+    autoTrunkHelp: "相手がLLDPでNETGEARスイッチと分かり、Trunkになっているポートです。Auto-Trunkで自動設定されたものと推定しています（スイッチは自動かどうかをSNMPで返しません）。",
+    native: "Native VLAN", tagged: "タグ付きで通すVLAN", untagged: "タグなしで通すVLAN", none: "なし",
+    carriedBy: "Trunkで運ぶポート", peerMissing: "相手側に無い: {list}",
+    markTrunk: "Trunk", markGeneral: "General", markLag: "LAG", markLagOf: "LAG（{lag}）", markBlocked: "STPブロック", marksLegend: "ポートの役割",
+    marksHelp: "記号の意味", helpTrunk: "Trunk: スイッチどうしをつなぎ、VLANを複数まとめて運ぶポート。",
+    helpGeneral: "General: VLANを個別に設定し、2つ以上運んでいるポート（VLANが1つだけなら記号は付けません）。",
+    helpLag: "LAG: 複数の線を束ねて1本として使う、そのうちの1本。",
+    helpBlocked: "STPブロック: ループを防ぐため、スイッチが通信を止めているポート。意図した冗長経路か確認してください。",
+  },
+  mcast: {
+    ip: "IPアドレス", purpose: "用途", guessed: "（推定）", ipGuessed: "IPアドレス（推定）", igmpVersion: "IGMPバージョン", heardVersion: "受信 v{v}",
+    guessedHelp: "スイッチはMACアドレスしか返さないため、既知の用途に当てはまるIPを推定しています（同じMACになるIPは32通りあります）。",
+  },
+  chart: {
+    rxMc: "マルチキャスト受信", txMc: "マルチキャスト送信", rxBps: "受信", txBps: "送信", err: "エラー", discard: "破棄", poe: "PoE電力", sfpRx: "SFP受信光",
+    bandwidthHelp: "このポートの1秒あたりの通信量（受信・送信）。",
+    errorsHelp: "ポーリング間隔ごとに増えたエラー・破棄パケットの数。0が正常です。",
+    multicastHelp: "このポートで1秒あたりに受信・送信したマルチキャストのパケット数（pps）。Dante・AES67 などの音声映像や、機器探索の通信が含まれます。",
+    hardwareHelp: "PoEの給電電力（W）とSFPの受信光レベル（dBm）。",
+  },
   vlan: {
     title: 'VLAN', ports: 'ポート {count}（接続中 {linked}）', settings: '設定', written: '記入',
     writtenHelp: 'ポートの説明欄に書かれた文字です（AV画面がプロファイル適用時に書きますが、手で書き換えられます）。実際の設定とは連動しません。',
@@ -90,7 +115,7 @@ export const ja = {
     marks: '発生中 {active}件 / 復旧・未確認 {recovered}件', switchCount: '{count}件',
     breadcrumb: '表示中のスイッチ', backToAll: 'すべてのスイッチに戻る',
     kpi: 'ポートモニターの全体状況', kpiScope: '全体', kpiSwitches: 'スイッチ', kpiActive: '異常（発生中）', kpiRecovered: '復旧・未確認',
-    kpiLinked: 'リンク中のポート', kpiUplink: 'アップリンク合計',
+    kpiLinked: 'リンク中のポート',
     health: 'スイッチ本体', ports: 'ポート（押すと右に詳細）', linkedPorts: '接続中のポート', noLinkedPorts: '接続中のポートなし',
     colPort: 'ポート', colDevice: '接続機器', colState: '状態', colRate: '受信 / 送信', linked: '接続中', colSpeed: '速度', colVlan: 'VLAN', colPoe: 'PoE', colErrors: 'エラー / 破棄', colTrend: '推移', colMulticast: 'マルチキャスト 受信 / 送信', colChanged: 'リンク変化',
     since: '{time} から', minutesAgo: '{n}分前', hoursAgo: '{n}時間前', daysAgo: '{n}日前', trendHelp: 'この画面を開いてからの受信＋送信の推移',

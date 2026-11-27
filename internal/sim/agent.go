@@ -48,7 +48,7 @@ func (l *Lab) Start(ctx context.Context, cfg Config) error {
 			return fmt.Errorf("仮想スイッチ%sのUDP待受に失敗 (%s): %w", s.Name, addr, err)
 		}
 		go func() { <-ctx.Done(); pc.Close() }()
-		go l.serve(pc, s)
+		go serve(pc, func(req *gosnmp.SnmpPacket) *gosnmp.SnmpPacket { return l.handle(s, req) })
 		if cfg.BaseCLIPort > 0 {
 			if err := l.startCLI(ctx, s, fmt.Sprintf("127.0.0.1:%d", cfg.BaseCLIPort+s.Index)); err != nil {
 				return err
@@ -88,7 +88,8 @@ func (l *Lab) background(ctx context.Context) {
 	}
 }
 
-func (l *Lab) serve(pc net.PacketConn, s *Switch) {
+// serve は UDP で SNMP 要求を受け、h の応答を返す（ラボと再生モードで共用）。
+func serve(pc net.PacketConn, h func(*gosnmp.SnmpPacket) *gosnmp.SnmpPacket) {
 	buf := make([]byte, 65535)
 	dec := &gosnmp.GoSNMP{Version: gosnmp.Version2c, Logger: gosnmp.NewLogger(nil)}
 	for {
@@ -108,7 +109,7 @@ func (l *Lab) serve(pc net.PacketConn, s *Switch) {
 		if req.Community != Community {
 			continue // 実機同様、コミュニティ不一致は無応答
 		}
-		resp := l.handle(s, req)
+		resp := h(req)
 		out, err := resp.MarshalMsg()
 		if err != nil {
 			slog.Warn("sim: 応答エンコード失敗", "err", err)
@@ -119,6 +120,10 @@ func (l *Lab) serve(pc net.PacketConn, s *Switch) {
 			if out, err = resp.MarshalMsg(); err != nil {
 				break
 			}
+		}
+		if err != nil || len(out) == 0 {
+			slog.Warn("sim: 応答を縮めた後のエンコードに失敗", "err", err)
+			continue // 空のパケットは送らない
 		}
 		if _, err := pc.WriteTo(out, addr); err != nil {
 			slog.Debug("sim: 送信失敗", "err", err)
@@ -131,7 +136,11 @@ func (l *Lab) handle(s *Switch, req *gosnmp.SnmpPacket) *gosnmp.SnmpPacket {
 	s.advance(time.Now())
 	tree := s.build(l)
 	s.mu.Unlock()
+	return respond(tree, req)
+}
 
+// respond は OID 順に並んだツリーから GET/GETNEXT/GETBULK の応答を作る（ラボと再生モードで共用）。
+func respond(tree []entry, req *gosnmp.SnmpPacket) *gosnmp.SnmpPacket {
 	resp := &gosnmp.SnmpPacket{Version: gosnmp.Version2c, Community: req.Community, PDUType: gosnmp.GetResponse, RequestID: req.RequestID}
 	find := func(o []uint32) int { // o より大きい最初の要素
 		return sort.Search(len(tree), func(i int) bool { return snmpx.CompareOID(tree[i].oid, o) > 0 })

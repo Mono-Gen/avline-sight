@@ -227,6 +227,11 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "hint": "Compare IGMP Snooping settings across switches in the same VLAN.",
     "details": "IGMP Snooping enabled on some switches and disabled on others in the same VLAN"
   },
+  "VLAN_TRUNK_MISMATCH": {
+    "title": "A VLAN is carried on only one side of a switch-to-switch link",
+    "hint": "Check that both switches have the VLAN and that the Trunk/Auto-Trunk allowed VLANs match.",
+    "details": "A VLAN present on both switches is carried on only one end of the link between them"
+  },
   "QUERIER_ABSENT": {
     "title": "No IGMP Querier active on IGMP Snooping-enabled VLAN",
     "hint": "Check IGMP Querier settings on the core switch promptly.",

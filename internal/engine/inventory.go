@@ -46,6 +46,8 @@ type InventoryRow struct {
 	IPStale    bool       `json:"ip_stale,omitempty"`  // IP は最終観測時のもの（現在も同じとは限らない）
 	Source     string     `json:"source"`
 	ViaUplink  bool       `json:"via_uplink"`     // スイッチ間リンクでしか見えていない（所在は経路上の推定）
+	PortTrunk  bool       `json:"port_trunk,omitempty"` // つながっているポートが Trunk
+	PortLag    string     `json:"port_lag,omitempty"`   // つながっているポートが属する LAG の名前
 	Ping       *PingMark  `json:"ping,omitempty"` // このIPへの直近の一括Ping結果（ライブのみ）
 }
 
@@ -130,7 +132,8 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 				}
 				r := InventoryRow{MAC: d.MAC, Label: d.Label, IP: d.IP, Vendor: d.Vendor, LLDPName: d.LLDPName,
 					SwitchID: s.ID, SwitchName: s.Name, GroupTag: s.GroupTag, Port: p.Name, IfIndex: p.IfIndex,
-					VLAN: d.VLAN, SpeedMbps: p.SpeedMbps, Seen: live, LastSeen: seenAt, Source: d.Source, ViaUplink: up}
+					VLAN: d.VLAN, SpeedMbps: p.SpeedMbps, Seen: live, LastSeen: seenAt, Source: d.Source, ViaUplink: up,
+					PortTrunk: p.Mode == "trunk", PortLag: lagLabel(p)}
 				if r.VLAN == 0 {
 					r.VLAN = p.PVID
 				}
@@ -213,6 +216,7 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 				for _, p := range s.Ports {
 					if p.IfIndex == ls.IfIndex {
 						r.Port = p.Name
+						r.PortTrunk, r.PortLag = p.Mode == "trunk", lagLabel(p)
 					}
 				}
 				break
@@ -574,4 +578,15 @@ func (e *Engine) RecordPing(results map[string]PingMark) {
 	}
 	e.mu.Unlock()
 	e.clearMatching(func(a *Alert) bool { return a.Code == "PING_FAIL" && recovered[a.MAC] })
+}
+
+// lagLabel は LAG に属するポートなら LAG 名（名前が取れなければ ifIndex）を返す。
+func lagLabel(p *model.Port) string {
+	if p.LagIfIndex <= 0 {
+		return ""
+	}
+	if p.LagName != "" {
+		return p.LagName
+	}
+	return "ifIndex " + itoa(p.LagIfIndex)
 }

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { api } from '../api';
 import { asArray } from '../format';
 import { jstTime, pcTimestamp } from '../pcTime';
@@ -25,7 +26,25 @@ export function PortDetail({ switchId, switchName, port, devices, alerts, close,
       mac: device.mac, label: device.label || '', lldp_name: device.lldp_name || '', ip: device.ip || '',
     })),
   ];
-  return <aside className="port-detail" role="dialog" aria-label={t('rack.portDetail')}>
+  // Close on a click outside the detail (or Esc). Clicking a port opens that port instead, so ports are excluded,
+  // as are clicks inside dialogs and menus.
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as Element | null;
+      if (!target || ref.current?.contains(target)) return;
+      if (target.closest('.port-lamp, .hardware-port, [role="dialog"], [role="menu"], dialog, .pane-resizer')) return;
+      close();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [close]);
+  return <aside ref={ref} className="port-detail" role="dialog" aria-label={t('rack.portDetail')}>
     <div className="flex items-center justify-between gap-2"><h2>{t('rack.portDetail')} · {switchName} / {port.name}</h2><button onClick={close}>{t('rack.close')}</button></div>
     {list.map(device => <section key={device.mac} className="border-b border-slate-600 py-3">
       <h3 className="font-bold">{device.label || device.lldp_name || device.mac}</h3>

@@ -68,22 +68,28 @@ type SwitchState struct {
 
 // Port はポート1つの状態と直近レート。
 type Port struct {
-	IfIndex   int     `json:"if_index"`
-	Name      string  `json:"name"` // ifName（1/0/1, lag 1）
-	Alias     string  `json:"alias"`
-	Memo      string  `json:"memo,omitempty"`
-	Type      string  `json:"type"` // rj45/sfp/lag/other
-	Oper      string  `json:"oper"`
-	SpeedMbps int     `json:"speed_mbps"`
-	Duplex    string  `json:"duplex"`
-	PVID      int     `json:"pvid"`
-	RxBps     float64 `json:"rx_bps"`
-	TxBps     float64 `json:"tx_bps"`
-	UtilRx    float64 `json:"util_rx"`
-	UtilTx    float64 `json:"util_tx"`
-	RxMcPps   float64 `json:"rx_mc_pps"`
-	TxMcPps   float64 `json:"tx_mc_pps"`
-	RxBcPps   float64 `json:"rx_bc_pps"`
+	IfIndex   int    `json:"if_index"`
+	Name      string `json:"name"` // ifName（1/0/1, lag 1）
+	Alias     string `json:"alias"`
+	Memo      string `json:"memo,omitempty"`
+	Type      string `json:"type"` // rj45/sfp/lag/other
+	Oper      string `json:"oper"`
+	SpeedMbps int    `json:"speed_mbps"`
+	Duplex    string `json:"duplex"`
+	PVID      int    `json:"pvid"`
+	// VLANの通し方。Mode は access/trunk/general（取れない機種は空）。
+	// TaggedVLANs/UntaggedVLANs は実際に流れているVLAN（dot1qVlanCurrent。Auto-Trunkで加わった分も含む）。
+	Mode          string  `json:"mode,omitempty"`
+	NativeVLAN    int     `json:"native_vlan,omitempty"`
+	TaggedVLANs   []int   `json:"tagged_vlans,omitempty"`
+	UntaggedVLANs []int   `json:"untagged_vlans,omitempty"`
+	RxBps         float64 `json:"rx_bps"`
+	TxBps         float64 `json:"tx_bps"`
+	UtilRx        float64 `json:"util_rx"`
+	UtilTx        float64 `json:"util_tx"`
+	RxMcPps       float64 `json:"rx_mc_pps"`
+	TxMcPps       float64 `json:"tx_mc_pps"`
+	RxBcPps       float64 `json:"rx_bc_pps"`
 
 	// 直近ポーリング間隔の増分
 	ErrDelta     uint64 `json:"err_delta"`
@@ -111,6 +117,9 @@ type Port struct {
 	UDLD          string    `json:"udld"`
 	StpState      string    `json:"stp_state"`
 	Trust         string    `json:"trust"`
+	// 所属している LAG（IEEE 802.3ad の dot3adAggPortAttachedAggID。0 は所属なし・取れない機種）
+	LagIfIndex int    `json:"lag_if_index,omitempty"`
+	LagName    string `json:"lag_name,omitempty"`
 	McastCtl      bool      `json:"mcast_storm_ctl"`
 	BcastCtl      bool      `json:"bcast_storm_ctl"`
 	Excluded      bool      `json:"excluded"`
@@ -222,7 +231,7 @@ type Process struct {
 type IGMP struct {
 	SnoopingOn       bool          `json:"snooping_on"`
 	SnoopingKnown    bool          `json:"snooping_known"` // 全体のSnooping設定を取得できたか（取れない機種・失敗時は false）
-	Vlans            []VlanIGMP    `json:"vlans"`
+	Vlans            []VlanIGMP    `json:"vlans"` // nil = まだ収集していない（空スライスは「VLANの行が無い」）
 	Groups           []McastGroup  `json:"groups"`
 	Mrouters         []Mrouter     `json:"mrouters"`
 	MVR              bool          `json:"mvr"`
@@ -256,7 +265,12 @@ type McastGroup struct {
 	Ports    []string `json:"ports"`
 	Reporter string   `json:"reporter,omitempty"`
 	Protocol string   `json:"protocol"` // Dante/AES67/NDI/sACN等の推定
-	Source   string   `json:"source"`   // ssm/l2
+	// IP は推定または実際のIPv4、IPGuessed は L2 の MAC から推定したとき true。Purpose は用途（日本語・英語）。
+	IP        string `json:"ip,omitempty"`
+	IPGuessed bool   `json:"ip_guessed,omitempty"`
+	PurposeJa string `json:"purpose_ja,omitempty"`
+	PurposeEn string `json:"purpose_en,omitempty"`
+	Source    string `json:"source"` // ssm/l2
 }
 
 // MSRPFailure はAVB/Milanの帯域予約失敗。

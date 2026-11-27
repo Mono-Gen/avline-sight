@@ -64,7 +64,7 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
   {
     selector: 'node[kind = "device-count"]',
     style: {
-      shape: 'round-rectangle', width: 28, height: 22, 'font-size': 11,
+      shape: 'round-rectangle', width: 'data(badgeWidth)', height: 22, 'font-size': 11, // width follows the label length (countBadge below)
       'background-color': '#111419', 'border-color': '#c4cad4', 'border-width': 1,
       'text-valign': 'center', 'text-outline-width': 0, 'z-index': 10
     }
@@ -76,6 +76,24 @@ export function countPosition(position: cytoscape.Position): cytoscape.Position 
 }
 
 export const countId = (node: string) => `count:${node}`;
+
+// Device-count badge. The width follows the label length (about 7px per character at 11px, plus padding).
+function countBadge(count: number) {
+  const statusLabel = t('topology.countBadge', { count });
+  return { statusLabel, badgeWidth: Math.max(28, 12 + [...statusLabel].length * 7) };
+}
+
+// VLANs carried on an inter-switch link: numbers up to five, otherwise the count (select the link for the full list).
+// A mismatch between the two ends gets ⚠ (not colour alone).
+const VLAN_LIST_MAX = 5;
+export function vlanLine(edge: { vlans?: number[]; vlan_mismatch?: boolean }) {
+  const vlans = edge.vlans ?? [];
+  // No common VLAN at all is the worst mismatch, so ⚠ is shown even with an empty list.
+  if (!vlans.length) return edge.vlan_mismatch ? `
+⚠ ${t('topology.vlanNone')}` : '';
+  const body = vlans.length <= VLAN_LIST_MAX ? t('topology.vlanList', { list: vlans.join(',') }) : t('topology.vlanCount', { count: vlans.length });
+  return `\n${edge.vlan_mismatch ? '⚠ ' : ''}${body}`;
+}
 export const deviceLabel = (row: { label: string; lldp_name: string; mac: string }) => row.label || row.lldp_name || row.mac;
 
 function updateData(element: cytoscape.SingularElementReturnValue, data: Record<string, unknown>) {
@@ -163,7 +181,7 @@ export function updateTopology(
         id: edge.id, source: edge.source, target: edge.target, interSwitch: true,
         lineWidth: width, lineColor: color, down, path: path?.has(edge.id) ?? false,
         selected: selection?.kind === 'edge' && selection.id === edge.id,
-        edgeLabel: `${edge.local_port} ↔ ${edge.remote_port}\n${down ? `${t('topology.linkDown')} · ` : ''}${metrics}`,
+        edgeLabel: `${edge.local_port} ↔ ${edge.remote_port}\n${down ? `${t('topology.linkDown')} · ` : ''}${metrics}${vlanLine(edge)}`,
         highlight: groups.some(item =>
           carries(edge.source, edge.local_port, item.vlan) && carries(edge.target, edge.remote_port, item.vlan)),
       });
@@ -185,11 +203,11 @@ export function updateTopology(
       const position = countPosition(core.getElementById(node.id).position());
       const existing = core.getElementById(id);
       if (existing.length) {
-        updateData(existing, { statusLabel: String(count) });
+        updateData(existing, countBadge(count));
         const current = existing.position();
         if (current.x !== position.x || current.y !== position.y) existing.position(position);
       } else {
-        core.add({ group: 'nodes', data: { id, kind: 'device-count', switchNode: node.id, statusLabel: String(count), statusColor: '#111419' },
+        core.add({ group: 'nodes', data: { id, kind: 'device-count', switchNode: node.id, ...countBadge(count), statusColor: '#111419' },
           position, grabbable: false, selectable: false });
       }
     }

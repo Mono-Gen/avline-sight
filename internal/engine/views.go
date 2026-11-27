@@ -31,6 +31,10 @@ type TopoEdge struct {
 	Blocking   bool    `json:"blocking"`
 	SpeedMbps  int     `json:"speed_mbps"`
 	UtilPct    float64 `json:"util_pct"`
+	// VLANs はこのリンクで両端とも流れている VLAN（tagged＋untagged）。相手が監視外なら片側の値。取れなければ空。
+	VLANs []int `json:"vlans,omitempty"`
+	// VLANMismatch は両端で流れる VLAN が食い違う（VLAN_TRUNK_MISMATCH と同じ判定）。
+	VLANMismatch bool `json:"vlan_mismatch,omitempty"`
 }
 
 type Topology struct {
@@ -61,6 +65,12 @@ func (e *Engine) Topology(layout map[string]struct{ X, Y float64 }) Topology {
 	}
 	seenEdge := map[string]bool{}
 	ext := map[string]bool{}
+	// 両端の VLAN が食い違うリンク（スイッチID/ポート名）。警告と同じ判定を使う
+	mismatch := map[string]bool{}
+	for _, m := range trunkVlanMismatches(states) {
+		mismatch[fmt.Sprintf("%d/%s", m.A.ID, m.PortA)] = true
+		mismatch[fmt.Sprintf("%d/%s", m.B.ID, m.PortB)] = true
+	}
 	for _, s := range states {
 		for _, nb := range s.Neighbors {
 			peer := byMAC[nb.ChassisID]
@@ -95,10 +105,21 @@ func (e *Engine) Topology(layout map[string]struct{ X, Y float64 }) Topology {
 				k = b + "|" + a
 			}
 			if seenEdge[k] {
-				// 反対側からも見えている: Blocking状態を合成
+				// 反対側からも見えている: Blocking状態・VLAN食い違いを合成
 				for i := range t.Edges {
 					if t.Edges[i].ID == k && blocking {
 						t.Edges[i].Blocking = true
+					}
+					if t.Edges[i].ID == k && lp != nil && mismatch[fmt.Sprintf("%d/%s", s.ID, lp.Name)] {
+						t.Edges[i].VLANMismatch = true
+					}
+					// 線に出す VLAN は両端の共通分（実際に相手まで届く VLAN）。片側の一覧だと、相手に無い VLAN まで流れて見える
+					if t.Edges[i].ID == k && lp != nil {
+						if other := carriedVLANs(lp); len(other) > 0 && len(t.Edges[i].VLANs) > 0 {
+							t.Edges[i].VLANs = intersectVLANs(t.Edges[i].VLANs, other)
+						} else if len(other) > 0 && t.Edges[i].VLANs == nil {
+							t.Edges[i].VLANs = other // 先に見えた側の一覧が取れていなければ、こちら側の値を使う（見る順で結果が変わらないように）
+						}
 					}
 				}
 				continue
@@ -108,6 +129,8 @@ func (e *Engine) Topology(layout map[string]struct{ X, Y float64 }) Topology {
 			if lp != nil {
 				ed.SpeedMbps = lp.SpeedMbps
 				ed.UtilPct = maxf(lp.UtilRx, lp.UtilTx)
+				ed.VLANs = carriedVLANs(lp)
+				ed.VLANMismatch = mismatch[fmt.Sprintf("%d/%s", s.ID, lp.Name)]
 			}
 			t.Edges = append(t.Edges, ed)
 		}
@@ -437,4 +460,19 @@ func (e *Engine) KnownIP(ip string) bool {
 		}
 	}
 	return false
+}
+
+// intersectVLANs は両方にある VLAN を昇順で返す（どちらも昇順の前提）。
+func intersectVLANs(a, b []int) []int {
+	in := map[int]bool{}
+	for _, v := range b {
+		in[v] = true
+	}
+	out := []int{}
+	for _, v := range a {
+		if in[v] {
+			out = append(out, v)
+		}
+	}
+	return out
 }

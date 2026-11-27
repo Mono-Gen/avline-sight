@@ -177,21 +177,27 @@ const (
 	LldpRemPortIDSubtype    = "1.0.8802.1.1.2.1.4.1.1.6"   // 3=macAddress, 5=interfaceName, 7=local
 	Dot1qVlanStaticEgress   = "1.3.6.1.2.1.17.7.1.4.3.1.2" // PortList, INDEX=vlan
 	Dot1qVlanStaticUntagged = "1.3.6.1.2.1.17.7.1.4.3.1.4"
-	LldpRemPortID           = "1.0.8802.1.1.2.1.4.1.1.7"
-	LldpRemPortDesc         = "1.0.8802.1.1.2.1.4.1.1.8"
-	LldpRemSysName          = "1.0.8802.1.1.2.1.4.1.1.9"
-	LldpRemSysDesc          = "1.0.8802.1.1.2.1.4.1.1.10"
-	LldpRemManAddrIfID      = "1.0.8802.1.1.2.1.4.2.1.4"   // INDEX=...,subtype,len,addr
-	Dot1qTpFdbPort          = "1.3.6.1.2.1.17.7.1.2.2.1.2" // INDEX=fdbId,mac(6)
-	Dot1qTpFdbStatus        = "1.3.6.1.2.1.17.7.1.2.2.1.3"
-	Dot1dBasePortIfIdx      = "1.3.6.1.2.1.17.1.4.1.2"
-	IpNetToPhysPhys         = "1.3.6.1.2.1.4.35.1.4"                // INDEX=ifIndex,atype,len,addr
-	IpNetToMediaPhys        = "1.3.6.1.2.1.4.22.1.2"                // INDEX=ifIndex,ip(4)
-	DsBindingIfIndex        = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.1" // INDEX=mac
-	DsBindingVlan           = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.2"
-	DsBindingIP             = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.4"
-	Dot1qPvid               = "1.3.6.1.2.1.17.7.1.4.5.1.1"
-	Dot1qVlanStaticName     = "1.3.6.1.2.1.17.7.1.4.3.1.1"
+	// 実際に流れているVLANメンバー（Auto-Trunk等で動的に加わった分も含む）。INDEX=timeMark,vlan
+	Dot1qVlanCurrentEgress   = "1.3.6.1.2.1.17.7.1.4.2.1.4"
+	Dot1qVlanCurrentUntagged = "1.3.6.1.2.1.17.7.1.4.2.1.5"
+	// agentSwitchportConfigTable（INDEX=ifIndex）。モード access(1) trunk(2) general(3)
+	SwitchportMode       = "1.3.6.1.4.1.4526.10.1.2.8.37.1.2"
+	SwitchportNativeVlan = "1.3.6.1.4.1.4526.10.1.2.8.37.1.4"
+	LldpRemPortID        = "1.0.8802.1.1.2.1.4.1.1.7"
+	LldpRemPortDesc      = "1.0.8802.1.1.2.1.4.1.1.8"
+	LldpRemSysName       = "1.0.8802.1.1.2.1.4.1.1.9"
+	LldpRemSysDesc       = "1.0.8802.1.1.2.1.4.1.1.10"
+	LldpRemManAddrIfID   = "1.0.8802.1.1.2.1.4.2.1.4"   // INDEX=...,subtype,len,addr
+	Dot1qTpFdbPort       = "1.3.6.1.2.1.17.7.1.2.2.1.2" // INDEX=fdbId,mac(6)
+	Dot1qTpFdbStatus     = "1.3.6.1.2.1.17.7.1.2.2.1.3"
+	Dot1dBasePortIfIdx   = "1.3.6.1.2.1.17.1.4.1.2"
+	IpNetToPhysPhys      = "1.3.6.1.2.1.4.35.1.4"                // INDEX=ifIndex,atype,len,addr
+	IpNetToMediaPhys     = "1.3.6.1.2.1.4.22.1.2"                // INDEX=ifIndex,ip(4)
+	DsBindingIfIndex     = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.1" // INDEX=mac
+	DsBindingVlan        = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.2"
+	DsBindingIP          = "1.3.6.1.4.1.4526.10.1.2.8.23.11.1.4"
+	Dot1qPvid            = "1.3.6.1.2.1.17.7.1.4.5.1.1"
+	Dot1qVlanStaticName  = "1.3.6.1.2.1.17.7.1.4.3.1.1"
 )
 
 // DHCP（fastpath_dhcp.my / fastpathswitching.my）

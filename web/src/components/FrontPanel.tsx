@@ -6,6 +6,7 @@ import { frontPanelRows } from '../frontPanelLayout';
 import type { Alert, ModelDefinitions, Port } from '../types';
 import { lampState } from '../rackModel';
 import { matchingPortAlerts } from '../wallAlerts';
+import { portMarks } from './PortVlan';
 
 export function FrontPanel({ ports, selected, onSelect, model, definitions, alerts = [], switchId = 0, reachable = true, showNote = false }: {
   ports: Port[];
@@ -46,7 +47,8 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
               const warningLabel = state.issues.length > 0 ? t('ui.m137') : '';
               const powered = (port.poe?.power_w || 0) > 0;
               const poeLabel = fault ? `${t('ui.m138')} · ${eventTitle(fault)}` : powered ? t('ui.m139') : '';
-              const description = [`${port.name} ${port.type}`, linkLabel, t(state.label), warningLabel, poeLabel]
+              const marks = portMarks(port);
+              const description = [`${port.name} ${port.type}`, linkLabel, t(state.label), warningLabel, poeLabel, ...marks.map(m => m.label)]
                 .filter(Boolean).join(' · ');
               // Same visual language as the all-switches rack: number + state symbol; the words are in the tooltip and legend.
               const tone = state.label === 'rack.unused' && port.oper === 'down' ? 'unused' : state.tone;
@@ -66,6 +68,7 @@ export function FrontPanel({ ports, selected, onSelect, model, definitions, aler
                     <span>{symbol}</span>
                     {poeLabel && <span>{fault ? '⛔' : '⚡'}</span>}
                   </span>
+                  {marks.length > 0 && <span className={`port-role-marks${marks.some(m => m.mark === 'B') ? ' port-role-blocked' : ''}`} aria-hidden="true">{marks.map(m => m.mark).join(' ')}</span>}
                 </button>
               );
             })}

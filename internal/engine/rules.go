@@ -316,9 +316,13 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 		queriers       []string
 		querierSw      []*model.SwitchState
 		lastQ          map[string]bool
+		selfLastQ      map[string]bool // クエリアと答えたスイッチ自身の LastQuerier
 		vers           map[int]bool
 	}
 	vl := map[int]*vinfo{}
+	// 起動直後はスイッチごとに IGMP を読み終える時刻がずれる。非クエリア側だけ先に読めた時点で
+	// 「クエリア不在」を出さないよう、全台が読み終えるまで不在の判定は保留する（2026-11-27 実機ダンプ再生で確認）。
+	igmpPending := igmpPendingIn(live)
 	for _, s := range live {
 		// 全体のSnoopingがOFFだと、VLANごとのSnooping設定は効かず全ポートへフラッディングする。
 		// VLANではSnoopingを使う設定になっているのに全体がOFF、という食い違いを重大として出す（取れなかったときは判定しない）。
@@ -337,7 +341,7 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 		for _, v := range s.IGMP.Vlans {
 			vi := vl[v.VLAN]
 			if vi == nil {
-				vi = &vinfo{lastQ: map[string]bool{}, vers: map[int]bool{}}
+				vi = &vinfo{lastQ: map[string]bool{}, selfLastQ: map[string]bool{}, vers: map[int]bool{}}
 				vl[v.VLAN] = vi
 			}
 			if v.Snooping {
@@ -352,8 +356,14 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 					add(model.SevWarning, "QUERIER_ON_EDGE", fmt.Sprintf("VLAN%d エッジスイッチがクエリアに選出", v.VLAN), s, "", map[string]any{"vlan": v.VLAN})
 				}
 			}
+			// クエリアと答えたスイッチの「最後に聞いたクエリア」は、選出前に聞いた相手の値が残っていることがある（2026-11-27 実機:
+			// VLAN11 で .1 だけが querier なのに .1 の LastQuerier は .254）。クエリアが1台だけのときは数えない（下で判断）。
 			if realQuerier(v.LastQuerier) {
-				vi.lastQ[v.LastQuerier] = true
+				if v.QuerierOper == "querier" {
+					vi.selfLastQ[v.LastQuerier] = true
+				} else {
+					vi.lastQ[v.LastQuerier] = true
+				}
 			}
 			if v.LastVersion > 0 {
 				vi.vers[v.LastVersion] = true
@@ -367,10 +377,16 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 	sort.Ints(vids)
 	for _, v := range vids {
 		vi := vl[v]
+		// クエリアと答えたスイッチが2台以上なら選出が済んでいないので、その値も複数クエリアの判断に使う
+		if len(vi.queriers) > 1 {
+			for q := range vi.selfLastQ {
+				vi.lastQ[q] = true
+			}
+		}
 		if len(vi.snoop) > 0 && len(vi.nosnoop) > 0 {
 			add(model.SevWarning, "SNOOP_MISMATCH", fmt.Sprintf("VLAN%d IGMP Snooping設定不一致（OFF: %s）", v, strings.Join(vi.nosnoop, ",")), nil, "", map[string]any{"vlan": v})
 		}
-		if len(vi.snoop) > 0 && len(vi.queriers) == 0 && len(vi.lastQ) == 0 {
+		if !igmpPending && len(vi.snoop) > 0 && len(vi.queriers) == 0 && len(vi.lastQ) == 0 {
 			add(model.SevCritical, "QUERIER_ABSENT", fmt.Sprintf("VLAN%d IGMPクエリア不在", v), nil, "", map[string]any{"vlan": v})
 		}
 		if len(vi.lastQ) > 1 {
@@ -391,6 +407,19 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 		if len(vi.vers) > 1 {
 			add(model.SevCritical, "IGMP_VERSION_MIX", fmt.Sprintf("VLAN%d IGMPバージョン混在", v), nil, "", map[string]any{"vlan": v})
 		}
+	}
+	// スイッチ間リンク（Trunk/Auto-Trunk）で片側にしか流れていないVLAN
+	for _, m := range trunkVlanMismatches(live) {
+		var parts []string
+		if len(m.OnlyA) > 0 {
+			parts = append(parts, fmt.Sprintf("VLAN %s は %s %s だけ", joinInts(m.OnlyA), m.A.Name, m.PortA))
+		}
+		if len(m.OnlyB) > 0 {
+			parts = append(parts, fmt.Sprintf("VLAN %s は %s %s だけ", joinInts(m.OnlyB), m.B.Name, m.PortB))
+		}
+		add(model.SevWarning, "VLAN_TRUNK_MISMATCH", fmt.Sprintf("スイッチ間でVLANが通っていない（%s）", strings.Join(parts, "、")), m.A, m.PortA,
+			map[string]any{"switch_a": m.A.Name, "port_a": m.PortA, "switch_b": m.B.Name, "port_b": m.PortB,
+				"only_a": joinInts(m.OnlyA), "only_b": joinInts(m.OnlyB)})
 	}
 	// トポロジー構造（デイジーチェーン検出: 3台以上で中継スイッチの連鎖）
 	if depth := chainDepth(live); depth >= 3 {
@@ -566,16 +595,14 @@ func connectedQueriers(live, queriers []*model.SwitchState) [][]string {
 		parent[id] = id
 		return id
 	}
-	byName := map[string]*model.SwitchState{}
+	// システム名が空のスイッチもあるため、名前だけでなく本体MAC・管理IPでも相手を特定する
+	ix := newSwitchIndex(live)
 	for _, s := range live {
 		find(s.ID)
-		if s.SysName != "" {
-			byName[s.SysName] = s
-		}
 	}
 	for _, s := range live {
 		for _, n := range s.Neighbors {
-			if peer := byName[n.SysName]; n.IsNetgear && peer != nil && peer.ID != s.ID {
+			if peer := ix.peerOf(n); n.IsNetgear && peer != nil && peer.ID != s.ID {
 				parent[find(s.ID)] = find(peer.ID)
 			}
 		}
@@ -662,6 +689,16 @@ func chainDepth(live []*model.SwitchState) int {
 	return maxd
 }
 
+// igmpPendingIn は、比較対象のうち IGMP をまだ読めていないスイッチがあるか（nil = 未収集）。
+func igmpPendingIn(states []*model.SwitchState) bool {
+	for _, s := range states {
+		if s.Reachable && s.FW != "" && s.Config.StpVersion != "" && s.IGMP.Vlans == nil { // live と同じ条件
+			return true
+		}
+	}
+	return false
+}
+
 // evaluateCross は横断ルールをイベント化する（監査結果のCRITICAL/WARNINGを立ち上がりで発報）。
 func (e *Engine) evaluateCross(set Settings) {
 	states := e.States()
@@ -705,6 +742,11 @@ func (e *Engine) evaluateCross(set Settings) {
 			e.clearKeys(func(key string, a *Alert) bool { return key == k })
 		}
 	}
-	e.clearPrefix("0|", seen)
+	// 判定を保留している間（スイッチ追加・再接続の直後）は、出ている「クエリア不在」を消さない。
+	// 消すと全台そろった時点で未確認として出し直しになり、確認済みの印が失われる。
+	pending := igmpPendingIn(states)
+	e.clearKeys(func(k string, a *Alert) bool {
+		return strings.HasPrefix(k, "0|") && !seen[k] && !(pending && strings.Contains(k, "|AUDIT|QUERIER_ABSENT|"))
+	})
 	_ = set
 }

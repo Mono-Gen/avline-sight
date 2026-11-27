@@ -232,6 +232,11 @@ export const eventJa = {
     "hint": "同じVLANのIGMP Snooping設定を各スイッチで確認。",
     "details": "同一VLAN内でIGMP Snooping有効スイッチと無効スイッチが混在"
   },
+  "VLAN_TRUNK_MISMATCH": {
+    "title": "スイッチ間リンクの片側にしかVLANが通っていない",
+    "hint": "両側のスイッチに同じVLANがあるか、Trunk/Auto-Trunkの許可VLANを確認。",
+    "details": "両方のスイッチにあるVLANが、スイッチ間リンクの片側だけに流れている（途切れている）"
+  },
   "QUERIER_ABSENT": {
     "title": "IGMP Snooping 有効VLANに IGMPクエリアが不在",
     "hint": "コアスイッチなどのIGMPクエリア設定をすぐ確認。",

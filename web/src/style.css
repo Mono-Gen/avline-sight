@@ -176,7 +176,7 @@ td {
 .rack-groups { display: grid; gap: var(--space-2); }
 .rack-row {
   display: grid;
-  grid-template-columns: minmax(8rem, 13rem) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2);
   min-height: 4.1rem;
@@ -186,13 +186,16 @@ td {
 .rack-row:nth-child(odd) { background: #13161b; }
 .rack-offline .rack-identity strong, .rack-stale { color: #fde68a; }
 .rack-identity { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-2); min-width: 0; }
-.rack-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+/* 名前は … で切らず折り返して全部見せる（ポートを大きくして名前の欄が狭くなったため、切ると「● …」しか残らない） */
+.rack-identity strong { display: flex; align-items: baseline; gap: .25rem; max-width: 100%; }
+.rack-identity .rack-switch-name { min-width: 0; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; text-align: start; } /* 「仮/想-…」のように1文字目の後で折れないよう、和文の途中では折らず入りきらない分だけ折る */
 .rack-identity > span { color: #9aa3b2; font-variant-numeric: tabular-nums; font-size: .75em; }
 .rack-switch-actions { display: flex; align-items: center; gap: var(--space-1); }
 .rack-front { min-width: 0; }
 .rack-port-row { display: flex; width: 100%; align-items: stretch; gap: 2px; flex-wrap: wrap; }
 .rack-port-row + .rack-port-row { margin-top: 2px; }
-.rack-port-slot, .rack-port-gap { flex: 0 1 1.76rem; min-width: 1.76rem; position: relative; }
+/* ラック図のポートは右側の余白を使って大きめにする。スイッチごとに大きさが変わらないよう伸縮はさせず固定幅（入りきらなければ折り返す） */
+.rack-port-slot, .rack-port-gap { flex: 0 0 2.4rem; min-width: 2.4rem; position: relative; }
 .rack-port-gap { opacity: .4; }
 .port-lamp {
   width: 100%;
@@ -208,8 +211,45 @@ td {
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
-.lamp-symbol { position: absolute; inset: 1px 1px auto auto; font-size: .52rem; font-weight: 800; }
-.lamp-number { font-size: var(--text-sm); font-weight: 700; }
+.lamp-symbol { position: absolute; inset: 1px 2px auto auto; font-size: .62rem; font-weight: 800; }
+.lamp-number { font-size: 1rem; font-weight: 700; }
+/* ペインの幅を変える仕切り（左ペインとメイン、ポート表とポート詳細の間） */
+.pane-resizer { flex: 0 0 6px; align-self: stretch; cursor: col-resize; background: transparent; border-inline: 1px solid transparent; touch-action: none; }
+.pane-resizer:hover, .pane-resizer:focus-visible { background: #334155; border-color: #7dd3fc; outline: none; }
+.focus-layout > .pane-resizer { min-height: 4rem; }
+.legend-help summary { cursor: pointer; list-style: none; padding: 0 var(--space-1); }
+/* 開いた説明は凡例の下に全幅で出す（浮かせるとカード内で切れたり、幅が縮んで読めなくなるため） */
+li:has(> .legend-help[open]) { flex-basis: 100%; order: 1; } /* 説明は凡例の最後の行の下に出す */
+.legend-help[open] ul { max-width: 40rem; margin: var(--space-1) 0 0; padding: var(--space-2) var(--space-3);
+  list-style: none; background: #111419; color: #eef1f6; border: 1px solid #334155; border-radius: .3rem; display: grid; gap: var(--space-1); }
+.device-port-role { margin-left: var(--space-1); padding: 0 3px; border: 1px solid currentColor; border-radius: 2px; font-size: .7rem; font-weight: 800; }
+/* Colour-by-VLAN view of the rack (VLAN number always written; faults keep their symbol and an outline) */
+.rack-color-toggle { display: flex; align-items: center; gap: var(--space-1); }
+.rack-color-toggle > span { color: #9aa3b2; font-size: var(--text-sm); }
+.port-lamp.lamp-vlan { color: #fff; border-color: var(--vlan-color); background: color-mix(in srgb, var(--vlan-color) 45%, #111419); box-shadow: none; }
+.port-lamp.lamp-vlan .lamp-role { font-size: .66rem; opacity: .95; }
+.port-lamp.lamp-vlan-multi { border-color: #c4cad4; background: repeating-linear-gradient(135deg, #1f242d 0 4px, #343b47 4px 8px); }
+.port-lamp.lamp-vlan-none { border-color: #475569; background: #111419; color: #9aa3b2; }
+.port-lamp.lamp-vlan-down { opacity: .55; }
+/* Fault frames use an inset shadow (not outline) so the keyboard focus ring stays visible; same colours as the state view */
+.port-lamp.lamp-vlan-issue-critical { box-shadow: inset 0 0 0 3px #ff4d5e; opacity: 1; }
+.port-lamp.lamp-vlan-issue-caution { box-shadow: inset 0 0 0 3px #fb923c; opacity: 1; }
+.port-lamp.lamp-vlan-issue-warning { box-shadow: inset 0 0 0 3px #facc15; opacity: 1; }
+.port-lamp.lamp-vlan-unknown { opacity: .55; border-style: dashed; }
+.rack-legend li .vlan-chip { width: auto; border: 1px solid var(--vlan-color); }
+.rack-legend li .vlan-chip-multi { border-color: #c4cad4; }
+.vlan-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 1.6rem; padding: 0 3px; margin-inline-end: 3px; border: 1px solid var(--vlan-color);
+  border-radius: .2rem; background: color-mix(in srgb, var(--vlan-color) 45%, #111419); color: #fff; font-size: .72rem; font-weight: 800; }
+.vlan-chip-multi { border-color: #c4cad4; background: repeating-linear-gradient(135deg, #1f242d 0 4px, #343b47 4px 8px); }
+body.pane-resizing { cursor: col-resize; user-select: none; }
+@media (max-width: 767px) { .app-workspace > .pane-resizer { display: none; } }
+/* ポートの役割（T/G/L/B）は番号の下の段に置く。記号の有無で枠の縦横比が変わらないよう、
+   すべてのポートの枠を同じ高さにして下の段を空けておく */
+.port-lamp { min-height: 2.75rem; padding-bottom: .65rem; }
+.lamp-role { position: absolute; inset: auto 0 2px 0; text-align: center; font-size: .72rem; font-weight: 800; line-height: 1; letter-spacing: .04em; }
+.port-role-marks { display: block; font-size: .62rem; font-weight: 800; letter-spacing: .05em; }
+/* ブロックは背景色に左右されないよう枠で強調（色だけに頼らない） */
+.port-role-blocked { outline: 1px solid currentColor; border-radius: 2px; padding: 0 1px; }
 .lamp-critical { background: #b4232f; color: #fff; border-color: #ff4d5e; box-shadow: 0 0 0 1px #ff4d5e; }
 .lamp-warning { background: #713f12; color: #fef08a; box-shadow: inset 0 0 0 1px #facc15; }
 .lamp-healthy { background: #0e3a36; color: #2dd4bf; }
@@ -366,7 +406,7 @@ td {
 .log-message pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (min-width: 768px) {
   /* 長いページでも左ペイン下の操作が画面内に残るよう、画面の高さに固定する */
-  .app-nav { width: 13rem; }
+  .app-nav { width: var(--nav-width, 15rem); max-width: 40vw; }
 
   .app-nav nav, .app-nav-tools { flex-direction: column; }
 }
@@ -473,13 +513,16 @@ td {
 .app-nav .switch-index-list button:hover { background: #1f242d; }
 .app-nav .switch-index-list button[aria-current="true"] { background: #1f242d; border-color: #7dd3fc; font-weight: 700; }
 .switch-index-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 長い名前で索引が左ペインの外へはみ出し、仕切りの線と重ならないようにする（はみ出した分は … で切る） */
+.app-nav { min-width: 0; overflow-x: clip; }
+.switch-index-list { grid-template-columns: minmax(0, 1fr); }
+.switch-index-list li { min-width: 0; }
 .switch-index-count { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
 /* 上部の数字パネル: 常に全体の値。0より大きい異常は状態色の枠と数字 */
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--space-2); }
 .kpi { background: #15181e; border: 1px solid #323946; border-radius: 6px; padding: var(--space-2) var(--space-3); min-width: 0; }
 .kpi-label { color: #9aa3b2; font-size: .78rem; }
 .kpi-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.kpi-value-small { font-size: 1.05rem; padding-block: .2rem; }
 .kpi-scope { color: #9aa3b2; font-size: .7rem; }
 .kpi-critical { border-color: #ff4d5e; } .kpi-critical .kpi-value { color: #ff4d5e; }
 .kpi-warning { border-color: #facc15; } .kpi-warning .kpi-value { color: #facc15; }
@@ -493,7 +536,7 @@ td {
 /* Grid children must be allowed to shrink, or the front panel pushes the detail off-screen. */
 .focus-main > * { min-width: 0; }
 /* Narrower port tiles in the single-switch view so a 48-port switch and the detail fit side by side. */
-.focus-detail { flex: 0 0 25rem; max-width: 40%; position: sticky; top: var(--space-3); max-height: calc(100vh - 2rem); overflow: auto; }
+.focus-detail { flex: 0 0 var(--detail-width, 25rem); max-width: 60%; position: sticky; top: var(--space-3); max-height: calc(100vh - 2rem); overflow: auto; }
 .focus-detail-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
 .focus-health { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
 .focus-health-name { display: flex; align-items: center; gap: var(--space-2); font-size: 1.25rem; font-weight: 700; }
@@ -508,6 +551,7 @@ td {
 .focus-ports-table tr.focus-row-selected { background: #1f242d; }
 .focus-ports-table button.focus-port-link { padding: 0 var(--space-2); }
 @media (max-width: 1100px) {
+  .focus-layout > .pane-resizer { display: none; }
   .focus-layout { flex-direction: column; }
   .focus-detail { flex-basis: auto; max-width: none; width: 100%; position: static; max-height: none; }
 }
@@ -683,3 +727,5 @@ td {
 .front-panel .hardware-port { width: auto; min-width: 0; padding: 2px 0; line-height: 1.1; }
 .front-port-number { display: block; font-weight: 700; white-space: normal; overflow-wrap: anywhere; font-size: .78rem; }
 .front-port-marks { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 1px; font-size: .7rem; }
+/* グラフ・欄の下の「何の値か」の一行説明 */
+.chart-help { margin: var(--space-1) 0 0; font-size: .8rem; line-height: 1.5; color: var(--text-muted, #4b5563); }
