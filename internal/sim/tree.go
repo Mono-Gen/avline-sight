@@ -260,6 +260,47 @@ func (s *Switch) build(lab *Lab) []entry {
 	}
 	b.scalar(mib.LldpLocChassisID, OS, s.BaseMAC[:])
 
+	// LAG（ifType=161）とメンバー（dot3adAggPortAttachedAggID）
+	lagOf := map[int]int{}
+	for _, l := range s.LAGs {
+		up := false
+		for _, m := range l.Members {
+			lagOf[m] = l.IfIndex
+			up = up || s.Ports[m-1].Up
+		}
+		ix := i1(l.IfIndex)
+		oper, spd := 2, 0
+		if up {
+			oper, spd = 1, s.Ports[l.Members[0]-1].SpeedMbps*len(l.Members)
+		}
+		b.add(mib.IfType, ix, I, 161)
+		b.add(mib.IfName, ix, OS, []byte(l.Name))
+		b.add(mib.IfAdminStatus, ix, I, 1)
+		b.add(mib.IfOperStatus, ix, I, oper)
+		b.add(mib.IfHighSpeed, ix, G, uint(spd))
+		b.add(mib.Dot1dBasePortIfIdx, ix, I, l.IfIndex)
+	}
+	for _, p := range s.Ports {
+		agg := 0
+		if l, ok := lagOf[p.IfIndex]; ok {
+			agg = l
+		}
+		b.add(mib.Dot3adAggPortAttached, i1(p.IfIndex), I, agg)
+	}
+
+	// Switchport モード（アップリンク=trunk、それ以外=access）
+	isUplink := func(p *Port) bool { return p.Dev != nil && p.Dev.Kind == DevUplink }
+	for _, p := range s.Ports {
+		mode, native := 1, 1
+		if isUplink(p) {
+			mode = 2
+		} else if p.Dev != nil && p.Dev.VLAN > 0 {
+			native = p.Dev.VLAN
+		}
+		b.add(mib.SwitchportMode, i1(p.IfIndex), I, mode)
+		b.add(mib.SwitchportNativeVlan, i1(p.IfIndex), I, native)
+	}
+
 	// VLAN と IGMP
 	vlans := make([]int, 0, len(s.VLANs))
 	for v := range s.VLANs {
@@ -276,6 +317,15 @@ func (s *Switch) build(lab *Lab) []entry {
 		}
 		b.add(mib.Dot1qVlanStaticName, i1(v), OS, []byte(s.VLANs[v]))
 		b.add(mib.Dot1qVlanStaticEgress, i1(v), OS, snmpx.MakePortList(members, nbytes))
+		// 現在のVLAN所属（INDEX=timeMark,vlan）。アップリンクは VLAN1 だけ untagged、他は tagged
+		var untag []int
+		for _, ix := range members {
+			if p := s.Ports[ix-1]; v == 1 || !isUplink(p) {
+				untag = append(untag, ix)
+			}
+		}
+		b.add(mib.Dot1qVlanCurrentEgress, []uint32{0, uint32(v)}, OS, snmpx.MakePortList(members, nbytes))
+		b.add(mib.Dot1qVlanCurrentUntagged, []uint32{0, uint32(v)}, OS, snmpx.MakePortList(untag, nbytes))
 		q := s.Querier[v]
 		qi := []uint32{uint32(v), 1}
 		en := func(x bool) int {
