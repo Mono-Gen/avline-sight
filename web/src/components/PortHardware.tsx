@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { t, type TranslationKey } from '../i18n';
 import React from 'react';
 import { asArray, decimal } from '../format';
 import type { Port } from '../types';
@@ -30,7 +30,7 @@ export function PortHardware({ port }: {
       {poe && <Details
         title="PoE"
         rows={[
-          [t('ui.m148'), poe.detect],
+          [t('ui.m148'), poeDetectLabel(poe.detect)],
           [t('ui.m149'), `${decimal(poe.power_w)} W`],
           [t('ui.m150'), poe.class],
           [t('ui.m151'), `${decimal(poe.current_ma)} mA`],
@@ -67,4 +67,11 @@ export function PortHardware({ port }: {
       />}
     </div>
   );
+}
+
+// Show the PoE detection state in the user's language; unknown values stay as reported.
+function poeDetectLabel(value: string) {
+  const key = `ui.poeDetect.${value}` as TranslationKey;
+  const label = t(key);
+  return label === key ? value : label;
 }

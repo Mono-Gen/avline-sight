@@ -227,6 +227,11 @@ export const eventEn: Record<keyof typeof eventJa, EventCopy> = {
     "hint": "Compare IGMP Snooping settings across switches in the same VLAN.",
     "details": "IGMP Snooping enabled on some switches and disabled on others in the same VLAN"
   },
+  "VLAN_NAME_MISMATCH": {
+    "title": "VLAN name differs between switches ({switch_a} \"{name_a}\" / {switch_b} \"{name_b}\")",
+    "hint": "Confirm it is the same VLAN and align the VLAN name on one of the switches (no effect on traffic).",
+    "details": "A VLAN with the same number, carried on a switch-to-switch link, has a different name on each switch"
+  },
   "VLAN_TRUNK_MISMATCH": {
     "title": "A VLAN is carried on only one side of a switch-to-switch link",
     "hint": "Check that both switches have the VLAN and that the Trunk/Auto-Trunk allowed VLANs match.",

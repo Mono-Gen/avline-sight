@@ -45,10 +45,10 @@ type InventoryRow struct {
 	LastSeen   time.Time  `json:"last_seen,omitempty"` // 見えていない登録済み機器の最終観測（不明ならゼロ）
 	IPStale    bool       `json:"ip_stale,omitempty"`  // IP は最終観測時のもの（現在も同じとは限らない）
 	Source     string     `json:"source"`
-	ViaUplink  bool       `json:"via_uplink"`     // スイッチ間リンクでしか見えていない（所在は経路上の推定）
+	ViaUplink  bool       `json:"via_uplink"`           // スイッチ間リンクでしか見えていない（所在は経路上の推定）
 	PortTrunk  bool       `json:"port_trunk,omitempty"` // つながっているポートが Trunk
 	PortLag    string     `json:"port_lag,omitempty"`   // つながっているポートが属する LAG の名前
-	Ping       *PingMark  `json:"ping,omitempty"` // このIPへの直近の一括Ping結果（ライブのみ）
+	Ping       *PingMark  `json:"ping,omitempty"`       // このIPへの直近の一括Ping結果（ライブのみ）
 }
 
 // PingMark はIPごとの直近Ping結果（一覧とCSVに載せるため engine が保持する。再起動で消える）。

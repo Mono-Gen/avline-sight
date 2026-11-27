@@ -196,6 +196,8 @@ export interface VlanIGMP {
   querier_oper: string;
   querier_addr: string;
   last_querier: string;
+  querier_in_use?: string;
+  querier_in_use_guessed?: boolean;
   last_version: number;
   oper_version: number;
 }

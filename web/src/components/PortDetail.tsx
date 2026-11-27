@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { api } from '../api';
-import { asArray } from '../format';
+import { asArray, formatBps } from '../format';
 import { jstTime, pcTimestamp } from '../pcTime';
 import { t } from '../i18n';
 import { pingLabel } from '../deviceCsv';
@@ -63,7 +63,7 @@ export function PortDetail({ switchId, switchName, port, devices, alerts, close,
     {replay && <p>{t('rack.noMetrics')}</p>}
     {metrics.pending && <p role="status">{t('rack.loading')}</p>}
     {metrics.error && <p role="alert">⚠ {metrics.error}</p>}
-    {metrics.data && (asArray(metrics.data.points).length ? <Chart points={metrics.data.points} keys={['rx_bps', 'tx_bps']} /> : <p>{t('rack.noMetrics')}</p>)}
+    {metrics.data && (asArray(metrics.data.points).length ? <Chart points={metrics.data.points} keys={['rx_bps', 'tx_bps']} format={formatBps} /> : <p>{t('rack.noMetrics')}</p>)}
     {metrics.updatedAt && <p className="text-sm">{t('rack.lastUpdated', { at: jstTime(metrics.updatedAt) })}</p>}
   </aside>;
 }

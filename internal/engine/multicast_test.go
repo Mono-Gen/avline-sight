@@ -13,11 +13,11 @@ func TestBaseGroup(t *testing.T) {
 		group     string
 		base, mac bool
 	}{
-		{"01:00:5E:00:00:FB", true, true},   // mDNS 224.0.0.251（M4250はMACで返す）
-		{"01:00:5e:00:01:81", true, true},   // PTP 224.0.1.129（小文字でも同じ）
-		{"224.0.0.251", true, false},        // IP書式
-		{"224.0.1.130", true, false},        // PTP
-		{"01:00:5E:45:00:01", false, true},  // 例: 239.69.0.1 のような実ストリーム
+		{"01:00:5E:00:00:FB", true, true},  // mDNS 224.0.0.251（M4250はMACで返す）
+		{"01:00:5e:00:01:81", true, true},  // PTP 224.0.1.129（小文字でも同じ）
+		{"224.0.0.251", true, false},       // IP書式
+		{"224.0.1.130", true, false},       // PTP
+		{"01:00:5E:45:00:01", false, true}, // 例: 239.69.0.1 のような実ストリーム
 		{"239.69.0.1", false, false},
 		{"", false, false},
 	} {
@@ -32,7 +32,7 @@ func floodSwitch(snooping bool, groups []model.McastGroup, sourcePps, txPps floa
 		return &model.Port{IfIndex: ix, Name: name, Oper: "up", PVID: 11, Type: "rj45", RxMcPps: rx, TxMcPps: tx}
 	}
 	return &model.SwitchState{ID: 1, Name: "A", Reachable: true,
-		IGMP: model.IGMP{SnoopingOn: true, SnoopingKnown: true, Vlans: []model.VlanIGMP{{VLAN: 11, Snooping: snooping}}, Groups: groups},
+		IGMP:  model.IGMP{SnoopingOn: true, SnoopingKnown: true, Vlans: []model.VlanIGMP{{VLAN: 11, Snooping: snooping}}, Groups: groups},
 		Ports: []*model.Port{port(1, "0/1", sourcePps, 0), port(3, "0/3", 0, txPps), port(5, "0/5", 0, txPps), port(7, "0/7", 0, txPps)}}
 }
 

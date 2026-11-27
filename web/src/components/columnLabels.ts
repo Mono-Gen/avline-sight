@@ -32,6 +32,7 @@ export const columnLabels: Record<string, string> = {
   get querier_admin() { return t('ui.m031'); },
   get querier_oper() { return t('ui.m032'); },
   get querier_addr() { return t('ui.m033'); },
+  get querier_in_use() { return t('ui.querierInUse'); },
   get last_querier() { return t('ui.m034'); },
   get last_version() { return t('ui.m035'); },
   get oper_version() { return t('ui.m036'); },

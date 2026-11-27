@@ -119,6 +119,14 @@ func NewLab(n int, seed int64) *Lab {
 		cp := coreSFP[sfpIdx]
 		sfpIdx++
 		link(core, cp, e, ep)
+		// 最初のエッジとは2本目のSFPでもつなぎ、LAGにする（双方に空きSFPがある場合だけ）
+		if i == 1 && sfpIdx < len(coreSFP) && len(e.Ports) >= 2 && e.Ports[len(e.Ports)-2].SFP {
+			cp2, ep2 := coreSFP[sfpIdx], e.Ports[len(e.Ports)-2]
+			sfpIdx++
+			link(core, cp2, e, ep2)
+			addLAG(core, cp.IfIndex, cp2.IfIndex)
+			addLAG(e, ep.IfIndex, ep2.IfIndex)
+		}
 	}
 	// 機器の割当て（各スイッチの銅線ポートのおよそ7割）
 	for _, s := range lab.Switches {
@@ -145,4 +153,10 @@ func link(a *Switch, ap *Port, b *Switch, bp *Port) {
 	bp.PeerSwitch, bp.PeerPort = a.Index, ap.IfIndex
 	ap.Dev = &Device{Kind: DevUplink, Name: b.Name, MAC: b.BaseMAC, LLDP: true, RxBps: 300e6, TxBps: 450e6, McastTx: 20000, VLAN: 1}
 	bp.Dev = &Device{Kind: DevUplink, Name: a.Name, MAC: a.BaseMAC, LLDP: true, RxBps: 450e6, TxBps: 300e6, McastTx: 20000, VLAN: 1}
+}
+
+// addLAG は物理ポートの後ろ（CPUポートの次）に LAG を1本足す。
+func addLAG(s *Switch, members ...int) {
+	ix := len(s.Ports) + 2 + len(s.LAGs)
+	s.LAGs = append(s.LAGs, LAG{IfIndex: ix, Name: fmt.Sprintf("lag %d", len(s.LAGs)+1), Members: members})
 }

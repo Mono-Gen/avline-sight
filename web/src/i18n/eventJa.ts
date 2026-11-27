@@ -232,6 +232,11 @@ export const eventJa = {
     "hint": "同じVLANのIGMP Snooping設定を各スイッチで確認。",
     "details": "同一VLAN内でIGMP Snooping有効スイッチと無効スイッチが混在"
   },
+  "VLAN_NAME_MISMATCH": {
+    "title": "VLAN名がスイッチ間で違う（{switch_a}「{name_a}」／{switch_b}「{name_b}」）",
+    "hint": "同じVLANか確認し、どちらかのスイッチのVLAN名をそろえる（動作への影響はない）。",
+    "details": "スイッチ間リンクに流れている同じ番号のVLANが、スイッチごとに違う名前になっている"
+  },
   "VLAN_TRUNK_MISMATCH": {
     "title": "スイッチ間リンクの片側にしかVLANが通っていない",
     "hint": "両側のスイッチに同じVLANがあるか、Trunk/Auto-Trunkの許可VLANを確認。",

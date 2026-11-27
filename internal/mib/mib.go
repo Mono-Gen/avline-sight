@@ -94,9 +94,11 @@ const (
 
 // IGMP Snooping（fastpathswitching.my）
 const (
-	SnoopingAdminMode          = "1.3.6.1.4.1.4526.10.1.2.8.6.1.1.2" // INDEX=protocol 1=en 2=dis
-	SnoopVlanAdminMode         = "1.3.6.1.4.1.4526.10.1.2.8.8.1.1.1" // INDEX=vlan,protocol 0=dis 1=en
-	SnoopVlanFastLeave         = "1.3.6.1.4.1.4526.10.1.2.8.8.1.1.4"
+	SnoopingAdminMode  = "1.3.6.1.4.1.4526.10.1.2.8.6.1.1.2" // INDEX=protocol 1=en 2=dis
+	SnoopVlanAdminMode = "1.3.6.1.4.1.4526.10.1.2.8.8.1.1.1" // INDEX=vlan,protocol 0=dis 1=en
+	SnoopVlanFastLeave = "1.3.6.1.4.1.4526.10.1.2.8.8.1.1.4"
+	// agentSwitchSnoopingQuerierCfgTable（INDEX=protocol 1=IPv4）の全体アドレス。実機では未設定で 0.0.0.0
+	QuerierGlobalAddress       = "1.3.6.1.4.1.4526.10.1.2.8.20.1.1.3"
 	QuerierVlanAdminMode       = "1.3.6.1.4.1.4526.10.1.2.8.20.2.1.1"
 	QuerierVlanOperMode        = "1.3.6.1.4.1.4526.10.1.2.8.20.2.1.2" // 0=disabled 1=querier 2=non-querier
 	QuerierVlanAddress         = "1.3.6.1.4.1.4526.10.1.2.8.20.2.1.4"

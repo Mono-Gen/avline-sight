@@ -40,8 +40,8 @@ func TestAgentRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pdus) != len(lab.Switches[1].Ports) {
-		t.Errorf("ifName件数=%d want %d", len(pdus), len(lab.Switches[1].Ports))
+	if want := len(lab.Switches[1].Ports) + len(lab.Switches[1].LAGs); len(pdus) != want {
+		t.Errorf("ifName件数=%d want %d", len(pdus), want)
 	}
 	// 64bitカウンタは時間経過で増加する
 	a, _ := g.Get([]string{mib.IfHCInOctets + ".1"})

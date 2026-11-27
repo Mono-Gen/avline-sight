@@ -3,6 +3,7 @@ package poller
 import (
 	"context"
 	"math"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -94,8 +95,37 @@ func TestPollerAgainstSim(t *testing.T) {
 	if offset := core.ClockOffsetSeconds; offset == nil || math.Abs(*offset) > 1 {
 		t.Errorf("Slow clock sample: %v", offset)
 	}
-	if len(core.Ports) != 30 {
-		t.Errorf("ポート数=%d want 30", len(core.Ports))
+	// 物理30ポート＋LAG1本（エッジとの2本のSFPリンクを束ねる）
+	if len(core.Ports) != 31 {
+		t.Errorf("ポート数=%d want 31", len(core.Ports))
+	}
+	var lag *model.Port
+	var members, trunks, access int
+	for i := range core.Ports {
+		p := core.Ports[i]
+		if p.Type == "lag" {
+			lag = p
+		}
+		if p.LagIfIndex > 0 {
+			members++
+		}
+		switch p.Mode {
+		case "trunk":
+			trunks++
+			if !slices.Equal(p.UntaggedVLANs, []int{1}) || !slices.Equal(p.TaggedVLANs, []int{10, 20, 30, 40}) {
+				t.Errorf("trunk %s: untag=%v tag=%v", p.Name, p.UntaggedVLANs, p.TaggedVLANs)
+			}
+		case "access":
+			if len(p.Devices) > 0 {
+				access++
+				if p.NativeVLAN == 0 || len(p.TaggedVLANs) != 0 || !slices.Equal(p.UntaggedVLANs, []int{p.NativeVLAN}) {
+					t.Errorf("access %s: native=%d untag=%v tag=%v", p.Name, p.NativeVLAN, p.UntaggedVLANs, p.TaggedVLANs)
+				}
+			}
+		}
+	}
+	if lag == nil || lag.Name != "lag 1" || members != 2 || trunks != 2 || access < 10 {
+		t.Errorf("LAG=%v メンバー=%d trunk=%d access=%d", lag, members, trunks, access)
 	}
 	var withDev, sfp, poe int
 	var rx float64
@@ -132,8 +162,8 @@ func TestPollerAgainstSim(t *testing.T) {
 			ng++
 		}
 	}
-	if ng != 1 {
-		t.Errorf("NETGEAR隣接=%d want 1", ng)
+	if ng != 2 { // LAGの2本それぞれでLLDPが同じ相手を返す
+		t.Errorf("NETGEAR隣接=%d want 2", ng)
 	}
 	if dead == nil || dead.Reachable {
 		t.Error("応答しないスイッチがReachable扱い")

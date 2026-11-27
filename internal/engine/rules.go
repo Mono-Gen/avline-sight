@@ -421,6 +421,11 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 			map[string]any{"switch_a": m.A.Name, "port_a": m.PortA, "switch_b": m.B.Name, "port_b": m.PortB,
 				"only_a": joinInts(m.OnlyA), "only_b": joinInts(m.OnlyB)})
 	}
+	// スイッチ間で同じ番号の VLAN の名前が違う（動作には影響しない。取り違え防止の情報）
+	for _, m := range vlanNameMismatches(live) {
+		add(model.SevInfo, "VLAN_NAME_MISMATCH", fmt.Sprintf("VLAN%d の名前がスイッチ間で違う（%s「%s」／%s「%s」）", m.VLAN, m.A.Name, m.NameA, m.B.Name, m.NameB), m.A, m.PortA,
+			map[string]any{"vlan": m.VLAN, "switch_a": m.A.Name, "name_a": m.NameA, "switch_b": m.B.Name, "name_b": m.NameB})
+	}
 	// トポロジー構造（デイジーチェーン検出: 3台以上で中継スイッチの連鎖）
 	if depth := chainDepth(live); depth >= 3 {
 		add(model.SevInfo, "DAISY_CHAIN", fmt.Sprintf("多段デイジーチェーン構成（最大%d段）", depth), nil, "", map[string]any{"depth": depth})

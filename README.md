@@ -46,6 +46,7 @@ When switching to Show, review the **Pre-show checklist**. It checks switch reac
 - Save and compare baselines, add an incident marker with `M`, export an `.avsight` session for offline replay, and export monitoring data as CSV or JSON.
 - Each port's VLAN mode (Access / Trunk / General) and the VLANs it carries are read, and a role mark appears under the port number in the rack view (see Glossary below). Inter-switch links in Topology show the VLANs carried at both ends.
 - `VLAN_TRUNK_MISMATCH` warns when a VLAN that exists on both switches is carried on only one end of an inter-switch link. A VLAN that the other switch does not have at all is treated as intentionally local and is not reported.
+- `VLAN_NAME_MISMATCH` (information) shows when a VLAN carried on an inter-switch link has a different name on each switch. It does not affect traffic, but makes it easy to mistake which VLAN is which.
 - When a switch reports only the MAC address of a multicast group, the IP address and purpose are estimated from known uses (Dante, mDNS, VRRP and others).
 
 ## Glossary
@@ -120,7 +121,7 @@ Run the app on one monitoring PC with `--listen 0.0.0.0:8080` and use the read-o
 Requires Go 1.26.11 or later and Node.js 20 or later.
 
 ```powershell
-pwsh scripts/build.ps1 -Version 0.4.0
+pwsh scripts/build.ps1 -Version 0.5.0
 ```
 
 The script builds the web UI under `web/dist`, runs the Go tests and produces `bin/avline-sight.exe` as a Windows GUI program (no console window).

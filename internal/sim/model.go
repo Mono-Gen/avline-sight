@@ -108,10 +108,18 @@ type Switch struct {
 	logSeq        int
 	EEEGlobal     bool
 	Cable         CableResult
+	LAGs          []LAG   // LAG（ifIndexは物理ポートの後ろ。実機M4250と同じ並び）
 	AVBDemo       bool    // MVRグループとMSRPストリーム（予約失敗あり）を公開する
 	MvrRxFail     float64 // MVR IGMP受信失敗カウンタ
 
 	trapHook func(name string, vbs []extraVB)
+}
+
+// LAG は1本のポートチャネル。
+type LAG struct {
+	IfIndex int
+	Name    string
+	Members []int // 物理ポートのifIndex
 }
 
 // QuerierState はVLANのIGMPクエリア状態。
