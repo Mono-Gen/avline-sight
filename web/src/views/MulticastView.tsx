@@ -100,6 +100,7 @@ export function MulticastView(props: ViewProps) {
         ...row, ip: ip ? `${ip}${ip_guessed && !allGuessed ? t('mcast.guessed') : ''}` : '',
         purpose: (getLang() === 'en' ? purpose_en : purpose_ja) || '' }))}
         labels={allGuessed ? { ip: t('mcast.ipGuessed') } : {}}
+        values={{ purpose: value => <span className="mcast-purpose">{String(value ?? '')}</span> }}
         first={['switch_name', 'vlan', 'group', 'ip', 'protocol', 'purpose']} />
       {asArray(data?.groups).some(row => row.ip_guessed) && <p className="chart-help">{t('mcast.guessedHelp')}</p>}
       <h2>{t('ui.m272')}</h2>
