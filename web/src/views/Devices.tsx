@@ -54,8 +54,8 @@ export function DeviceInventoryTable({ rows, alerts = [], onNavigate, pingDisabl
                 {row.switch_name || emptyCell}
                 {row.port && <> / {navigate ? <button onClick={event => { event.stopPropagation(); navigate(); }} aria-label={`${t('rack.nav.monitor')} · ${row.switch_name} ${row.port}`}>{row.port}</button> : row.port}</>}
                 {/* Trunk・LAG のポートにつながった機器だけ印を付ける（機器用ポートに Trunk が来ていないかの気づき用） */}
-                {row.port_trunk && <span className="device-port-role" title={t('trunk.markTrunk')} aria-label={t('trunk.markTrunk')}>T</span>}
-                {row.port_lag && <span className="device-port-role" title={t('trunk.markLagOf', { lag: row.port_lag })} aria-label={t('trunk.markLagOf', { lag: row.port_lag })}>L</span>}
+                {row.port_trunk && <span className="device-port-role" role="img" title={t('trunk.markTrunk')} aria-label={t('trunk.markTrunk')}>T</span>}
+                {row.port_lag && <span className="device-port-role" role="img" title={t('trunk.markLagOf', { lag: row.port_lag })} aria-label={t('trunk.markLagOf', { lag: row.port_lag })}>L</span>}
                 {!row.port && navigate && <button onClick={event => { event.stopPropagation(); navigate(); }} aria-label={`${t('rack.nav.monitor')} · ${row.switch_name}`}>↗</button>}
               </td>
               <td className="whitespace-nowrap">

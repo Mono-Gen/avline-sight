@@ -61,7 +61,7 @@ export const ja = {
     selection: 'トポロジー上の選択', noSelection: '選択なし', affected: '⚠ 影響範囲',
     noPath: '選択した機器からコアスイッチまでの経路を確認できません。',
     linkMetrics: '{speed} · 使用率 {utilization}', linkDown: '⚠ リンクダウン',
-    deviceCount: '接続機器 {count}台', countBadge: '{count}台', vlanList: 'VLAN {list}', vlanCount: 'VLAN {count}本', deviceList: '{name} の接続機器', noDevices: '接続機器は確認されていません。',
+    deviceCount: '接続機器 {count}台', countBadge: '{count}台', vlanNone: '共通VLANなし', vlanList: 'VLAN {list}', vlanCount: 'VLAN {count}本', deviceList: '{name} の接続機器', noDevices: '接続機器は確認されていません。',
   },
   ping: {
     target: 'Ping対象', visible: '表示中の機器（{count}台）', group: 'グループ {name}（{count}台）', manual: '手入力',
@@ -73,7 +73,7 @@ export const ja = {
   // VLANごとの事実（SNMPで読めた設定）と、ポート説明欄に書かれた文字。判定はしない
   // VLANの通し方（Trunk/Auto-Trunk）とマルチキャストの用途
   // 左右ペインの幅を変える仕切り
-  pane: { nav: "左ペインの幅", detail: "ポート詳細の幅", resizeHelp: "ドラッグか←→キーで変更、ダブルクリックで元に戻す" },
+  pane: { nav: "左ペインの幅", detail: "ポート詳細の幅", resizeHelp: "ドラッグか←→キーで変更、ダブルクリックかEnterで元に戻す" },
   trunk: {
     mode: "VLANモード", access: "Access", general: "General", trunk: "Trunk", autoTrunk: "Trunk（Auto-Trunk 推定）",
     autoTrunkHelp: "相手がLLDPでNETGEARスイッチと分かり、Trunkになっているポートです。Auto-Trunkで自動設定されたものと推定しています（スイッチは自動かどうかをSNMPで返しません）。",

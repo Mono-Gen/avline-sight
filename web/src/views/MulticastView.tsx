@@ -97,9 +97,10 @@ export function MulticastView(props: ViewProps) {
       {/* スイッチがMACしか返さないときは、既知の用途から推定したIPに「推定」と添える */}
       {/* IP が全部推定なら列名に1回だけ「推定」と書く。確定と推定が混ざるときは行ごとに添える */}
       <Table {...switchColumn} rows={filter(data?.groups).map(({ purpose_ja, purpose_en, ip_guessed, ip, ...row }) => ({
-        ...row, [allGuessed ? 'ip_guessed_all' : 'ip']: ip ? `${ip}${ip_guessed && !allGuessed ? t('mcast.guessed') : ''}` : '',
+        ...row, ip: ip ? `${ip}${ip_guessed && !allGuessed ? t('mcast.guessed') : ''}` : '',
         purpose: (getLang() === 'en' ? purpose_en : purpose_ja) || '' }))}
-        first={['switch_name', 'vlan', 'group', allGuessed ? 'ip_guessed_all' : 'ip', 'protocol', 'purpose']} />
+        labels={allGuessed ? { ip: t('mcast.ipGuessed') } : {}}
+        first={['switch_name', 'vlan', 'group', 'ip', 'protocol', 'purpose']} />
       {asArray(data?.groups).some(row => row.ip_guessed) && <p className="chart-help">{t('mcast.guessedHelp')}</p>}
       <h2>{t('ui.m272')}</h2>
       <Table {...switchColumn} rows={filter(data?.mrouters)} first={['switch_name', 'vlan', 'port']} />

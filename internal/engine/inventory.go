@@ -216,6 +216,7 @@ func BuildInventory(states []*model.SwitchState, aliases []store.Alias, lastSeen
 				for _, p := range s.Ports {
 					if p.IfIndex == ls.IfIndex {
 						r.Port = p.Name
+						r.PortTrunk, r.PortLag = p.Mode == "trunk", lagLabel(p)
 					}
 				}
 				break

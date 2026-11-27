@@ -215,9 +215,10 @@ td {
 .pane-resizer:hover, .pane-resizer:focus-visible { background: #334155; border-color: #7dd3fc; outline: none; }
 .focus-layout > .pane-resizer { min-height: 4rem; }
 .legend-help summary { cursor: pointer; list-style: none; padding: 0 var(--space-1); }
-.legend-help[open] ul { position: absolute; z-index: 20; max-width: 28rem; margin: var(--space-1) 0 0; padding: var(--space-2) var(--space-3);
-  list-style: none; background: #111419; border: 1px solid #334155; border-radius: .3rem; display: grid; gap: var(--space-1); }
-.legend-help { position: relative; }
+/* 開いた説明は凡例の下に全幅で出す（浮かせるとカード内で切れたり、幅が縮んで読めなくなるため） */
+li:has(> .legend-help[open]) { flex-basis: 100%; }
+.legend-help[open] ul { max-width: 40rem; margin: var(--space-1) 0 0; padding: var(--space-2) var(--space-3);
+  list-style: none; background: #111419; color: #eef1f6; border: 1px solid #334155; border-radius: .3rem; display: grid; gap: var(--space-1); }
 .device-port-role { margin-left: var(--space-1); padding: 0 3px; border: 1px solid currentColor; border-radius: 2px; font-size: .7rem; font-weight: 800; }
 body.pane-resizing { cursor: col-resize; user-select: none; }
 @media (max-width: 767px) { .app-workspace > .pane-resizer { display: none; } }
@@ -383,7 +384,7 @@ body.pane-resizing { cursor: col-resize; user-select: none; }
 .log-message pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (min-width: 768px) {
   /* 長いページでも左ペイン下の操作が画面内に残るよう、画面の高さに固定する */
-  .app-nav { width: var(--nav-width, 15rem); }
+  .app-nav { width: var(--nav-width, 15rem); max-width: 40vw; }
 
   .app-nav nav, .app-nav-tools { flex-direction: column; }
 }
@@ -510,7 +511,7 @@ body.pane-resizing { cursor: col-resize; user-select: none; }
 /* Grid children must be allowed to shrink, or the front panel pushes the detail off-screen. */
 .focus-main > * { min-width: 0; }
 /* Narrower port tiles in the single-switch view so a 48-port switch and the detail fit side by side. */
-.focus-detail { flex: 0 0 var(--detail-width, 25rem); max-width: 70%; position: sticky; top: var(--space-3); max-height: calc(100vh - 2rem); overflow: auto; }
+.focus-detail { flex: 0 0 var(--detail-width, 25rem); max-width: 60%; position: sticky; top: var(--space-3); max-height: calc(100vh - 2rem); overflow: auto; }
 .focus-detail-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
 .focus-health { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
 .focus-health-name { display: flex; align-items: center; gap: var(--space-2); font-size: 1.25rem; font-weight: 700; }

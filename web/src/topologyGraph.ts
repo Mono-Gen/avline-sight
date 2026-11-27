@@ -64,7 +64,7 @@ export const topologyStyles: cytoscape.Stylesheet[] = [
   {
     selector: 'node[kind = "device-count"]',
     style: {
-      shape: 'round-rectangle', width: 36, height: 22, 'font-size': 11, // 「10台」の幅に合わせる
+      shape: 'round-rectangle', width: 'data(badgeWidth)', height: 22, 'font-size': 11, // 文字数に合わせた幅（下の countBadge）
       'background-color': '#111419', 'border-color': '#c4cad4', 'border-width': 1,
       'text-valign': 'center', 'text-outline-width': 0, 'z-index': 10
     }
@@ -77,12 +77,20 @@ export function countPosition(position: cytoscape.Position): cytoscape.Position 
 
 export const countId = (node: string) => `count:${node}`;
 
+// 接続台数のバッジ。「10台」「120 dev.」など文字数に合わせて幅を決める（11px 文字の目安で1文字7px＋余白）
+function countBadge(count: number) {
+  const statusLabel = t('topology.countBadge', { count });
+  return { statusLabel, badgeWidth: Math.max(28, 12 + [...statusLabel].length * 7) };
+}
+
 // リンクの線に流れている VLAN を添える。5本までは番号、それより多ければ本数（全部はリンクを選ぶと見える）。
 // 両端で食い違うときは ⚠ を付ける（色だけに頼らない）。
 const VLAN_LIST_MAX = 5;
 export function vlanLine(edge: { vlans?: number[]; vlan_mismatch?: boolean }) {
   const vlans = edge.vlans ?? [];
-  if (!vlans.length) return '';
+  // 共通の VLAN が1つも無い食い違いが最も重いので、一覧が空でも ⚠ は出す
+  if (!vlans.length) return edge.vlan_mismatch ? `
+⚠ ${t('topology.vlanNone')}` : '';
   const body = vlans.length <= VLAN_LIST_MAX ? t('topology.vlanList', { list: vlans.join(',') }) : t('topology.vlanCount', { count: vlans.length });
   return `\n${edge.vlan_mismatch ? '⚠ ' : ''}${body}`;
 }
@@ -195,11 +203,11 @@ export function updateTopology(
       const position = countPosition(core.getElementById(node.id).position());
       const existing = core.getElementById(id);
       if (existing.length) {
-        updateData(existing, { statusLabel: t('topology.countBadge', { count }) });
+        updateData(existing, countBadge(count));
         const current = existing.position();
         if (current.x !== position.x || current.y !== position.y) existing.position(position);
       } else {
-        core.add({ group: 'nodes', data: { id, kind: 'device-count', switchNode: node.id, statusLabel: t('topology.countBadge', { count }), statusColor: '#111419' },
+        core.add({ group: 'nodes', data: { id, kind: 'device-count', switchNode: node.id, ...countBadge(count), statusColor: '#111419' },
           position, grabbable: false, selectable: false });
       }
     }

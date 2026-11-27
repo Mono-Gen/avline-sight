@@ -59,7 +59,7 @@ When switching to Show, review the **Pre-show checklist**. It checks switch reac
 | Querier | The switch that sends IGMP queries to find multicast listeners. Each VLAN needs one. |
 | (estimated) | A value not read directly from the switch but estimated from other information. |
 
-Drag the dividers between the left pane and the main area, and between the port list and port details, to change their widths (←/→ keys also work; double-click to reset).
+Drag the dividers between the left pane and the main area, and between the port list and port details, to change their widths (←/→ keys also work; double-click or Enter to reset).
 
 ## Quick start
 

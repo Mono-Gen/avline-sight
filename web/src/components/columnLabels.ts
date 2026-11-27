@@ -46,7 +46,6 @@ export const columnLabels: Record<string, string> = {
   get decline_rx() { return t('ui.m043'); },
   get invalid_server_msgs() { return t('ui.m044'); },
   get ip() { return t('ui.m045'); },
-  get ip_guessed_all() { return t('mcast.ipGuessed'); },
   get mac() { return t('ui.m046'); },
   get cpu_5s() { return t('ui.m047'); },
   get cpu_60s() { return t('ui.m048'); },

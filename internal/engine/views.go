@@ -117,6 +117,8 @@ func (e *Engine) Topology(layout map[string]struct{ X, Y float64 }) Topology {
 					if t.Edges[i].ID == k && lp != nil {
 						if other := carriedVLANs(lp); len(other) > 0 && len(t.Edges[i].VLANs) > 0 {
 							t.Edges[i].VLANs = intersectVLANs(t.Edges[i].VLANs, other)
+						} else if len(other) > 0 && t.Edges[i].VLANs == nil {
+							t.Edges[i].VLANs = other // 先に見えた側の一覧が取れていなければ、こちら側の値を使う（見る順で結果が変わらないように）
 						}
 					}
 				}

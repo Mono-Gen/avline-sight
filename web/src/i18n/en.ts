@@ -62,7 +62,7 @@ export const en: Dictionary = {
     selection: 'Topology selection', noSelection: 'Nothing selected', affected: '⚠ Affected',
     noPath: 'No path to the core switch was confirmed for the selected device.',
     linkMetrics: '{speed} · {utilization} utilization', linkDown: '⚠ Link down',
-    deviceCount: '{count} connected devices', countBadge: '{count} dev.', vlanList: 'VLAN {list}', vlanCount: '{count} VLANs', deviceList: 'Devices connected to {name}', noDevices: 'No connected devices detected.',
+    deviceCount: '{count} connected devices', countBadge: '{count} dev.', vlanNone: 'no common VLAN', vlanList: 'VLAN {list}', vlanCount: '{count} VLANs', deviceList: 'Devices connected to {name}', noDevices: 'No connected devices detected.',
   },
   ping: {
     target: 'Ping target', visible: 'Shown devices ({count})', group: 'Group {name} ({count})', manual: 'Manual entry',
@@ -70,7 +70,7 @@ export const en: Dictionary = {
     summary: 'Ping complete: {ok} responded / {ng} no response ({sec}s)', noReply: 'Devices with no response ({count})',
   },
   metrics: { rxtx: 'RX {rx} / TX {tx}', rxOnly: 'RX {value}', txOnly: 'TX {value}', errors: 'Errors {value}', discards: 'Discards {value}', multicast: 'Multicast' },
-  pane: { nav: "Left pane width", detail: "Port detail width", resizeHelp: "drag or use ←/→ to resize, double-click to reset" },
+  pane: { nav: "Left pane width", detail: "Port detail width", resizeHelp: "drag or use ←/→ to resize, double-click or Enter to reset" },
   trunk: {
     mode: "VLAN mode", access: "Access", general: "General", trunk: "Trunk", autoTrunk: "Trunk (likely Auto-Trunk)",
     autoTrunkHelp: "This port is a trunk and LLDP shows a NETGEAR switch on the other end, so it is probably set by Auto-Trunk (the switch does not report over SNMP whether it was automatic).",
