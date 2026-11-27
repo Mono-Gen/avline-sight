@@ -222,9 +222,10 @@ li:has(> .legend-help[open]) { flex-basis: 100%; order: 1; } /* 説明は凡例�
 .device-port-role { margin-left: var(--space-1); padding: 0 3px; border: 1px solid currentColor; border-radius: 2px; font-size: .7rem; font-weight: 800; }
 body.pane-resizing { cursor: col-resize; user-select: none; }
 @media (max-width: 767px) { .app-workspace > .pane-resizer { display: none; } }
-/* ポートの役割（T/G/L/B）。番号の横だと2桁の番号ではみ出すため、番号の下の段に置く（記号のあるポートだけ少し高くする） */
-.port-lamp.has-role { flex-direction: column; min-height: 2.2rem; padding-bottom: 1px; }
-.lamp-role { font-size: .62rem; font-weight: 800; line-height: 1; letter-spacing: .04em; }
+/* ポートの役割（T/G/L/B）は番号の下の段に置く。記号の有無で枠の縦横比が変わらないよう、
+   すべてのポートの枠を同じ高さにして下の段を空けておく */
+.port-lamp { min-height: 2.2rem; padding-bottom: .55rem; }
+.lamp-role { position: absolute; inset: auto 0 1px 0; text-align: center; font-size: .62rem; font-weight: 800; line-height: 1; letter-spacing: .04em; }
 .port-role-marks { display: block; font-size: .62rem; font-weight: 800; letter-spacing: .05em; }
 /* ブロックは背景色に左右されないよう枠で強調（色だけに頼らない） */
 .port-role-blocked { outline: 1px solid currentColor; border-radius: 2px; padding: 0 1px; }
@@ -491,6 +492,10 @@ body.pane-resizing { cursor: col-resize; user-select: none; }
 .app-nav .switch-index-list button:hover { background: #1f242d; }
 .app-nav .switch-index-list button[aria-current="true"] { background: #1f242d; border-color: #7dd3fc; font-weight: 700; }
 .switch-index-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 長い名前で索引が左ペインの外へはみ出し、仕切りの線と重ならないようにする（はみ出した分は … で切る） */
+.app-nav { min-width: 0; overflow-x: clip; }
+.switch-index-list { grid-template-columns: minmax(0, 1fr); }
+.switch-index-list li { min-width: 0; }
 .switch-index-count { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
 /* 上部の数字パネル: 常に全体の値。0より大きい異常は状態色の枠と数字 */
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--space-2); }

@@ -60,7 +60,7 @@ export function PortLamp({ port, alerts, devices, reachable, wall, onSelect }: {
   const content = <><span className="lamp-number">{port.name.match(/(\d+)\D*$/)?.[1] || port.name}</span>
     <span className="lamp-symbol" aria-hidden="true">{symbol}</span>
     {marks.length > 0 && <span className={`lamp-role${marks.some(m => m.mark === 'B') ? ' port-role-blocked' : ''}`} aria-hidden="true">{marks.map(m => m.mark).join('')}</span>}</>;
-  const className = `port-lamp lamp-${tone}${marks.length ? ' has-role' : ''}`;
+  const className = `port-lamp lamp-${tone}`;
   return wall ? <span className={className} title={label} aria-label={label}>{content}</span>
     : <button className={className} title={label} aria-label={label} onClick={onSelect}>{content}</button>;
 }
