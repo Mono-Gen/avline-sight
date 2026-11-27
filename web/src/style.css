@@ -210,6 +210,11 @@ td {
 }
 .lamp-symbol { position: absolute; inset: 1px 1px auto auto; font-size: .52rem; font-weight: 800; }
 .lamp-number { font-size: var(--text-sm); font-weight: 700; }
+/* ポートの役割（T=Trunk, G=General, B=STPブロック）。小さな角だと読めないため番号の右に並べる */
+.lamp-role { margin-left: 1px; font-size: .68rem; font-weight: 800; text-decoration: underline; }
+.port-role-marks { display: block; font-size: .62rem; font-weight: 800; letter-spacing: .05em; }
+/* ブロックは背景色に左右されないよう枠で強調（色だけに頼らない） */
+.port-role-blocked { outline: 1px solid currentColor; border-radius: 2px; padding: 0 1px; }
 .lamp-critical { background: #b4232f; color: #fff; border-color: #ff4d5e; box-shadow: 0 0 0 1px #ff4d5e; }
 .lamp-warning { background: #713f12; color: #fef08a; box-shadow: inset 0 0 0 1px #facc15; }
 .lamp-healthy { background: #0e3a36; color: #2dd4bf; }

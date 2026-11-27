@@ -14,6 +14,24 @@ export function portModeLabel(port: Pick<Port, 'mode' | 'if_index'>, state: Pick
   return port.mode === 'trunk' ? t('trunk.trunk') : port.mode === 'access' ? t('trunk.access') : t('trunk.general');
 }
 
+export type PortMark = { mark: string; label: string };
+
+// 前面パネル・ラック図でポート番号に添える役割の記号。色だけに頼らず文字で示す。
+// M4250 は普通の機器ポートもモードを General で返す（2026-11-27 実機）ため、VLAN を1つだけ運ぶ General は Access と同じ扱いで記号を付けない。
+export function portMarks(port: Pick<Port, 'mode' | 'oper' | 'stp_state' | 'tagged_vlans' | 'untagged_vlans'>): PortMark[] {
+  const marks: PortMark[] = [];
+  const carried = new Set([...asArray(port.tagged_vlans), ...asArray(port.untagged_vlans)]).size;
+  if (port.mode === 'trunk') marks.push({ mark: 'T', label: t('trunk.markTrunk') });
+  else if (port.mode === 'general' && carried > 1) marks.push({ mark: 'G', label: t('trunk.markGeneral') });
+  if (port.stp_state === 'discarding' && port.oper === 'up') marks.push({ mark: 'B', label: t('trunk.markBlocked') });
+  return marks;
+}
+
+// 凡例用（記号と意味の一覧）
+export function portMarkLegend(): PortMark[] {
+  return [{ mark: 'T', label: t('trunk.markTrunk') }, { mark: 'G', label: t('trunk.markGeneral') }, { mark: 'B', label: t('trunk.markBlocked') }];
+}
+
 const list = (vlans?: number[]) => asArray(vlans).length ? asArray(vlans).join(', ') : t('trunk.none');
 
 // ポート詳細の「VLAN」欄。モードと、実際に流れている VLAN（タグ付き・タグなし）を並べる。

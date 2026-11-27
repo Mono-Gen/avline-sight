@@ -8,6 +8,7 @@ import { lampState } from '../rackModel';
 import { isPortAlert, matchingPortAlerts, summarizeAlerts } from '../wallAlerts';
 import type { Alert, InventoryRow, ModelDefinitions, Port, SwitchConfig, SwitchSummary } from '../types';
 import type { ViewProps } from '../views/props';
+import { portMarkLegend, portMarks } from './PortVlan';
 
 export const lampStates = {
   critical: { symbol: '!', label: 'pages.abnormal' },
@@ -24,6 +25,7 @@ export function PortLegend({ single = false }: { single?: boolean } = {}) {
     {Object.entries(lampStates).map(([tone, { symbol, label }]) => <li key={tone}>
       <span className={`lamp-${tone}`} aria-hidden="true">{symbol}</span>{t(label)}
     </li>)}
+    <MarkLegend />
     {single ? <>
       <li><span aria-hidden="true">×</span>{t('ui.m133')}</li>
       <li><span aria-hidden="true">⚡</span>{t('ui.m139')}</li>
@@ -37,6 +39,10 @@ export function PortLegend({ single = false }: { single?: boolean } = {}) {
   </ul>;
 }
 
+function MarkLegend() {
+  return <>{portMarkLegend().map(({ mark, label }) => <li key={mark}><span className="port-role-marks" aria-hidden="true">{mark}</span>{label}</li>)}</>;
+}
+
 export function PortLamp({ port, alerts, devices, reachable, wall, onSelect }: {
   port: Port; alerts: Alert[]; devices: InventoryRow[]; reachable: boolean; wall: boolean; onSelect: () => void;
 }) {
@@ -44,10 +50,12 @@ export function PortLamp({ port, alerts, devices, reachable, wall, onSelect }: {
   const attached = devices.length ? devices : asArray(port.devices);
   const tone = state.label === 'rack.unused' && port.oper === 'down' ? 'unused' : state.tone;
   const { symbol, label: stateLabel } = lampStates[tone];
+  const marks = portMarks(port);
   const label = [port.name, ...attached.map(device => [device.label || device.lldp_name || device.mac, device.ip].filter(Boolean).join(' ')),
-    t(stateLabel), state.label === 'rack.suppressed' && t(state.label)].filter(Boolean).join(' · ');
+    t(stateLabel), state.label === 'rack.suppressed' && t(state.label), ...marks.map(m => m.label)].filter(Boolean).join(' · ');
   const content = <><span className="lamp-number">{port.name.match(/(\d+)\D*$/)?.[1] || port.name}</span>
-    <span className="lamp-symbol" aria-hidden="true">{symbol}</span></>;
+    <span className="lamp-symbol" aria-hidden="true">{symbol}</span>
+    {marks.length > 0 && <span className={`lamp-role${marks.some(m => m.mark === 'B') ? ' port-role-blocked' : ''}`} aria-hidden="true">{marks.map(m => m.mark).join('')}</span>}</>;
   const className = `port-lamp lamp-${tone}`;
   return wall ? <span className={className} title={label} aria-label={label}>{content}</span>
     : <button className={className} title={label} aria-label={label} onClick={onSelect}>{content}</button>;

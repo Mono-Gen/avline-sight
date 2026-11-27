@@ -75,6 +75,8 @@ export const en: Dictionary = {
     autoTrunkHelp: "This port is a trunk and LLDP shows a NETGEAR switch on the other end, so it is probably set by Auto-Trunk (the switch does not report over SNMP whether it was automatic).",
     native: "Native VLAN", tagged: "Tagged VLANs", untagged: "Untagged VLANs", none: "none",
     carriedBy: "Carried on trunk ports", peerMissing: "Missing on the other end: {list}",
+    markTrunk: "Trunk (carries several VLANs, e.g. between switches)", markGeneral: "General (VLANs set per port, carries several)",
+    markBlocked: "Blocked by STP (stopped to prevent a loop)", marksLegend: "Port roles",
   },
   mcast: {
     ip: "IP address", purpose: "Purpose", guessed: " (estimated)",

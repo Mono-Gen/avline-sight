@@ -77,6 +77,8 @@ export const ja = {
     autoTrunkHelp: "相手がLLDPでNETGEARスイッチと分かり、Trunkになっているポートです。Auto-Trunkで自動設定されたものと推定しています（スイッチは自動かどうかをSNMPで返しません）。",
     native: "Native VLAN", tagged: "タグ付きで通すVLAN", untagged: "タグなしで通すVLAN", none: "なし",
     carriedBy: "Trunkで運ぶポート", peerMissing: "相手側に無い: {list}",
+    markTrunk: "Trunk（スイッチ間などでVLANを複数運ぶ）", markGeneral: "General（VLANを個別に設定し、複数運ぶ）",
+    markBlocked: "STPでブロック中（ループ防止で止めている）", marksLegend: "ポートの役割",
   },
   mcast: {
     ip: "IPアドレス", purpose: "用途", guessed: "（推定）",
