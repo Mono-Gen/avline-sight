@@ -22,10 +22,13 @@ export const VLAN_PALETTE = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E
 export const vlanColor = (vlan: number) => VLAN_PALETTE[((vlan % VLAN_PALETTE.length) + VLAN_PALETTE.length) % VLAN_PALETTE.length];
 
 // The VLAN a port belongs to for colouring. Ports carrying several VLANs (trunk, multi-VLAN general) get no single colour.
+// Only a port carrying exactly one VLAN untagged (and nothing tagged) gets that VLAN's colour; a port carrying
+// a tagged VLAN is a trunk-like link even with one VLAN. With no membership data, fall back to the PVID.
 export function portVlanGroup(port: Pick<Port, 'mode' | 'pvid' | 'tagged_vlans' | 'untagged_vlans'>): { vlan?: number; multi: boolean } {
-  const carried = [...new Set([...asArray(port.tagged_vlans), ...asArray(port.untagged_vlans)])];
-  if (port.mode === 'trunk' || carried.length > 1) return { multi: true };
-  const vlan = carried[0] ?? (port.pvid > 0 ? port.pvid : undefined);
+  const tagged = asArray(port.tagged_vlans);
+  const untagged = [...new Set(asArray(port.untagged_vlans))];
+  if (port.mode === 'trunk' || tagged.length > 0 || untagged.length > 1) return { multi: true };
+  const vlan = untagged[0] ?? (port.pvid > 0 ? port.pvid : undefined);
   return { vlan, multi: false };
 }
 

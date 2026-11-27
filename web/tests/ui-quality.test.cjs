@@ -2113,6 +2113,8 @@ test('Colour-by-VLAN groups single-VLAN ports and keeps several-VLAN ports neutr
   // Expected from the rule: a trunk, or any port carrying two or more VLANs, has no single colour.
   assert.deepEqual(portVlanGroup({ mode: 'trunk', pvid: 1, tagged_vlans: [11, 12], untagged_vlans: [1] }), { multi: true });
   assert.deepEqual(portVlanGroup({ mode: 'general', pvid: 1, tagged_vlans: [], untagged_vlans: [1, 12] }), { multi: true });
+  // A tagged VLAN makes it a trunk-like link even when only one VLAN is carried.
+  assert.deepEqual(portVlanGroup({ mode: 'general', pvid: 1, tagged_vlans: [20], untagged_vlans: [] }), { multi: true });
   // M4250 reports an ordinary port as general with one untagged VLAN: coloured by that VLAN.
   assert.deepEqual(portVlanGroup({ mode: 'general', pvid: 11, tagged_vlans: [], untagged_vlans: [11] }), { vlan: 11, multi: false });
   // No membership data (older firmware): fall back to the PVID.

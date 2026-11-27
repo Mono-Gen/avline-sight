@@ -1,4 +1,3 @@
-import type React from 'react';
 import { t } from '../i18n';
 import type { Alert } from '../types';
 import { hasCriticalActive, summarizeAlerts } from '../wallAlerts';
@@ -16,7 +15,7 @@ export function MonitorKpis({ switches, alerts, alertsKnown = true }: {
   const recovered = counts.count - counts.active;
   const reachable = switches.filter(sw => sw.reachable).length;
   const linked = switches.reduce((sum, sw) => sum + (sw.ports_up || 0), 0);
-  const items: { key: string; label: string; value: React.ReactNode; tone?: 'critical' | 'caution' | 'warning'; small?: boolean }[] = [
+  const items: { key: string; label: string; value: string; tone?: 'critical' | 'caution' | 'warning' }[] = [
     { key: 'switches', label: t('focus.kpiSwitches'), value: `${reachable} / ${switches.length}`, tone: reachable < switches.length ? 'critical' : undefined },
     { key: 'active', label: t('focus.kpiActive'), value: alertsKnown ? String(counts.active) : '—',
       tone: alertsKnown && counts.active ? hasCriticalActive(counts) ? 'critical' : 'caution' : undefined },
@@ -26,7 +25,7 @@ export function MonitorKpis({ switches, alerts, alertsKnown = true }: {
   return <section className="kpi-row" aria-label={t('focus.kpi')}>
     {items.map(item => <div key={item.key} className={`kpi${item.tone ? ` kpi-${item.tone}` : ''}`} data-kpi={item.key}>
       <div className="kpi-label">{item.label}</div>
-      <div className={`kpi-value${item.small ? ' kpi-value-small' : ''}`}>{item.value}</div>
+      <div className="kpi-value">{item.value}</div>
       <div className="kpi-scope">{t('focus.kpiScope')}</div>
     </div>)}
   </section>;

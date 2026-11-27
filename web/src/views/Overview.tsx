@@ -131,12 +131,6 @@ export function OverviewView(props: OverviewProps) {
   const groupFiltered = hasGroupFilter(props) && !focusSummary;
   const visible = summary.filter(item => matchesSwitch(props, tags, item.id, item.group_tag));
   const visibleIds = new Set(visible.map(item => item.id));
-  // VLANs present on the shown switches, for the colour-by-VLAN legend.
-  const legendVlans = [...new Set(asArray(rack.data?.ports)
-    .filter(({ switch_id }) => visibleIds.has(switch_id))
-    .map(({ port }) => portVlanGroup(port))
-    .filter(group => !group.multi && group.vlan)
-    .map(group => group.vlan as number))].sort((a, b) => a - b).map(vlan => ({ vlan }));
   const targetSwitch = visible.find(item => item.id === target?.switchId);
   const focusedTarget = useRef<PortMonitorTarget>();
   useEffect(() => {
@@ -180,6 +174,13 @@ export function OverviewView(props: OverviewProps) {
       };
     }));
   const byAlert = indexBySwitch(alerts);
+  // VLANs present on the shown switches, for the colour-by-VLAN legend.
+  // Same ports as drawn: unused LAGs removed and the part's VLAN filter applied.
+  const legendVlans = [...new Set(visible.flatMap(sw => withoutUnusedLags((ports.get(sw.id) || []).map(row => row.port), byAlert.get(sw.id) || []))
+    .filter(port => !preset?.vlans?.length || preset.vlans.includes(port.pvid))
+    .map(port => portVlanGroup(port))
+    .filter(group => !group.multi && group.vlan)
+    .map(group => group.vlan as number))].sort((a, b) => a - b).map(vlan => ({ vlan }));
   const groupRows = new Map<string, SwitchSummary[]>();
   for (const sw of visible) {
     if (!groupRows.has(sw.group_tag)) groupRows.set(sw.group_tag, []);

@@ -73,14 +73,18 @@ export function PortLamp({ port, alerts, devices, reachable, wall, onSelect, col
     // Faults keep their symbol and a red/amber outline so a problem is never hidden by this view.
     const group = portVlanGroup(port);
     const issue = ['critical', 'caution', 'warning'].includes(tone);
+    // Offline, stale, excluded or suppressed ports must not look like live ones: keep their symbol and dim them.
+    const unknown = tone === 'unknown' || port.excluded;
+    const mark = port.excluded && !issue ? '×' : symbol;
     const vlanLabel = group.multi ? '' : group.vlan ? `VLAN ${group.vlan}` : '';
     const style = group.vlan && !group.multi ? { '--vlan-color': vlanColor(group.vlan) } as React.CSSProperties : undefined;
-    const cls = `port-lamp lamp-vlan${group.multi ? ' lamp-vlan-multi' : ''}${!group.multi && !group.vlan ? ' lamp-vlan-none' : ''}${issue ? ` lamp-vlan-issue-${tone}` : ''}${port.oper !== 'up' ? ' lamp-vlan-down' : ''}`;
+    const cls = `port-lamp lamp-vlan${group.multi ? ' lamp-vlan-multi' : ''}${!group.multi && !group.vlan ? ' lamp-vlan-none' : ''}${issue ? ` lamp-vlan-issue-${tone}` : ''}${unknown && !issue ? ' lamp-vlan-unknown' : ''}${port.oper !== 'up' ? ' lamp-vlan-down' : ''}`;
     const vlanTitle = [label, vlanLabel].filter(Boolean).join(' · ');
     return <button className={cls} style={style} title={vlanTitle} aria-label={vlanTitle} onClick={onSelect}>
       {number}
-      {issue && <span className="lamp-symbol" aria-hidden="true">{symbol}</span>}
-      {group.multi ? roleLine : <span className="lamp-role" aria-hidden="true">{group.vlan ?? ''}{marks.filter(m => m.mark !== 'G' && m.mark !== 'T').map(m => m.mark).join('')}</span>}
+      {(issue || unknown) && <span className="lamp-symbol" aria-hidden="true">{mark}</span>}
+      {group.multi ? roleLine : <span className={`lamp-role${marks.some(m => m.mark === 'B') ? ' port-role-blocked' : ''}`} aria-hidden="true">
+        {[group.vlan ?? '', ...marks.filter(m => m.mark === 'L' || m.mark === 'B').map(m => m.mark)].filter(Boolean).join(' ')}</span>}
     </button>;
   }
   const content = <>{number}

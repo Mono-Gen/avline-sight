@@ -231,8 +231,13 @@ li:has(> .legend-help[open]) { flex-basis: 100%; order: 1; } /* 説明は凡例�
 .port-lamp.lamp-vlan-multi { border-color: #c4cad4; background: repeating-linear-gradient(135deg, #1f242d 0 4px, #343b47 4px 8px); }
 .port-lamp.lamp-vlan-none { border-color: #475569; background: #111419; color: #9aa3b2; }
 .port-lamp.lamp-vlan-down { opacity: .55; }
-.port-lamp.lamp-vlan-issue-critical { outline: 3px solid #ff4d5e; outline-offset: -1px; opacity: 1; }
-.port-lamp.lamp-vlan-issue-caution, .port-lamp.lamp-vlan-issue-warning { outline: 3px solid #fb923c; outline-offset: -1px; opacity: 1; }
+/* Fault frames use an inset shadow (not outline) so the keyboard focus ring stays visible; same colours as the state view */
+.port-lamp.lamp-vlan-issue-critical { box-shadow: inset 0 0 0 3px #ff4d5e; opacity: 1; }
+.port-lamp.lamp-vlan-issue-caution { box-shadow: inset 0 0 0 3px #fb923c; opacity: 1; }
+.port-lamp.lamp-vlan-issue-warning { box-shadow: inset 0 0 0 3px #facc15; opacity: 1; }
+.port-lamp.lamp-vlan-unknown { opacity: .55; border-style: dashed; }
+.rack-legend li .vlan-chip { width: auto; border: 1px solid var(--vlan-color); }
+.rack-legend li .vlan-chip-multi { border-color: #c4cad4; }
 .vlan-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 1.6rem; padding: 0 3px; margin-inline-end: 3px; border: 1px solid var(--vlan-color);
   border-radius: .2rem; background: color-mix(in srgb, var(--vlan-color) 45%, #111419); color: #fff; font-size: .72rem; font-weight: 800; }
 .vlan-chip-multi { border-color: #c4cad4; background: repeating-linear-gradient(135deg, #1f242d 0 4px, #343b47 4px 8px); }
@@ -518,7 +523,6 @@ body.pane-resizing { cursor: col-resize; user-select: none; }
 .kpi { background: #15181e; border: 1px solid #323946; border-radius: 6px; padding: var(--space-2) var(--space-3); min-width: 0; }
 .kpi-label { color: #9aa3b2; font-size: .78rem; }
 .kpi-value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.kpi-value-small { font-size: 1.05rem; padding-block: .2rem; }
 .kpi-scope { color: #9aa3b2; font-size: .7rem; }
 .kpi-critical { border-color: #ff4d5e; } .kpi-critical .kpi-value { color: #ff4d5e; }
 .kpi-warning { border-color: #facc15; } .kpi-warning .kpi-value { color: #facc15; }
