@@ -495,6 +495,10 @@ func (w *worker) collectIGMP() error {
 		}
 	}
 	sort.Ints(order)
+	// nil は「まだ読んでいない」の印（エンジンがクエリア不在の判定を待つ）。読めたら行が無くても空スライスにする
+	if ig.Vlans == nil {
+		ig.Vlans = []model.VlanIGMP{}
+	}
 	ig.Vlans = ig.Vlans[:0]
 	for _, v := range order {
 		ig.Vlans = append(ig.Vlans, *byV[v])

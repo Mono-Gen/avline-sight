@@ -228,7 +228,7 @@ type Process struct {
 type IGMP struct {
 	SnoopingOn       bool          `json:"snooping_on"`
 	SnoopingKnown    bool          `json:"snooping_known"` // 全体のSnooping設定を取得できたか（取れない機種・失敗時は false）
-	Vlans            []VlanIGMP    `json:"vlans"`
+	Vlans            []VlanIGMP    `json:"vlans"` // nil = まだ収集していない（空スライスは「VLANの行が無い」）
 	Groups           []McastGroup  `json:"groups"`
 	Mrouters         []Mrouter     `json:"mrouters"`
 	MVR              bool          `json:"mvr"`

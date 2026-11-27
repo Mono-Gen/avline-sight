@@ -320,6 +320,14 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 		vers           map[int]bool
 	}
 	vl := map[int]*vinfo{}
+	// 起動直後はスイッチごとに IGMP を読み終える時刻がずれる。非クエリア側だけ先に読めた時点で
+	// 「クエリア不在」を出さないよう、全台が読み終えるまで不在の判定は保留する（2026-11-27 実機ダンプ再生で確認）。
+	igmpPending := false
+	for _, s := range live {
+		if s.IGMP.Vlans == nil {
+			igmpPending = true
+		}
+	}
 	for _, s := range live {
 		// 全体のSnoopingがOFFだと、VLANごとのSnooping設定は効かず全ポートへフラッディングする。
 		// VLANではSnoopingを使う設定になっているのに全体がOFF、という食い違いを重大として出す（取れなかったときは判定しない）。
@@ -383,7 +391,7 @@ func (e *Engine) Audit() ([]Finding, map[string][]string) {
 		if len(vi.snoop) > 0 && len(vi.nosnoop) > 0 {
 			add(model.SevWarning, "SNOOP_MISMATCH", fmt.Sprintf("VLAN%d IGMP Snooping設定不一致（OFF: %s）", v, strings.Join(vi.nosnoop, ",")), nil, "", map[string]any{"vlan": v})
 		}
-		if len(vi.snoop) > 0 && len(vi.queriers) == 0 && len(vi.lastQ) == 0 {
+		if !igmpPending && len(vi.snoop) > 0 && len(vi.queriers) == 0 && len(vi.lastQ) == 0 {
 			add(model.SevCritical, "QUERIER_ABSENT", fmt.Sprintf("VLAN%d IGMPクエリア不在", v), nil, "", map[string]any{"vlan": v})
 		}
 		if len(vi.lastQ) > 1 {

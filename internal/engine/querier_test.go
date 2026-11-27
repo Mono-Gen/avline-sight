@@ -147,3 +147,50 @@ func TestSingleElectedQuerierWithStaleLastQuerier(t *testing.T) {
 		}
 	}
 }
+
+// 起動直後、非クエリア側のスイッチだけ IGMP を読み終えた状態では「クエリア不在」を出さない。
+// 期待値は「読んでいないスイッチがクエリアかもしれない」ことから導く。全台そろえば従来どおり判定する。
+func TestQuerierAbsentWaitsForAllSwitches(t *testing.T) {
+	e, _ := newTestEngine(t)
+	mk := func(id int64, name string, vlans []model.VlanIGMP) *model.SwitchState {
+		return &model.SwitchState{ID: id, Name: name, SysName: name, Reachable: true, FW: "13.0.7.6", LastPoll: time.Now(),
+			Config: model.SwitchConf{StpVersion: "rstp", StpPriority: 4096, IsRoot: id == 1},
+			IGMP:   model.IGMP{Vlans: vlans}}
+	}
+	set := func(states ...*model.SwitchState) {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		e.states = map[int64]*model.SwitchState{}
+		e.order = nil
+		for _, s := range states {
+			e.states[s.ID] = s
+			e.order = append(e.order, s.ID)
+		}
+	}
+	has := func(code string) bool {
+		fs, _ := e.Audit()
+		for _, f := range fs {
+			if f.Code == code {
+				return true
+			}
+		}
+		return false
+	}
+	nonQ := []model.VlanIGMP{{VLAN: 11, Snooping: true, QuerierOper: "non-querier", LastQuerier: "0.0.0.0"}}
+
+	// A（クエリア側）はまだ読んでいない
+	set(mk(1, "A", nil), mk(2, "B", nonQ))
+	if has("QUERIER_ABSENT") {
+		t.Fatal("A を読む前にクエリア不在を出した")
+	}
+	// 全台読めて、本当にクエリアがいない → 出す
+	set(mk(1, "A", []model.VlanIGMP{{VLAN: 11, Snooping: true, QuerierOper: "disabled", LastQuerier: "0.0.0.0"}}), mk(2, "B", nonQ))
+	if !has("QUERIER_ABSENT") {
+		t.Fatal("全台読めたのにクエリア不在を出さない")
+	}
+	// VLAN の行が無いスイッチ（空スライス＝読めた）は保留の理由にしない
+	set(mk(1, "A", []model.VlanIGMP{}), mk(2, "B", nonQ))
+	if !has("QUERIER_ABSENT") {
+		t.Fatal("VLAN行の無いスイッチで判定が止まった")
+	}
+}
