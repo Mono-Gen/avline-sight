@@ -115,7 +115,7 @@ export const ja = {
     marks: '発生中 {active}件 / 復旧・未確認 {recovered}件', switchCount: '{count}件',
     breadcrumb: '表示中のスイッチ', backToAll: 'すべてのスイッチに戻る',
     kpi: 'ポートモニターの全体状況', kpiScope: '全体', kpiSwitches: 'スイッチ', kpiActive: '異常（発生中）', kpiRecovered: '復旧・未確認',
-    kpiLinked: 'リンク中のポート', kpiUplink: 'アップリンク合計',
+    kpiLinked: 'リンク中のポート',
     health: 'スイッチ本体', ports: 'ポート（押すと右に詳細）', linkedPorts: '接続中のポート', noLinkedPorts: '接続中のポートなし',
     colPort: 'ポート', colDevice: '接続機器', colState: '状態', colRate: '受信 / 送信', linked: '接続中', colSpeed: '速度', colVlan: 'VLAN', colPoe: 'PoE', colErrors: 'エラー / 破棄', colTrend: '推移', colMulticast: 'マルチキャスト 受信 / 送信', colChanged: 'リンク変化',
     since: '{time} から', minutesAgo: '{n}分前', hoursAgo: '{n}時間前', daysAgo: '{n}日前', trendHelp: 'この画面を開いてからの受信＋送信の推移',

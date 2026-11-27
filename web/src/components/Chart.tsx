@@ -5,17 +5,17 @@ import { pcTimestamp } from '../pcTime';
 import { columnLabels } from './columnLabels';
 import { useLang } from '../i18n';
 
-// 系列の色。受信は青、送信は黄など、暗い背景でも明るい背景でも見分けやすい組み合わせ。
+// Series colours (receive blue, send yellow, ...) chosen to stay distinct on dark and light backgrounds.
 const SERIES_COLORS = ['#38bdf8', '#facc15', '#f472b6', '#2dd4bf'];
 
-// 画面のテーマ（暗色/明色）に合わせた文字・罫線の色を、要素のCSS変数から読む。
+// Text and grid colours follow the current theme (dark/light), read from the element's CSS variables.
 function themeColors(el: HTMLElement) {
   const style = getComputedStyle(el);
   const pick = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
   return { text: pick('--text-primary', '#1f2937'), muted: pick('--text-muted', '#4b5563'), grid: pick('--border', '#d1d5db') };
 }
 
-// 横軸の目盛りは時刻（時:分）だけにする。日付まで出すと幅が足りず欠けるため。日付はツールチップで見られる。
+// X-axis ticks show time only (HH:mm); with the date they do not fit. The date is in the tooltip.
 function shortTime(label: string) {
   const match = /(\d{1,2}:\d{2})(:\d{2})?/.exec(label);
   return match ? match[1] : label;
@@ -27,9 +27,9 @@ export function Chart({ points, keys, format, height = 280, labels = {}, unit }:
   // Formats axis and tooltip values (for example bps); plain numbers when omitted.
   format?: (value: number) => string;
   height?: number;
-  // 系列名（凡例）。無ければ表の列名、それも無ければキー名。
+  // Series names for the legend; falls back to the column label, then the key.
   labels?: Record<string, string>;
-  // 縦軸の単位（format が無いとき目盛りに付ける。例 "pps"）。
+  // Y-axis unit appended to ticks when there is no format (e.g. "pps").
   unit?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);

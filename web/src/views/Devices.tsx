@@ -53,7 +53,7 @@ export function DeviceInventoryTable({ rows, alerts = [], onNavigate, pingDisabl
               <td className="whitespace-nowrap">
                 {row.switch_name || emptyCell}
                 {row.port && <> / {navigate ? <button onClick={event => { event.stopPropagation(); navigate(); }} aria-label={`${t('rack.nav.monitor')} · ${row.switch_name} ${row.port}`}>{row.port}</button> : row.port}</>}
-                {/* Trunk・LAG のポートにつながった機器だけ印を付ける（機器用ポートに Trunk が来ていないかの気づき用） */}
+                {/* Mark only devices on trunk or LAG ports (a cue that a trunk reached a device port). */}
                 {row.port_trunk && <span className="device-port-role" role="img" title={t('trunk.markTrunk')} aria-label={t('trunk.markTrunk')}>T</span>}
                 {row.port_lag && <span className="device-port-role" role="img" title={t('trunk.markLagOf', { lag: row.port_lag })} aria-label={t('trunk.markLagOf', { lag: row.port_lag })}>L</span>}
                 {!row.port && navigate && <button onClick={event => { event.stopPropagation(); navigate(); }} aria-label={`${t('rack.nav.monitor')} · ${row.switch_name}`}>↗</button>}

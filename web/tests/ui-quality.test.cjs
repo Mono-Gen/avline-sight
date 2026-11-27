@@ -1496,14 +1496,14 @@ test('Number panels show whole-project counts and stay unknown when a replay has
   const { MonitorKpis } = require('../src/components/MonitorKpis.tsx');
   const switches = [{ reachable: true, ports_up: 10 }, { reachable: false, ports_up: 0 }];
   const alerts = [fault(1, { active: true, severity: 'CRITICAL' }), fault(2, { active: false }), fault(3, { active: true, suppressed: true })];
-  const html = render(MonitorKpis, { switches, alerts, uplink: { rx: 2e9, tx: 1e9 } });
+  const html = render(MonitorKpis, { switches, alerts });
   // Expected from the inputs: 1 of 2 switches reachable, 1 ongoing, 1 recovered (the suppressed one is not an issue), 10 linked ports.
   assert.match(html, /kpi kpi-critical" data-kpi="switches"[^]*>1 \/ 2</);
   assert.match(html, /kpi kpi-critical" data-kpi="active"[^]*>1</);
   assert.match(html, /kpi kpi-warning" data-kpi="recovered"[^]*>1</);
   assert.match(html, /data-kpi="linked"[^]*>10</);
-  // Receive and send on separate lines so the value never wraps mid-number.
-  assert.match(html, /data-kpi="uplink"[^]*<span>受信 [^<]*<\/span><span>送信 [^<]*<\/span>/);
+  // The uplink total was removed (it double-counted each link with two or more switches).
+  assert.doesNotMatch(html, /data-kpi="uplink"/);
   const legacy = render(MonitorKpis, { switches, alerts: [], alertsKnown: false });
   assert.match(legacy, /class="kpi" data-kpi="active"[^]*>—</);
   assert.match(legacy, /class="kpi" data-kpi="recovered"[^]*>—</);
@@ -2106,4 +2106,17 @@ test('the pre-show checklist opens Settings as a page, not a removed dialog', ()
   assert.match(app, /setDialog\(target\.destination === 'trap' \? 'trap' : ''\)/);
   assert.match(app, /target\.destination === 'settings'\) \{\s*setMonitorTarget\(undefined\);\s*setPage\('settings'\)/);
   assert.doesNotMatch(app, /setDialog\('settings'\)|dialog === 'settings'/);
+});
+
+test('Colour-by-VLAN groups single-VLAN ports and keeps several-VLAN ports neutral', () => {
+  const { portVlanGroup, vlanColor, VLAN_PALETTE } = require('../src/components/PortVlan.tsx');
+  // Expected from the rule: a trunk, or any port carrying two or more VLANs, has no single colour.
+  assert.deepEqual(portVlanGroup({ mode: 'trunk', pvid: 1, tagged_vlans: [11, 12], untagged_vlans: [1] }), { multi: true });
+  assert.deepEqual(portVlanGroup({ mode: 'general', pvid: 1, tagged_vlans: [], untagged_vlans: [1, 12] }), { multi: true });
+  // M4250 reports an ordinary port as general with one untagged VLAN: coloured by that VLAN.
+  assert.deepEqual(portVlanGroup({ mode: 'general', pvid: 11, tagged_vlans: [], untagged_vlans: [11] }), { vlan: 11, multi: false });
+  // No membership data (older firmware): fall back to the PVID.
+  assert.deepEqual(portVlanGroup({ mode: '', pvid: 20 }), { vlan: 20, multi: false });
+  // Colours repeat after the palette length, so the same VLAN always gets the same colour.
+  assert.equal(vlanColor(11), vlanColor(11 + VLAN_PALETTE.length));
 });

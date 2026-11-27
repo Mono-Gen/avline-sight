@@ -111,7 +111,7 @@ export const en: Dictionary = {
     marks: 'Ongoing {active} / Recovered, unacknowledged {recovered}', switchCount: '{count}',
     breadcrumb: 'Switch shown', backToAll: 'Back to all switches',
     kpi: 'Port monitor overview', kpiScope: 'All', kpiSwitches: 'Switches', kpiActive: 'Ongoing faults', kpiRecovered: 'Recovered, unacknowledged',
-    kpiLinked: 'Linked ports', kpiUplink: 'Uplink total',
+    kpiLinked: 'Linked ports',
     health: 'Switch', ports: 'Ports (select for details)', linkedPorts: 'Linked ports', noLinkedPorts: 'No linked ports',
     colPort: 'Port', colDevice: 'Device', colState: 'State', colRate: 'RX / TX', linked: 'Linked', colSpeed: 'Speed', colVlan: 'VLAN', colPoe: 'PoE', colErrors: 'Errors / discards', colTrend: 'Trend', colMulticast: 'Multicast RX / TX', colChanged: 'Link change',
     since: 'since {time}', minutesAgo: '{n} min ago', hoursAgo: '{n} h ago', daysAgo: '{n} d ago', trendHelp: 'RX + TX since this view was opened',

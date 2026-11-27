@@ -43,7 +43,7 @@ export function VlanFacts({ vlans, ports, globalSnoopingOff = false }: { vlans: 
       const v = asArray(vlans as VlanRow[]).find(row => row.vlan === id);
       const members = access.filter(port => port.pvid === id);
       const linked = members.filter(port => port.oper === 'up').length;
-      // このVLANをタグ付きで運ぶポート（Trunk など）。VLANがスイッチ間を通っているかの手がかり
+      // Ports carrying this VLAN tagged (trunks etc.): a hint whether the VLAN crosses between switches.
       const carriers = asArray(ports as PortRow[]).filter(port => asArray(port.tagged_vlans).includes(id)).map(port => port.name);
       const written = sameOrMixed(members.map(port => writtenText(port.alias)).filter(Boolean));
       const facts = [

@@ -1,3 +1,4 @@
+import type React from 'react';
 import { api } from '../api';
 import { asArray, decimal, formatBps, formatTime } from '../format';
 import { frontPanelRows } from '../frontPanelLayout';
@@ -8,7 +9,7 @@ import { lampState } from '../rackModel';
 import { isPortAlert, matchingPortAlerts, summarizeAlerts } from '../wallAlerts';
 import type { Alert, InventoryRow, ModelDefinitions, Port, SwitchConfig, SwitchSummary } from '../types';
 import type { ViewProps } from '../views/props';
-import { portMarkLegend, portMarks } from './PortVlan';
+import { portMarkLegend, portMarks, portVlanGroup, vlanColor } from './PortVlan';
 
 export const lampStates = {
   critical: { symbol: '!', label: 'pages.abnormal' },
@@ -20,9 +21,17 @@ export const lampStates = {
 } as const;
 
 // single: the one-switch front panel, which has no switch dots but shows excluded and PoE marks.
-export function PortLegend({ single = false }: { single?: boolean } = {}) {
+export type RackColor = 'state' | 'vlan';
+
+// vlans: the VLANs shown in the colour-by-VLAN view, with names when known.
+export function PortLegend({ single = false, color = 'state', vlans = [] }: { single?: boolean; color?: RackColor; vlans?: { vlan: number; name?: string }[] } = {}) {
   return <ul className={`rack-legend${single ? ' front-legend' : ''}`} aria-label={t('pages.legend')}>
-    {Object.entries(lampStates).map(([tone, { symbol, label }]) => <li key={tone}>
+    {color === 'vlan' ? <>
+      {vlans.map(({ vlan, name }) => <li key={vlan}><span className="vlan-chip" style={{ '--vlan-color': vlanColor(vlan) } as React.CSSProperties} aria-hidden="true">{vlan}</span>
+        {name ? `VLAN ${vlan} ${name}` : `VLAN ${vlan}`}</li>)}
+      <li><span className="vlan-chip vlan-chip-multi" aria-hidden="true">T</span>{t('rack.vlanMulti')}</li>
+      <li><span className="lamp-critical" aria-hidden="true">!</span>{t('rack.vlanAlertKept')}</li>
+    </> : Object.entries(lampStates).map(([tone, { symbol, label }]) => <li key={tone}>
       <span className={`lamp-${tone}`} aria-hidden="true">{symbol}</span>{t(label)}
     </li>)}
     <MarkLegend />
@@ -39,7 +48,7 @@ export function PortLegend({ single = false }: { single?: boolean } = {}) {
   </ul>;
 }
 
-// 凡例は短い名前だけにし、意味は ⓘ を押すと開く（本番中に README を探しに行かなくて済むよう画面内に置く）
+// The legend shows short names only; the meanings open from ⓘ, kept on screen so nobody has to look up the README during a show.
 function MarkLegend() {
   return <>{portMarkLegend().map(({ mark, label }) => <li key={mark}><span className="port-role-marks" aria-hidden="true">{mark}</span>{label}</li>)}
     <li><details className="legend-help"><summary aria-label={t('trunk.marksHelp')} title={t('trunk.marksHelp')}>ⓘ</summary>
@@ -47,8 +56,8 @@ function MarkLegend() {
     </details></li></>;
 }
 
-export function PortLamp({ port, alerts, devices, reachable, wall, onSelect }: {
-  port: Port; alerts: Alert[]; devices: InventoryRow[]; reachable: boolean; wall: boolean; onSelect: () => void;
+export function PortLamp({ port, alerts, devices, reachable, wall, onSelect, color = 'state' }: {
+  port: Port; alerts: Alert[]; devices: InventoryRow[]; reachable: boolean; wall: boolean; onSelect: () => void; color?: RackColor;
 }) {
   const state = lampState(port, alerts, reachable);
   const attached = devices.length ? devices : asArray(port.devices);
@@ -57,9 +66,26 @@ export function PortLamp({ port, alerts, devices, reachable, wall, onSelect }: {
   const marks = portMarks(port);
   const label = [port.name, ...attached.map(device => [device.label || device.lldp_name || device.mac, device.ip].filter(Boolean).join(' ')),
     t(stateLabel), state.label === 'rack.suppressed' && t(state.label), ...marks.map(m => m.label)].filter(Boolean).join(' · ');
-  const content = <><span className="lamp-number">{port.name.match(/(\d+)\D*$/)?.[1] || port.name}</span>
+  const number = <span className="lamp-number">{port.name.match(/(\d+)\D*$/)?.[1] || port.name}</span>;
+  const roleLine = marks.length > 0 && <span className={`lamp-role${marks.some(m => m.mark === 'B') ? ' port-role-blocked' : ''}`} aria-hidden="true">{marks.map(m => m.mark).join('')}</span>;
+  if (color === 'vlan' && !wall) {
+    // Colour by VLAN: the fill is the VLAN, the bottom line its number (or T/G for several VLANs).
+    // Faults keep their symbol and a red/amber outline so a problem is never hidden by this view.
+    const group = portVlanGroup(port);
+    const issue = ['critical', 'caution', 'warning'].includes(tone);
+    const vlanLabel = group.multi ? '' : group.vlan ? `VLAN ${group.vlan}` : '';
+    const style = group.vlan && !group.multi ? { '--vlan-color': vlanColor(group.vlan) } as React.CSSProperties : undefined;
+    const cls = `port-lamp lamp-vlan${group.multi ? ' lamp-vlan-multi' : ''}${!group.multi && !group.vlan ? ' lamp-vlan-none' : ''}${issue ? ` lamp-vlan-issue-${tone}` : ''}${port.oper !== 'up' ? ' lamp-vlan-down' : ''}`;
+    const vlanTitle = [label, vlanLabel].filter(Boolean).join(' · ');
+    return <button className={cls} style={style} title={vlanTitle} aria-label={vlanTitle} onClick={onSelect}>
+      {number}
+      {issue && <span className="lamp-symbol" aria-hidden="true">{symbol}</span>}
+      {group.multi ? roleLine : <span className="lamp-role" aria-hidden="true">{group.vlan ?? ''}{marks.filter(m => m.mark !== 'G' && m.mark !== 'T').map(m => m.mark).join('')}</span>}
+    </button>;
+  }
+  const content = <>{number}
     <span className="lamp-symbol" aria-hidden="true">{symbol}</span>
-    {marks.length > 0 && <span className={`lamp-role${marks.some(m => m.mark === 'B') ? ' port-role-blocked' : ''}`} aria-hidden="true">{marks.map(m => m.mark).join('')}</span>}</>;
+    {roleLine}</>;
   const className = `port-lamp lamp-${tone}`;
   return wall ? <span className={className} title={label} aria-label={label}>{content}</span>
     : <button className={className} title={label} aria-label={label} onClick={onSelect}>{content}</button>;
@@ -87,11 +113,11 @@ export function switchHealth(sw: SwitchSummary, thresholds?: Record<string, numb
   ] as const;
 }
 
-export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlans = [], wall, stale, uplinks, samples, actions, onPort, onEdit }: {
+export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlans = [], wall, stale, uplinks, samples, actions, onPort, onEdit, color = 'state' }: {
   summary: SwitchSummary; ports: Port[]; devices: InventoryRow[]; alerts: Alert[]; definitions: ModelDefinitions;
   vlans?: readonly number[];
   wall: boolean; stale: boolean; uplinks: Set<string>; samples: Record<string, { rx: number; tx: number }[]>;
-  actions: ViewProps; onPort: (port: Port) => void; onEdit: (config: SwitchConfig | null) => void;
+  actions: ViewProps; onPort: (port: Port) => void; onEdit: (config: SwitchConfig | null) => void; color?: RackColor;
 }) {
   const rows = frontPanelRows(ports, definitions[sw.model]);
   const portAlerts = summarizeAlerts(alerts).items.filter(isPortAlert);
@@ -133,7 +159,7 @@ export function RackRow({ summary: sw, ports, devices, alerts, definitions, vlan
       {rows.map((row, index) => <div className="rack-port-row" key={index}>{row.slots.map((port, position) => port && (!vlans.length || vlans.includes(port.pvid))
         ? <div className="rack-port-slot" key={port.if_index}>
           <PortLamp port={port} alerts={matchingPortAlerts(alerts, sw.id, port.if_index)} devices={devices.filter(device => device.if_index === port.if_index)}
-            reachable={sw.reachable && !stale} wall={wall} onSelect={() => onPort(port)} />
+            reachable={sw.reachable && !stale} wall={wall} onSelect={() => onPort(port)} color={color} />
           {uplinks.has(`${sw.id}/${port.name}`) && <Sparkline samples={samples[`${sw.id}/${port.name}`] || []} label={`${port.name} ${t('rack.uplink')} ${formatBps(port.rx_bps)} / ${formatBps(port.tx_bps)}`} />}
         </div> : <span className="rack-port-gap" key={`gap-${position}`} />)}</div>)}
       {callouts.size > 0 && <div className="rack-callouts">{[...callouts.values()].slice(0, 3).map(alert => {

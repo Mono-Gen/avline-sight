@@ -162,7 +162,7 @@ export function SwitchPorts(p: SwitchPortsProps) {
     /fault/i.test(port.poe.detect || '') || port.poe.denied_cnt > 0 || port.poe.overload_cnt > 0 || port.poe.short_cnt > 0);
   // One chart at a time with its own unit, instead of every metric on one scale.
   const [chartTab, setChartTab] = useState('bandwidth');
-  // help: グラフの下に出す「何の値か」の一行説明。labels: 凡例の名前（内部のキー名を見せない）。
+  // help: one-line explanation under the chart. labels: legend names (never show internal keys).
   const chartTabs: { id: string; label: TranslationKey; keys: string[]; format?: (value: number) => string; unit?: string; help: TranslationKey; labels: Record<string, string> }[] = [
     { id: 'bandwidth', label: 'focus.chartBandwidth', keys: ['rx_bps', 'tx_bps'], format: formatBps, help: 'chart.bandwidthHelp',
       labels: { rx_bps: t('chart.rxBps'), tx_bps: t('chart.txBps') } },
@@ -284,7 +284,7 @@ export function SwitchPorts(p: SwitchPortsProps) {
               <td>{lines.length ? <span className={lines[0].critical ? 'rack-critical-count' : lines[0].active ? 'rack-caution-count' : 'rack-warning-count'}>{lines[0].critical ? '!' : '▲'} {lines[0].title}</span>
                 : t('focus.linked')}</td>
               <td>{speedLabel(x.speed_mbps)}</td>
-              {/* Trunk は VLAN 番号の代わりに Trunk と出す（PVID だけでは複数 VLAN を運ぶことが分からないため） */}
+              {/* Show Trunk instead of a VLAN number (the PVID alone does not show that several VLANs are carried). */}
               <td title={x.mode === 'trunk' ? [t('trunk.tagged'), asArray(x.tagged_vlans).join(', ')].join(': ') : undefined}>{x.mode === 'trunk' ? portModeLabel(x, s) : (x.pvid || '—')}</td>
               <td>{poeW ? `${decimal(poeW)} W` : '—'}</td>
               {/* Errors and discards: coloured only when above zero. */}

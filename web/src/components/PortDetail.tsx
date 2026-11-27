@@ -26,8 +26,8 @@ export function PortDetail({ switchId, switchName, port, devices, alerts, close,
       mac: device.mac, label: device.label || '', lldp_name: device.lldp_name || '', ip: device.ip || '',
     })),
   ];
-  // 詳細の外をクリックしたら閉じる（Esc でも閉じる）。ポートのクリックは別のポートの詳細を開く操作なので除く。
-  // ダイアログやメニューの中の操作も閉じる理由にしない
+  // Close on a click outside the detail (or Esc). Clicking a port opens that port instead, so ports are excluded,
+  // as are clicks inside dialogs and menus.
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     const onDown = (e: PointerEvent) => {

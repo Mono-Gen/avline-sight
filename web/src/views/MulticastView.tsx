@@ -41,8 +41,8 @@ export function VlanQuerierTable({ rows, networkRows = rows }: { rows: Multicast
   return <>
     {/* One line per VLAN so the summary can be scanned. */}
     {summary.length > 0 && <ul className="multicast-summary">{summary.map(line => <li key={line}>{line}</li>)}</ul>}
-    {/* 受信版と動作版を1列にまとめる。-1/0 は「まだクエリを受けていない」というスイッチの値なので出さない。
-        受信した版が動作版と違うときだけ添える（版の食い違いは Dante/AES67 が流れない原因になる） */}
+    {/* Received and operating versions in one column. -1/0 means no query heard yet, so it is not shown.
+        The received version is added only when it differs (a version mismatch can stop Dante/AES67). */}
     <Table rows={rows.map(({ last_version, oper_version, ...row }) => ({ ...row,
       igmp_version: [oper_version > 0 ? `v${oper_version}` : '—', last_version > 0 && last_version !== oper_version ? `（${t('mcast.heardVersion', { v: last_version })}）` : ''].join('') }))}
       first={['switch_name', 'vlan', 'name', 'snooping', 'querier_oper', 'querier_addr']}
@@ -94,8 +94,8 @@ export function MulticastView(props: ViewProps) {
       <h2>{t('ui.m270')}</h2>
       <VlanQuerierTable rows={filter(data?.vlans)} networkRows={asArray(data?.vlans)} />
       <h2>{t('ui.m271')}</h2>
-      {/* スイッチがMACしか返さないときは、既知の用途から推定したIPに「推定」と添える */}
-      {/* IP が全部推定なら列名に1回だけ「推定」と書く。確定と推定が混ざるときは行ごとに添える */}
+      {/* When the switch reports only the MAC, the IP is estimated from known uses and marked as estimated. */}
+      {/* If every IP is estimated, say so once in the header; when mixed, mark each row. */}
       <Table {...switchColumn} rows={filter(data?.groups).map(({ purpose_ja, purpose_en, ip_guessed, ip, ...row }) => ({
         ...row, ip: ip ? `${ip}${ip_guessed && !allGuessed ? t('mcast.guessed') : ''}` : '',
         purpose: (getLang() === 'en' ? purpose_en : purpose_ja) || '' }))}

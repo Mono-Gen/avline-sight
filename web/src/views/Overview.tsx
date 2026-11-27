@@ -7,7 +7,8 @@ import type { PingOutcome } from '../components/GroupActions';
 import { GroupEditDialog } from '../components/GroupEditDialog';
 import type { GroupEdit } from '../components/GroupEditDialog';
 import { PortDetail } from '../components/PortDetail';
-import { PortLegend, RackRow } from '../components/RackRow';
+import { PortLegend, RackRow, type RackColor } from '../components/RackRow';
+import { portVlanGroup } from '../components/PortVlan';
 import { api } from '../api';
 import { asArray } from '../format';
 import { t } from '../i18n';
@@ -28,6 +29,11 @@ import { SwitchPorts } from './SwitchPorts';
 import { emptySwitchFilter } from './props';
 
 const collapseKey = 'rack-collapsed';
+// Port colouring of the rack view (state or VLAN), remembered on this PC.
+const colorKey = 'rack-color';
+function loadColor(): RackColor {
+  try { return localStorage.getItem(colorKey) === 'vlan' ? 'vlan' : 'state'; } catch { return 'state'; }
+}
 function readCollapsed() {
   try {
     return new Set(asArray<string[]>(JSON.parse(localStorage.getItem(collapseKey) || '[]')).filter(name => typeof name === 'string'));
@@ -81,6 +87,11 @@ const noDevices: InventoryRow[] = [];
 export function OverviewView(props: OverviewProps) {
   const { wall = false, operations, onTrapHelp = () => undefined, replay, locked, busy, target } = props;
   const [layout, setLayout] = useState<'diagram' | 'list'>('diagram');
+  const [color, setColorState] = useState<RackColor>(loadColor);
+  const setColor = (next: RackColor) => {
+    setColorState(next);
+    try { localStorage.setItem(colorKey, next); } catch { /* keep working without storage */ }
+  };
   const [edit, setEdit] = useState<SwitchConfig | null>();
   const [discover, setDiscover] = useState(false);
   const [groupEdit, setGroupEdit] = useState<GroupEdit>();
@@ -109,15 +120,6 @@ export function OverviewView(props: OverviewProps) {
   }, [replay, props.overview.switches, configs]);
   const uplinks = useMemo(() => uplinkPorts(rack.topology, summary), [rack.topology, summary]);
   const samples = useUplinkSamples(rack.data?.ports, uplinks);
-  // Uplink total for the number panels: sum of uplink ports in the existing snapshot, no extra polling.
-  const uplinkTotal = useMemo(() => {
-    let found = false; let rx = 0; let tx = 0;
-    for (const { switch_id, port } of asArray(rack.data?.ports)) {
-      if (!uplinks.has(`${switch_id}/${port.name}`)) continue;
-      found = true; rx += port.rx_bps || 0; tx += port.tx_bps || 0;
-    }
-    return found ? { rx, tx } : undefined;
-  }, [rack.data?.ports, uplinks]);
   const devices = rack.data?.devices || noDevices;
   const ports = indexBySwitch(asArray(rack.data?.ports));
   const bySwitch = indexBySwitch(devices);
@@ -129,6 +131,12 @@ export function OverviewView(props: OverviewProps) {
   const groupFiltered = hasGroupFilter(props) && !focusSummary;
   const visible = summary.filter(item => matchesSwitch(props, tags, item.id, item.group_tag));
   const visibleIds = new Set(visible.map(item => item.id));
+  // VLANs present on the shown switches, for the colour-by-VLAN legend.
+  const legendVlans = [...new Set(asArray(rack.data?.ports)
+    .filter(({ switch_id }) => visibleIds.has(switch_id))
+    .map(({ port }) => portVlanGroup(port))
+    .filter(group => !group.multi && group.vlan)
+    .map(group => group.vlan as number))].sort((a, b) => a - b).map(vlan => ({ vlan }));
   const targetSwitch = visible.find(item => item.id === target?.switchId);
   const focusedTarget = useRef<PortMonitorTarget>();
   useEffect(() => {
@@ -225,7 +233,7 @@ export function OverviewView(props: OverviewProps) {
       undoCount={live ? operations?.undoCount : undefined} undo={live ? operations?.undoAck : undefined} />}
   </div>;
   // Legacy replays carry no alert list, so fault counts are unknown rather than zero.
-  const kpis = <MonitorKpis switches={summary} alerts={allAlerts} uplink={uplinkTotal} alertsKnown={live || props.replayAlerts !== undefined} />;
+  const kpis = <MonitorKpis switches={summary} alerts={allAlerts} alertsKnown={live || props.replayAlerts !== undefined} />;
   const band = (live || props.replayAlerts !== undefined) && <AlertBand alerts={alerts} wall={wall} expert={props.expert} busy={busy} locked={locked} ack={live ? operations?.ack : undefined}
     ackMany={live && groupFiltered ? operations?.ackMany : undefined} undoCount={live ? operations?.undoCount : undefined}
     undo={live ? operations?.undoAck : undefined} pending={live && !operations?.ready && !operations?.alerts.length} />;
@@ -270,6 +278,11 @@ export function OverviewView(props: OverviewProps) {
         <button aria-pressed={layout === 'diagram'} onClick={() => setLayout('diagram')}>{t('cleanup.diagram')}</button>
         <button aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>{t('cleanup.list')}</button>
       </div>
+      {layout === 'diagram' && !wall && <div role="group" aria-label={t('rack.colorBy')} className="rack-color-toggle">
+        <span>{t('rack.colorBy')}</span>
+        <button aria-pressed={color === 'state'} onClick={() => setColor('state')}>{t('rack.colorState')}</button>
+        <button aria-pressed={color === 'vlan'} onClick={() => setColor('vlan')}>{t('rack.colorVlan')}</button>
+      </div>}
       {/* Single-switch choice lives in the left index, so the toolbar keeps only group and part. */}
       <SwitchFilters filter={{ group: props.group, part: props.part ?? '', switchId: props.switchId }}
         onChange={filter => props.onFilterChange?.({ ...filter, switchId: undefined })} switches={summary}
@@ -287,7 +300,7 @@ export function OverviewView(props: OverviewProps) {
     {!locked && !wall && (props.group === undefined ? pingResult('*') : layout === 'list' && pingResult(props.group))}
     {!wall && notice && <div role="status" className="panel flex items-center justify-between gap-2">{notice}<button onClick={() => setNotice('')}>{t('rack.close')}</button></div>}
     {rack.error && <p role="alert" className="rack-data-error">⚠ {rack.error}</p>}
-    {layout === 'list' ? <PortMatrix {...props} visibleSwitchIds={visibleIds} /> : <><PortLegend /><div className="rack-groups">
+    {layout === 'list' ? <PortMatrix {...props} visibleSwitchIds={visibleIds} /> : <><PortLegend color={wall ? 'state' : color} vlans={legendVlans} /><div className="rack-groups">
       {!visible.length && <p>{rack.data ? t('rack.empty') : t('rack.loading')}</p>}
       {groups.map(name => {
         const rows = groupRows.get(name) || [];
@@ -316,7 +329,7 @@ export function OverviewView(props: OverviewProps) {
             ports={withoutUnusedLags((ports.get(sw.id) || []).map(row => row.port), byAlert.get(sw.id) || [])} devices={bySwitch.get(sw.id) || []} alerts={byAlert.get(sw.id) || []}
             definitions={rack.definitions} vlans={preset?.vlans}
             wall={wall} stale={!!rack.error} uplinks={uplinks} samples={samples} actions={props}
-            onPort={port => setSelected({ switchId: sw.id, ifIndex: port.if_index })} onEdit={setEdit} />)}
+            onPort={port => setSelected({ switchId: sw.id, ifIndex: port.if_index })} onEdit={setEdit} color={wall ? 'state' : color} />)}
         </section>;
       })}
     </div></>}

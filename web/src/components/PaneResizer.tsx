@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import { t } from '../i18n';
 
-// ペインの幅をマウス（とキーボード）で変える仕切り。幅は CSS 変数に入れ、この PC に覚えておく。
-// side: 'left' は仕切りの左にあるペイン（左ペイン）、'right' は右にあるペイン（ポート詳細）の幅を変える。
+// Divider that resizes a pane with the mouse (and keyboard). The width lives in a CSS variable and is remembered on this PC.
+// side 'left' resizes the pane left of the divider (sidebar); 'right' resizes the pane to its right (port detail).
 type Props = { cssVar: string; storageKey: string; side: 'left' | 'right'; min: number; max: number; defaultPx: number; label: string };
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
@@ -17,7 +17,7 @@ function load(storageKey: string): number | null {
     const v = Number(localStorage.getItem(storageKey));
     return Number.isFinite(v) && v > 0 ? v : null;
   } catch {
-    return null; // 保存できない環境（プライベートモード等）では既定幅のまま
+    return null; // storage unavailable (private mode etc.): keep the default width
   }
 }
 
@@ -25,24 +25,24 @@ function save(storageKey: string, px: number | null) {
   try {
     if (px === null) localStorage.removeItem(storageKey);
     else localStorage.setItem(storageKey, String(Math.round(px)));
-  } catch { /* 覚えられなくても操作は続ける */ }
+  } catch { /* keep working even if the width cannot be remembered */ }
 }
 
 export function PaneResizer({ cssVar, storageKey, side, min, max, defaultPx, label }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  // ドラッグ中の後始末。途中で画面が切り替わって仕切りが消えても、カーソルや選択禁止が残らないよう unmount でも呼ぶ
+  // Cleanup for an ongoing drag; also run on unmount so the cursor and no-select state never stick if the divider disappears mid-drag.
   const cleanup = useRef<(() => void) | null>(null);
   const [width, setWidth] = useState<number>(defaultPx);
 
-  // 実際に見えている幅（CSS の上限で縮んでいる分も含む）。保存値ではなくこれを起点にしないと、
-  // 上限に張り付いた状態から縮めるときに動かない区間ができる
+  // The rendered width (including any CSS max-width clamp). Dragging must start from this, not the saved value,
+  // or shrinking from a clamped width has a dead zone.
   const rendered = () => {
     const pane = side === 'left' ? ref.current?.previousElementSibling : ref.current?.nextElementSibling;
     const w = pane?.getBoundingClientRect().width;
     return w && w > 0 ? w : defaultPx;
   };
 
-  // 起動時に前回の幅を戻す
+  // Restore the previous width on start.
   useEffect(() => {
     const saved = load(storageKey);
     if (saved !== null) apply(cssVar, clamp(saved, min, max));
@@ -58,7 +58,7 @@ export function PaneResizer({ cssVar, storageKey, side, min, max, defaultPx, lab
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return; // 右クリックなどでは始めない（終わりのイベントを取り逃がすため）
+    if (e.button !== 0) return; // ignore right-click etc. (the end event can be lost)
     e.preventDefault();
     cleanup.current?.();
     const startX = e.clientX;
@@ -91,7 +91,7 @@ export function PaneResizer({ cssVar, storageKey, side, min, max, defaultPx, lab
     handle.addEventListener('lostpointercapture', up);
   };
 
-  // 既定の幅に戻す（ダブルクリック・Enter・Home）
+  // Reset to the default width (double-click, Enter, Home).
   const reset = () => {
     document.documentElement.style.removeProperty(cssVar);
     save(storageKey, null);
