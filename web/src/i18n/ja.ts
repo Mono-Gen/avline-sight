@@ -78,6 +78,7 @@ export const ja = {
     native: "Native VLAN", tagged: "タグ付きで通すVLAN", untagged: "タグなしで通すVLAN", none: "なし",
     carriedBy: "Trunkで運ぶポート", peerMissing: "相手側に無い: {list}",
     markTrunk: "Trunk（スイッチ間などでVLANを複数運ぶ）", markGeneral: "General（VLANを個別に設定し、複数運ぶ）",
+    markLag: "LAG のメンバー（複数の線を束ねた1本の一部）", markLagOf: "LAG のメンバー（{lag}）",
     markBlocked: "STPでブロック中（ループ防止で止めている）", marksLegend: "ポートの役割",
   },
   mcast: {

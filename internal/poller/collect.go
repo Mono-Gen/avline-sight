@@ -937,6 +937,24 @@ func (w *worker) collectConfig(pm map[int]*model.Port) {
 	perPort([]string{mib.UdldIntfOperStatus}, func(p *model.Port, r sx.Row) {
 		p.UDLD = mib.UdldOperEnum.Name(int(sx.Int(r.Cols[mib.UdldIntfOperStatus])))
 	})
+	// LAG の所属（標準 IEEE8023-LAG-MIB。値は所属する LAG の ifIndex、未所属は 0）。
+	// 読めたときだけ全ポートを一度クリアしてから入れ直す（抜けたポートに古い所属を残さない）。
+	if rows, err := w.c.WalkColumns([]string{mib.Dot3adAggPortAttached}); err == nil {
+		for _, p := range pm {
+			p.LagIfIndex, p.LagName = 0, ""
+		}
+		for _, r := range rows {
+			p := pm[ifIdx(r)]
+			agg := int(sx.Int(r.Cols[mib.Dot3adAggPortAttached]))
+			if p == nil || agg <= 0 || agg == p.IfIndex {
+				continue
+			}
+			p.LagIfIndex = agg
+			if lag := pm[agg]; lag != nil {
+				p.LagName = lag.Name
+			}
+		}
+	}
 	perPort([]string{mib.StpCstPortFwdState}, func(p *model.Port, r sx.Row) {
 		p.StpState = mib.StpFwdStateEnum.Name(int(sx.Int(r.Cols[mib.StpCstPortFwdState])))
 	})

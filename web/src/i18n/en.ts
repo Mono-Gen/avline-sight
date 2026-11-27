@@ -76,6 +76,7 @@ export const en: Dictionary = {
     native: "Native VLAN", tagged: "Tagged VLANs", untagged: "Untagged VLANs", none: "none",
     carriedBy: "Carried on trunk ports", peerMissing: "Missing on the other end: {list}",
     markTrunk: "Trunk (carries several VLANs, e.g. between switches)", markGeneral: "General (VLANs set per port, carries several)",
+    markLag: "LAG member (one of several links bundled together)", markLagOf: "LAG member ({lag})",
     markBlocked: "Blocked by STP (stopped to prevent a loop)", marksLegend: "Port roles",
   },
   mcast: {

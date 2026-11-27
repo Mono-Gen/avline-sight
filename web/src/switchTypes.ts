@@ -80,6 +80,8 @@ export interface Port {
   max_frame: number;
   udld: string;
   stp_state: string;
+  lag_if_index?: number;
+  lag_name?: string;
   trust: string;
   mcast_storm_ctl: boolean;
   bcast_storm_ctl: boolean;

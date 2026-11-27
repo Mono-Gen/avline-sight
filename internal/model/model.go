@@ -117,6 +117,9 @@ type Port struct {
 	UDLD          string    `json:"udld"`
 	StpState      string    `json:"stp_state"`
 	Trust         string    `json:"trust"`
+	// 所属している LAG（IEEE 802.3ad の dot3adAggPortAttachedAggID。0 は所属なし・取れない機種）
+	LagIfIndex int    `json:"lag_if_index,omitempty"`
+	LagName    string `json:"lag_name,omitempty"`
 	McastCtl      bool      `json:"mcast_storm_ctl"`
 	BcastCtl      bool      `json:"bcast_storm_ctl"`
 	Excluded      bool      `json:"excluded"`
